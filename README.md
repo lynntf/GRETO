@@ -1,4 +1,4 @@
-# Gamma Ray Tracking
+# Gamma Ray Energy Tracking Optimization (GRETO)
 
 The Gamma Ray Energy Tracking Array (GRETA) is a 4&pi; spherical shell, gamma-ray detector array. GRETA is able to determine the 3D position and energy of various gamma-ray interactions. The accuracy of the positions and energies are governed by the Pulse Shape Analysis (PSA), but the accuracy of the produced spectrum is governed by solving the gamma-ray tracking problem.
 
