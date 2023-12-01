@@ -1,0 +1,23 @@
+{
+    "AGATA_INNER_RADIUS_cm": 23.5,
+    "AGATA_OUTER_RADIUS_cm": 32.5,
+    "GRETA_INNER_RADIUS_cm": 18.5,
+    "GRETA_OUTER_RADIUS_cm": 27.5,
+    "AGATA_CRMAT": "GANIL_AGATA_crmat.dat",
+    "GRETA_CRMAT": "crmat.LINUX",
+    "POSITION_ERROR_W0_cm": 0.463,
+    "POSITION_ERROR_W0_cm_agata": 0.5,
+    "POSITION_ERROR_W0_cm_Soederstroem": 0.270,
+    "POSITION_ERROR_W0_cm_Siciliano": 0.463,
+    "POSITION_ERROR_W1_cm": 0.551,
+    "POSITION_ERROR_W1_cm_agata": 0.0,
+    "POSITION_ERROR_W1_cm_Soederstroem": 0.62,
+    "POSITION_ERROR_W1_cm_Siciliano": 0.551,
+    "AGATA_sigma_thet_cm": 0.8,
+    "GRETA_sigma_thet_cm": 0.6,
+    "AGATA_eres_MeV": 1e-3,
+    "GRETA_eres_MeV": 1e-3,
+    "default_origin_x_cm": 0.0,
+    "default_origin_y_cm": 0.0,
+    "default_origin_z_cm": 0.0
+}
