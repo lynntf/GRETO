@@ -1,0 +1,34 @@
+{
+    "DETECTOR": "agata",
+    "COINCIDENCE_TIME_GAP": 40,
+    "NUM_PROCESSES": 3,
+    "SECONDARY_ORDER": true,
+    "VERBOSITY": 2,
+    "TIMEOUT_SECONDS": 15,
+    "MAX_HIT_POINTS": 200,
+    "GLOBAL_COORDS": false,
+    "MONSTER_SIZE": 8,
+    "PARTIAL_TRACK" : false,
+    "order_FOM_kwargs": {
+        "fom_method": "selected",
+        "singles_method": "depth",
+        "width": 5,
+        "stride": 2,
+        "max_cluster_size": 8
+    },
+    "secondary_order_FOM_kwargs": {
+        "fom_method": "angle",
+        "singles_method": "depth",
+        "width": 5,
+        "stride": 2,
+        "max_cluster_size": 8
+    },
+    "eval_FOM_kwargs": {
+        "fom_method": "angle",
+        "singles_method": "depth"
+    },
+    "cluster_kwargs": {
+        "alpha_degrees": 10.0,
+        "time_gap": 40
+    }
+}
