@@ -1,0 +1,10 @@
+scipy
+numpy
+matplotlib
+seaborn
+plotly
+cartopy
+pandas
+cvxpy
+sklearn
+pyomo

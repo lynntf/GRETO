@@ -1,45 +1,45 @@
 # Gamma Ray Energy Tracking Optimization (GRETO)
 
-The Gamma Ray Energy Tracking Array (GRETA) is a 4&pi; spherical shell, gamma-ray detector array. GRETA is able to determine the 3D position and energy of various gamma-ray interactions. The accuracy of the positions and energies are governed by the Pulse Shape Analysis (PSA), but the accuracy of the produced spectrum is governed by solving the gamma-ray tracking problem.
+The Gamma Ray Energy Tracking Array (GRETA) is a 4&pi; spherical shell, gamma-ray detector array used for gamma-ray spectroscopy. GRETA is able to determine the 3D position and energy of various gamma-ray interactions. The accuracy of the positions and energies are governed by the Pulse Shape Analysis (PSA) process, but the accuracy of the produced spectrum is governed by solving the gamma-ray tracking problem, for which we aim to improve the solution accuracy.
 
 An overview of gamma-ray tracking in 4&pi; tracking arrays can be found in [**Tracking &gamma; rays in highly segmented HPGe detectors: A review
 of AGATA and GRETINA**, A. Korichi and T. Lauritsen 2019](https://doi.org/10.1140/epja/i2019-12787-1).
 
 ## Tracking in brief
 
-GRETINA/GRETA is designed to capture simultaneous emissions of multiple gamma-rays. Its open design (as opposed to the cellular design of GammaSphere) allows more gamma-rays to be maintained by the array (GammaSphere relies on rejection of gamma-rays exiting a single cell). Although this allows more gamma-rays to be maintained, detected gamma-rays must now be algorithmically separated from one another (where they were physically separated from one another in GammaSphere). Many of the interactions detected by GRETINA/GRETA are Compton scattering interactions where an incoming gamma-ray elastically "bounces off" of an electron, depositing a portion of its energy and continuing on as a reduced energy gamma-ray. These scattering interactions obey the [Compton Scattering Formula (CSF)](https://en.wikipedia.org/wiki/Compton_scattering#Description_of_the_phenomenon). The goal of tracking is to find the causal sequence of interactions that best matches the actual gamma-ray emission, typically by measuring how well it agrees with the CSF and known [gamma-ray cross-sections](https://en.wikipedia.org/wiki/Gamma_ray_cross_section).
+GRETINA/GRETA is designed to capture simultaneous emissions of multiple gamma-rays. Its open design (as opposed to the cellular design of GammaSphere) allows more gamma-rays to be kept for the final measured spectrum (GammaSphere relies on rejection of gamma-rays that exit the cell they enter). Although this allows more gamma-rays to be maintained for the final spectrum, detected gamma-rays must now be algorithmically separated from one another (where they were physically separated from one another by cell walls in GammaSphere). Many of the interactions detected by GRETINA/GRETA are Compton scattering interactions where an incoming gamma-ray elastically "bounces off" of an electron, depositing a portion of its energy and continuing on as a reduced energy gamma-ray. These scattering interactions obey the [Compton Scattering Formula (CSF)](https://en.wikipedia.org/wiki/Compton_scattering#Description_of_the_phenomenon). The goal of tracking is to find the causal sequence of measured interactions that best matches the actual gamma-ray emission, typically by evaluating the agreement of measured data with the CSF and known [gamma-ray cross-sections](https://en.wikipedia.org/wiki/Gamma_ray_cross_section).
 
-One of the main challenges in tracking is that it is unknown whether or not the interactions that are measured are the result of a gamma-ray that deposits all of its energy in the array, or only deposits some of its energy before exiting the array. If we can successfully remove incomplete energy deposited gamma-rays from the data, we can remove background noise from the final spectrum. This removal process is called Compton suppression.
+One of the main challenges in tracking is that it is unknown whether or not the interactions that are measured are the result of a gamma-ray that deposits all of its energy in the active part of the array, or only deposits only some of its energy (exits the array or deposits energy in a non-active part of the detector). If we can successfully remove incomplete energy deposited gamma-rays from the data, we can remove background noise from the final spectrum. This removal process is called *Compton suppression*.
 
-Another key challenge is determining which interactions belong to which gamma-ray. Mixing interactions will essentially move energy values from peak values into the background noise.
+The energy of an emitted gamma-ray is computed by summing together the energies of the constituent interactions. Another key challenge is determining which interactions belong to which gamma-ray. Mixing interactions from different gamma-rays will essentially shift energy values into the background noise of the spectrum.
 
 ## Description
 
-This software is designed to load gamma-ray events into a python readable format (from [typical GEB data types type 1 (mode2) and type 3 (mode1)](https://gretina.lbl.gov/tools-etc/gebheaders) and some other GEANT4 generated outputs). Given time sorted mode2 data (GRETINA/GRETA output from PSA), the software will build coincidences of gamma-ray interactions stored in `Interaction` objects (together, these comprise a single `Event` object or a `Coincidence` object which is a stripped down `Event`). Interactions from a single event must be tracked before they can be interpreted as part of a gamma-ray.
+This software is designed to load gamma-ray events into a python readable format (from [typical GEB data types type 1 (mode2) and type 3 (mode1)](https://gretina.lbl.gov/tools-etc/gebheaders) and some other GEANT4 generated outputs). Given time sorted mode2 data (GRETINA/GRETA output from PSA), the software will build coincidences of gamma-ray interactions stored in `Interaction` objects [together, these comprise a single `Event` object or a `Coincidence` object (a stripped down `Event`); `Interaction` objects are stored in `Event.points` (including the detector origin/target) or in `Event.hit_points` (excluding the detector origin/target)]. Interactions from a single event must be tracked before they can be interpreted as part of a gamma-ray.
 
-When reading interactions and events, a detector configuration must be provided. Default configurations for AGATA and GRETA are provided as `DetectorConfig(detector="agata")` and `DetectorConfig(detector="greta")` respectively. This is also be specified in a tracking `.yaml` or `.json` configuration file.
+When reading interactions and events, a detector configuration must be provided. Default configurations for AGATA and GRETA are provided as `DetectorConfig(detector="agata")` and `DetectorConfig(detector="greta")` respectively. This can also be specified in a tracking `.yaml` or `.json` configuration file.
 
 Given an `Event`, tracking is performed by first clustering interactions into separate gamma-rays.
 
 > - `Event.cluster_linkage`, an alias for `cluster_tools.cluster_linkage`, will create clusters based on a hierarchical clustering method; the default method is a cone-clustering method where `Interaction` objects are grouped by their angle with respect to the detector center/target. Other methods are available for [linkages](https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html) and [pairwise distance calculations](https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.pdist.html#scipy.spatial.distance.pdist) of which the default is a `cosine` distance.
-> - One additional linkage not present in Scipy is an asymmetric linkage `asym_hier_linkage` or `directional`. This linkage type only allows clusters to grow from the head or tail of a cluster and creates the cluster as a chain of interaction (this is often undesired in generic hierarchical clustering, but matches gamma-ray behavior here). This type of linkage allows for small improvements in clustering accuracy.
+> - One additional linkage not present in Scipy is an asymmetric linkage `asym_hier_linkage` or `directional`. This linkage type only allows clusters to grow from the head or tail of a cluster and creates the cluster as a chain of interactions (this is often undesired in generic hierarchical clustering, but matches the behavior of Compton scattered gamma-rays). This type of linkage allows for a small improvement in clustering accuracy with no change in clustering computational cost.
 > - One additional distance metric is the `germanium` distance which indicates the pairwise length of detector material (which is germanium) between interactions. This assumes a geometrically simpler detector that is an exact spherical shell of material.
 
-Clustered interactions are then ordered with respect to a Figure-Of-Merit (FOM) that acts as an objective function. The order with the best (minimal or maximal) FOM determines the best causal order of interactions. Different FOMs have different performance with respect to ordering the interactions.
+Clustered interactions are then put into a causal order with respect to a Figure-Of-Merit (FOM) that acts as an objective function. The order with the best (minimal or maximal) FOM determines the best causal order of interactions. Different FOMs have different performance with respect to ordering the interactions.
 
-One of the main functions of this software is the methods for optimal FOM design. Given various different FOMs/FOM elements, an optimal combination of them can be determined by framing it as a Learning-To-Rank (LETOR) problem. Various LETOR methods exist for determining ranking functions (essentially a FOM) that will compare different interaction orders. Given a method for comparing orders (e.g., a greedy comparison where the compared orders are only for the first few interactions, or a complete enumeration of all `N`-factorial orders), the code can construct features (FOMs and FOM elements) and then determine a model that combines these features such that the model selects the correct order as often as possible.
+The methods for optimal FOM design are able to optimize this FOM for ordering. Given various different FOMs/FOM elements/features, an optimal FOM that is a function of them can be determined by framing ordering as a Learning-To-Rank (LETOR) problem. Various LETOR methods exist for determining ranking functions (essentially a FOM) that will compare different interaction orders. Given a method for comparing orders (e.g., a greedy comparison where the compared orders are only for the first few interactions, or a complete enumeration of all `N`-factorial orders), the code can construct features (FOMs and FOM elements) and then determine a model that combines these features such that the model selects the correct order as often as possible.
 
 > *Notes*:
 >
 > - Not all features are created equal in terms of computational complexity and ordering ability.
 > - An ensemble of ranking models is more likely to have robust performance. More specific models can be incorporated into an ensemble (e.g., energy specific models)
-> - Learning a ranking model is dependent on the data used to train it, in this case simulated gamma-ray events from GEANT4.
+> - Learning a ranking model is dependent on the data used to train it, in this case a specific data set of simulated gamma-ray events from GEANT4. Other training data may produce more reliable ordering.
 
-Because this is a general approach (given alternatives to compare to, design a model that selects between them), different approaches to clustering may also be possible. This software can produce features for individual clusters or groups of clusters. In addition, given other solution methods (e.g., [**Gamma-ray track reconstruction using graph neural networks**, Andersson and Bäck 2023](https://doi.org/10.1016/j.nima.2022.168000)), additional FOM elements can be constructed and incorporated. That is to say, individual methods for solving the tracking problem can be combined (somewhat) arbitrarily to increase overall performance.
+Because this is a general approach (i.e., given alternatives to compare to, design a model that compares them optimally), different approaches to clustering may also be possible. This software can produce features for individual clusters or groups of clusters. In addition, given other solution methods (e.g., [**Gamma-ray track reconstruction using graph neural networks**, Andersson and Bäck 2023](https://doi.org/10.1016/j.nima.2022.168000)), additional FOM elements can be constructed and incorporated. That is to say, individual methods for solving the tracking problem can be combined (somewhat) arbitrarily to increase overall performance and new tracking methods can be considered additive (instead of alternative) in performance.
 
-Currently, a single LETOR derived ordering method (designated as the `selected` FOM) is included although others are planned.
+Currently, a single LETOR derived ordering method (designated as the `selected` FOM) is included in this code although others are planned (optimizing existing FOMs by weighing FOM elements; optimizing for computational complexity of the features; optimizing for greedy approaches).
 
-Clustering provides a dictionary with keys indicating the cluster ID (which would be anything, but are usually integers) and values containing the ordered interaction IDs. Tracking a an event that has been clustered will produce a new clustering (dictionary) with reordered values.
+Clustering provides a python `dict` with keys indicating the cluster ID (usually integers) and values containing the ordered interaction IDs. Tracking a an event that has been clustered will produce a new clustering (dictionary) with reordered values.
 
 ## Installation
 
@@ -84,7 +84,7 @@ conda deactivate
 ### Complete installation
 
 ```bash
-conda create -n gamma -c conda-forge python>3.10 scipy numpy matplotlib seaborn plotly cartopy pandas cvxpy sklearn pyomo jupyter tqdm xgboost
+conda create -n gamma -c conda-forge python>3.10 scipy numpy matplotlib seaborn plotly cartopy pandas cvxpy sklearn pyomo jupyter tqdm
 ```
 
 ## Usage
@@ -149,7 +149,7 @@ detector_name = 'gretina'
 events = []
 with open(mode2_filename, 'rb') as mode2_file:
     for event in gr.file_io.mode2_loader(mode2_file, detector=detector_name):
-        events.append(event)  # we may not want to actually save all of these events, but rather process them as they are read in and discard the event objects after processing
+        events.append(event)  # we probably do not want to actually retain all of these events, but rather process them as they are read in and discard the event objects after processing
 ```
 
 These created events can be manipulated as below in the simulated data example (as either a list of events, which may be extremely large, as above, or individually).
@@ -171,6 +171,8 @@ Nesting the `read` method in a loop allows reading in data from GEB data file.
 ### Simulated data interactive example
 
 We will start with the AGATA multiplicity-30 simulated data that we use for training as an example:
+
+> The AGATA multiplicity-30 simulated data is a dataset comprised of 30 gamma-ray energies (0.08 MeV to 2.6 MeV in 0.09 MeV increments) simulated using GEANT4 (separately and then joined together; there are often gamma-rays that so undetected so the combined multiplicity is less than 30).
 
 ```python
 import gamma_ray_tracking as gr  # import the package
@@ -216,13 +218,13 @@ plt.hist(energies, bins=np.arange(0,3,0.001), histtype='step')
 plt.show()
 ```
 
-Since this is simulated data, the position and energy resolution are much higher than what would be found in experimental data. To compensate, we artificially add noise to the data by packing together close interactions into a single interaction (typical packing distance is 6 mm) and adding noise to the position in line with an error model ([Siciliano et al. 2021](https://doi.org/10.1140/epja/s10050-021-00385-z) or [Söderström et al. 2011](https://doi.org/10.1016/j.nima.2011.02.089)).
+Since this is simulated data, the position and energy resolution are much higher than what would be found in experimental data. To compensate, we artificially add noise to the data by packing together close interactions into a single interaction (typical packing distance is 6 mm) and adding noise to the position and energy in line with an error model ([Siciliano et al. 2021](https://doi.org/10.1140/epja/s10050-021-00385-z) or [Söderström et al. 2011](https://doi.org/10.1016/j.nima.2011.02.089)). Error in position is typically much larger than the error in energy. This overall process is called *packing-and-smearing*.
 
 ```python
 ps_events, ps_clusters = gr.cluster_tools.pack_and_smear_list(m30_events, m30_clusters)
 ```
 
-Let's try tracking these events to get some predicted clusters. First we compute clusters using the cone clustering
+Let's try tracking these events to get some predicted clusters. First we compute clusters using a cone clustering (interactions are grouped by their angular distance from one another with respect to the detector origin):
 
 ```python
 predicted_clusters - []
@@ -238,7 +240,7 @@ fom_kwargs = {  # the FOM used for tracking
     'start_point' : 0,  # assume gamma-rays are originating from the interaction with index 0 (this is always the detector center/target)
 }  # see the documentation of gr.fom_tools.FOM() and gr.fom_tools.single_FOM() for additional information about keyword arguments to the FOM
 reordered_clusters = []
-for event, pred_clusters in zip(ps_events, predicted_clusters)
+for event, pred_clusters in zip(ps_events, predicted_clusters):
     reordered_clusters.append(gr.fom_tools.semi_greedy_clusters(event, pred_clusters, width = 5, stride = 2, **fom_kwargs))  # apply a semi-greedy ordering method to each cluster looking ahead five interactions and accepting the first two at each step
 ```
 
@@ -264,6 +266,7 @@ plt.show()
 FOM features are created using methods in the `fom_tools` and `fom_optimization_data` modules:
 
 ```python
+import pandas as pd
 import gamma_ray_tracking as gr
 m30_events, m30_clusters, m30_true_energies = gr.file_io.load_m30(include_energies=True)  # load multiplicity-30 simulated events and clusters (GEANT4; for training); true energies are given by cluster ID
 ps_events, ps_clusters = gr.cluster_tools.pack_and_smear_list(m30_events, m30_clusters)  # pack and smear the simulated data
@@ -271,6 +274,8 @@ ps_events, ps_clusters = gr.cluster_tools.pack_and_smear_list(m30_events, m30_cl
 energy_sums, lengths, opt_index,
 other_index, cluster_ids, acceptable,
 event_ids, true_cluster_ids) = gr.fom_optimization_data.make_data(ps_events, ps_clusters, true_energies=m30_true_energies)
+feature_names = gr.fom_tools.individual_FOM_feature_names()
+features_df = pd.DataFrame(data=features, columns=feature_names)
 ```
 
 The `features` are FOM elements that ostensibly could be used to order interactions. `ordered` is a boolean vector indicating if the features are associated with the true order (used for ordering model generation). `complete` is a boolean vector indicating if the features are associated with a complete energy deposit (used for suppression model generation). `energy_sums` are the energy sums of the associated cluster, `lengths` are the number of interactions, `opt_index` is the row index for each cluster of the ordered features, `other_index` is the row index of every row (can be replaced with `np.arange(0, len(features))`), `cluster_ids` are the absolute ID of the cluster in the data (not the ID of the source cluster with respect to a single `Event`), `acceptable` is a boolean vector indicating if the first two interactions are in the correct order (all that is really needed for tracking), `event_ids` are the associated `Event` object IDs, `true_cluster_ids` are the cluster IDs of the source cluster (for the multiplicity 30 data, this indicates the true emitted energy).
@@ -287,7 +292,7 @@ ranker = xgb.XGBRanker(tree_method="hist", objective="pairwise")  # Create a ran
 ranker.fit(X, y, qid=qid)  # Fit the ranking model
 ```
 
-Linear ranking models are also useful. In this case, we will be applying the ranking model to get values for an optimization problem, which means we are only interested in the optimal result (the ranking of other values is not important, only relative to the top result). We can then create a linear classification model for clusters of ordering features relative to the true ordering features:
+Linear ranking models are also useful for their simple implementation and sparsity. In this case, we will be applying the ranking model to get values for an optimization problem, which means we are only interested in the optimal result (the ranking of other values is not important, only relative to the top result). We can then create a linear classification model for clusters of ordering features relative to the true ordering features:
 
 ```python
 from gamma_ray_tracking.cluster_svm import column_generation
@@ -298,7 +303,7 @@ foms = np.dot(features, w, axis = 1)
 relative_foms = np.dot(relative_features, w, axis = 1)
 ```
 
-Order optimization methods applied to clusters that have a single relative fom value that is negative will produce an incorrect order. The goal of the `column_generation` method is to repeatedly search for the features of preferred incorrect orders and attempt to classify them with a relative fom that is negative (much of the produced data does not need to be used because they do not represent preferred alternatives to the true ordering).
+Order optimization methods applied to clusters that have a single relative FOM value that is negative will produce an incorrect order. The goal of the `column_generation` method is to repeatedly search for the features of preferred incorrect orders and attempt to classify them with a relative FOM that is negative (much of the produced data does not need to be used because they do not represent preferred alternatives to the true ordering).
 
 In practice, we need additional normalization of the data to remove `NaN` values and `inf` values before passing it to any ranking model.
 
