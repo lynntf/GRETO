@@ -289,7 +289,10 @@ class GEBdata_file:
             intpts.append(intpt)
         event["intpts"] = intpts
         event["sum_e"] = sum(intpt["int"][3] for intpt in event["intpts"])
-        corr = event["tot_e"] / event["sum_e"]  # correction factor for energy
+        if event["sum_e"] > 0:
+            corr = event["tot_e"] / event["sum_e"]  # correction factor for energy
+        else:
+            corr = 1.0
         event["energy_factor"] = corr
 
         if print_formatted:
