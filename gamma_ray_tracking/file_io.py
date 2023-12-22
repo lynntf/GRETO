@@ -8,8 +8,7 @@ from __future__ import annotations
 import os
 import struct
 from typing import BinaryIO, Dict, Generator, List, Tuple
-# import importlib
-# import pathlib
+
 import pickle as pkl
 
 import numpy as np
@@ -36,9 +35,15 @@ class GEBdata_file:
     This class provides methods to read and parse the GEB data file and return
     event objects that represent the events in the file.
     """
-    def __init__(self, file: BinaryIO = None, filename: str = None,
-                 MAX_INTPTS: int=16, detector:DetectorConfig=default_config,
-                 global_coords:bool = False):
+
+    def __init__(
+        self,
+        file: BinaryIO = None,
+        filename: str = None,
+        MAX_INTPTS: int = 16,
+        detector: DetectorConfig = default_config,
+        global_coords: bool = False,
+    ):
         """
         # Initialize the binary formats and configurations
 
@@ -69,26 +74,28 @@ class GEBdata_file:
         - `mode1_format` : The struct format for parsing MODE1 event level data
         """
         if file is None and filename is not None:
-            self.file = open(filename, 'rb') # Not the preferred method
+            self.file = open(filename, "rb")  # Not the preferred method
         elif file is not None:
             self.file = file
         else:
-            raise ValueError('No file provided')
+            raise ValueError("No file provided")
         if isinstance(detector, str):
             detector = DetectorConfig(detector=detector)
         self.crmat = detector.crmat
         self.index = -1
         self.MAX_INTPTS = MAX_INTPTS
-        self.GEBHeader_format = 'iiq'
-        self.intpts_format = 'ffffif'
-        self.crystal_intpts_format = 'iiifiiiiqqfffffffi'
-        self.mode2format = self.crystal_intpts_format + self.MAX_INTPTS*self.intpts_format
-        self.tracked_gamma_hit_format = 'ii'
-        self.mode1_format = 'fifiqffffffffhhee'
+        self.GEBHeader_format = "iiq"
+        self.intpts_format = "ffffif"
+        self.crystal_intpts_format = "iiifiiiiqqfffffffi"
+        self.mode2format = (
+            self.crystal_intpts_format + self.MAX_INTPTS * self.intpts_format
+        )
+        self.tracked_gamma_hit_format = "ii"
+        self.mode1_format = "fifiqffffffffhhee"
         self.header = {}
         self.global_coords = global_coords
 
-    def read(self, print_formatted: bool = False, as_gr_event:bool = False) -> Dict:
+    def read(self, print_formatted: bool = False, as_gr_event: bool = False) -> Dict:
         """
         # Read the next event in the GEB data file
 
@@ -110,38 +117,53 @@ class GEBdata_file:
         data = self.file.read(struct.calcsize(self.GEBHeader_format))
         if not data:
             return None
-        data_type, data_length, data_timestamp = struct.unpack(self.GEBHeader_format, data)
-        header = {'GEBHEADER type': data_type,
-                  'GEBHEADER length' : data_length,
-                  'GEBHEADER ts': data_timestamp}
+        data_type, data_length, data_timestamp = struct.unpack(
+            self.GEBHeader_format, data
+        )
+        header = {
+            "GEBHEADER type": data_type,
+            "GEBHEADER length": data_length,
+            "GEBHEADER ts": data_timestamp,
+        }
         self.header = header
         if print_formatted:
             print(f"***** event no {self.index}")
             print(f"Header type   {header['GEBHEADER type']}")
             print(f"Header length {header['GEBHEADER length']}")
             print(f"Header ts     {header['GEBHEADER ts']}")
-        self.mode2format = self.crystal_intpts_format + self.MAX_INTPTS*self.intpts_format
-        if header['GEBHEADER length'] != struct.calcsize(self.mode2format):
+        self.mode2format = (
+            self.crystal_intpts_format + self.MAX_INTPTS * self.intpts_format
+        )
+        if header["GEBHEADER length"] != struct.calcsize(self.mode2format):
             # Data includes extra padding, need to update the data format
-            self.mode2format = self.crystal_intpts_format + self.MAX_INTPTS*self.intpts_format +\
-                (header['GEBHEADER length'] - struct.calcsize(self.mode2format))*'x'
+            self.mode2format = (
+                self.crystal_intpts_format
+                + self.MAX_INTPTS * self.intpts_format
+                + (header["GEBHEADER length"] - struct.calcsize(self.mode2format)) * "x"
+            )
         if data_type == 1:
             try:
                 data = self.read_mode2(print_formatted=print_formatted)
             except struct.error:
                 return
             # Reset the data format
-            self.mode2format = self.crystal_intpts_format + self.MAX_INTPTS*self.intpts_format
+            self.mode2format = (
+                self.crystal_intpts_format + self.MAX_INTPTS * self.intpts_format
+            )
         elif data_type == 3:
             try:
-                data = self.read_mode1(print_formatted=print_formatted, as_gr_event=as_gr_event)
+                data = self.read_mode1(
+                    print_formatted=print_formatted, as_gr_event=as_gr_event
+                )
             except struct.error:
                 return
             if as_gr_event:
                 return data
         elif data_type == 33:
             try:
-                data = self.read_extended_mode1(print_formatted=print_formatted, as_gr_event=as_gr_event)
+                data = self.read_extended_mode1(
+                    print_formatted=print_formatted, as_gr_event=as_gr_event
+                )
             except struct.error:
                 return
             if as_gr_event:
@@ -153,11 +175,11 @@ class GEBdata_file:
                 return
             return header
         else:
-            self.file.read(header['GEBHEADER length'])
+            self.file.read(header["GEBHEADER length"])
             return header
         return header | data
 
-    def read_mode2(self, print_formatted:bool = False, size:int = None) -> Dict:
+    def read_mode2(self, print_formatted: bool = False, size: int = None) -> Dict:
         """
         # Read in a crystal level event from a MODE2 data file
 
@@ -221,82 +243,101 @@ class GEBdata_file:
         """
         event = {}
         if size is None:
-            event_data = struct.unpack(self.mode2format,
-                                   self.file.read(struct.calcsize(self.mode2format)))
+            event_data = struct.unpack(
+                self.mode2format, self.file.read(struct.calcsize(self.mode2format))
+            )
         else:
-            event_data = struct.unpack(self.mode2format,
-                                   self.file.read(size))
-        event['mode'] = 2
-        event['type'] = event_data[0]
-        event['crystal_id'] = event_data[1]
-        event['num'] = event_data[2]
-        event['tot_e'] = event_data[3]
-        event['core_e'] = event_data[4:8]
-        event['timestamp'] = event_data[8]
-        event['trig_time'] = event_data[9]
-        event['t0'] = event_data[10]
-        event['cfd'] = event_data[11]
-        event['chisq'] = event_data[12]
-        event['norm_chisq'] = event_data[13]
-        event['baseline'] = event_data[14]
-        event['prestep'] = event_data[15]
-        event['poststep'] = event_data[16]
-        event['pad'] = event_data[17]
+            event_data = struct.unpack(self.mode2format, self.file.read(size))
+        event["mode"] = 2
+        event["type"] = event_data[0]
+        event["crystal_id"] = event_data[1]
+        event["num"] = event_data[2]
+        event["tot_e"] = event_data[3]
+        event["core_e"] = event_data[4:8]
+        event["timestamp"] = event_data[8]
+        event["trig_time"] = event_data[9]
+        event["t0"] = event_data[10]
+        event["cfd"] = event_data[11]
+        event["chisq"] = event_data[12]
+        event["norm_chisq"] = event_data[13]
+        event["baseline"] = event_data[14]
+        event["prestep"] = event_data[15]
+        event["poststep"] = event_data[16]
+        event["pad"] = event_data[17]
 
         intpts = []
         # for i in range(self.MAX_INTPTS):
-        for i in range(event['num']):
+        for i in range(event["num"]):
             intpt = {}
-            intpt['int'] = event_data[18+(i*6):22+(i*6)]
+            intpt["int"] = event_data[18 + (i * 6) : 22 + (i * 6)]
             if self.crmat is not None and not self.global_coords:
                 try:
-                    intpt['global_int'] = np.matmul(self.crmat[event['crystal_id']],
-                                                    np.array(list(intpt['int'][:3]) + [10]))
-                    intpt['global_int'][3] = intpt['int'][3]
+                    intpt["global_int"] = np.matmul(
+                        self.crmat[event["crystal_id"]],
+                        np.array(list(intpt["int"][:3]) + [10]),
+                    )
+                    intpt["global_int"][3] = intpt["int"][3]
                 except ValueError as exc:
-                    raise ValueError(f"Problem with coordinate transform. {event} {intpt},"+\
-                        f" {np.array(list(intpt['int'][:3]) + [10])}") from exc
+                    raise ValueError(
+                        f"Problem with coordinate transform. {event} {intpt},"
+                        + f" {np.array(list(intpt['int'][:3]) + [10])}"
+                    ) from exc
             else:
-                intpt['global_int'] = intpt['int']
-            intpt['seg'] = event_data[22+(i*6)]
-            intpt['seg_ener'] = event_data[23+(i*6)]
+                intpt["global_int"] = intpt["int"]
+            intpt["seg"] = event_data[22 + (i * 6)]
+            intpt["seg_ener"] = event_data[23 + (i * 6)]
             intpts.append(intpt)
-        event['intpts'] = intpts
-        event['sum_e'] = sum(intpt['int'][3] for intpt in event['intpts'])
+        event["intpts"] = intpts
+        event["sum_e"] = sum(intpt["int"][3] for intpt in event["intpts"])
+        corr = event["tot_e"] / event["sum_e"]  # correction factor for energy
+        event["energy_factor"] = corr
 
         if print_formatted:
-            print('\n===========================')
-            print(f"Event at time {event['timestamp']} in crystal {event['crystal_id']}")
+            print("\n===========================")
+            print(
+                f"Event at time {event['timestamp']} in crystal {event['crystal_id']}"
+            )
             print("num | tot_e (keV) |   t0   | chisq | norm_chisq |   timestamp")
             print("----+-------------+--------+-------+------------+---------------")
-            print(f"{event['num']:2}  | {event['tot_e']:^11.3f} |"+\
-                f" {event['t0']:4.3f} | {event['chisq']:^5.3f} |"+\
-                f" {event['norm_chisq']:^10.3f} | {event['timestamp']}")
+            print(
+                f"{event['num']:2}  | {event['tot_e']:^11.3f} |"
+                + f" {event['t0']:4.3f} | {event['chisq']:^5.3f} |"
+                + f" {event['norm_chisq']:^10.3f} | {event['timestamp']}"
+            )
             try:
                 print("")
-                corr = event['tot_e']/event['sum_e'] # correction factor for energy
-                print("id |  x (cm)  |  y (cm)  |  z (cm)  |   e (keV)  |  seg  | r (cm)")
-                print("---+----------+----------+----------+------------+-------+--------")
-                for i, intpt in enumerate(event['intpts'][:event['num']]):
+                print(
+                    "id |  x (cm)  |  y (cm)  |  z (cm)  |   e (keV)  |  seg  | r (cm)"
+                )
+                print(
+                    "---+----------+----------+----------+------------+-------+--------"
+                )
+                for i, intpt in enumerate(event["intpts"][: event["num"]]):
                     if self.crmat is None:
-                        print(f"{i:2} | {intpt['int'][0]/10:8.2f} |"+\
-                            f" {intpt['int'][1]/10:8.2f} |"+\
-                            f" {intpt['int'][2]/10:8.2f} |"+\
-                            f" {intpt['int'][3]*corr:4.0f}/ {event['tot_e']:<4.0f} |"+\
-                            f" {intpt['seg']:^5} | {np.linalg.norm(intpt['int'][:3])/10:6.2f}")
+                        print(
+                            f"{i:2} | {intpt['int'][0]/10:8.2f} |"
+                            + f" {intpt['int'][1]/10:8.2f} |"
+                            + f" {intpt['int'][2]/10:8.2f} |"
+                            + f" {intpt['int'][3]*corr:4.0f}/ {event['tot_e']:<4.0f} |"
+                            + f" {intpt['seg']:^5} | {np.linalg.norm(intpt['int'][:3])/10:6.2f}"
+                        )
                     else:
-                        print(f"{i:2} | {intpt['global_int'][0]/10:8.2f} |"+\
-                            f" {intpt['global_int'][1]/10:8.2f} |"+\
-                            f" {intpt['global_int'][2]/10:8.2f} |"+\
-                            f" {intpt['int'][3]*corr:4.0f}/ {event['tot_e']:<4.0f} |"+\
-                            f" {intpt['seg']:^5} |"+\
-                            f" {np.linalg.norm(intpt['global_int'][:3])/10:6.2f}")
+                        print(
+                            f"{i:2} | {intpt['global_int'][0]/10:8.2f} |"
+                            + f" {intpt['global_int'][1]/10:8.2f} |"
+                            + f" {intpt['global_int'][2]/10:8.2f} |"
+                            + f" {intpt['int'][3]*corr:4.0f}/ {event['tot_e']:<4.0f} |"
+                            + f" {intpt['seg']:^5} |"
+                            + f" {np.linalg.norm(intpt['global_int'][:3])/10:6.2f}"
+                        )
             except IndexError:
                 print("No interactions read")
             print("")
         return event
 
-    def read_mode1(self, print_formatted:bool =False, as_gr_event:bool = False) -> Dict:
+    def read_mode1(
+        self, print_formatted: bool = False, as_gr_event: bool = False
+    ) -> Dict:
         """
         # Read in an event from a MODE1 data file
 
@@ -321,14 +362,14 @@ class GEBdata_file:
         - For each &gamma;-ray detected indexed [0,`ngam`):
             - `pad` : An integer that indicates
                 - non-0 with a decomp error, value gives error type
-                - `pad = 1`   a null pointer was passed to dl_decomp() 
+                - `pad = 1`   a null pointer was passed to dl_decomp()
                 - `pad = 2`   total energy below threshold
                 - `pad = 3`   no net charge segments in evt
                 - `pad = 4`   too many net charge segments
-                - `pad = 5`   chi^2 is bad following decomp (in this case 
-                             crys_intpts is non-zero but post-processing 
+                - `pad = 5`   chi^2 is bad following decomp (in this case
+                             crys_intpts is non-zero but post-processing
                              step is not applied)
-                - `pad = 6`   bad build, i.e. <40 segment+CC channels found 
+                - `pad = 6`   bad build, i.e. <40 segment+CC channels found
                 - `pad|= 128`  PileUp, i.e. pileup flag or deltaT1<6usec
                     - e.g.:
                         - `pad = 128`  pileup+Good
@@ -357,63 +398,75 @@ class GEBdata_file:
             - `TANGO_fom` : A float that indicates the figure of merit using the
               TANGO energy of the &gamma;-ray
         """
-        ngam, pad = struct.unpack(self.tracked_gamma_hit_format,
-                                  self.file.read(struct.calcsize(self.tracked_gamma_hit_format)))
+        ngam, pad = struct.unpack(
+            self.tracked_gamma_hit_format,
+            self.file.read(struct.calcsize(self.tracked_gamma_hit_format)),
+        )
 
-        events = {'mode': 1, 'ngam': ngam, 'pad': pad}
+        events = {"mode": 1, "ngam": ngam, "pad": pad}
         for i in range(ngam):
             event = {}
-            event_data = tuple(struct.unpack(self.mode1_format,
-                                       self.file.read(struct.calcsize(self.mode1_format))))
-            event['esum'] = event_data[0]
-            event['ndet'] = event_data[1]
-            event['fom'] = event_data[2]
-            event['tracked'] = event_data[3]
-            event['timestamp'] = event_data[4]
-            event['fhcrID'] = event_data[13]
+            event_data = tuple(
+                struct.unpack(
+                    self.mode1_format,
+                    self.file.read(struct.calcsize(self.mode1_format)),
+                )
+            )
+            event["esum"] = event_data[0]
+            event["ndet"] = event_data[1]
+            event["fom"] = event_data[2]
+            event["tracked"] = event_data[3]
+            event["timestamp"] = event_data[4]
+            event["fhcrID"] = event_data[13]
             first_int = tuple(event_data[5:9])
             second_int = tuple(event_data[9:13])
             if as_gr_event:
                 first_int = (
-                    first_int[0]/10,
-                    first_int[1]/10,
-                    first_int[2]/10,
-                    first_int[3]/1000,
+                    first_int[0] / 10,
+                    first_int[1] / 10,
+                    first_int[2] / 10,
+                    first_int[3] / 1000,
                 )
                 second_int = (
-                    second_int[0]/10,
-                    second_int[1]/10,
-                    second_int[2]/10,
-                    second_int[3]/1000,
+                    second_int[0] / 10,
+                    second_int[1] / 10,
+                    second_int[2] / 10,
+                    second_int[3] / 1000,
                 )
-            event['first'] = Interaction(first_int[:3], first_int[3],
-                                         ts=event['timestamp'],
-                                         crystal_no=event['fhcrID'])
-            event['second'] = Interaction(second_int[:3], second_int[3],
-                                          ts=event['timestamp'],
-                                          crystal_no=event['fhcrID'])
+            event["first"] = Interaction(
+                first_int[:3],
+                first_int[3],
+                ts=event["timestamp"],
+                crystal_no=event["fhcrID"],
+            )
+            event["second"] = Interaction(
+                second_int[:3],
+                second_int[3],
+                ts=event["timestamp"],
+                crystal_no=event["fhcrID"],
+            )
             # event['first'] = Interaction(event_data[5:8], event_data[8],
             #                              ts=event['timestamp'],
             #                              crystal_no=event['fhcrID'])
             # event['second'] = Interaction(event_data[9:12], event_data[12],
             #                               ts=event['timestamp'],
             #                               crystal_no=event['fhcrID'])
-            event['escaped'] = event_data[14]
-            event['TANGO'] = event_data[15]
-            event['TANGO_fom'] = event_data[16]
+            event["escaped"] = event_data[14]
+            event["TANGO"] = event_data[15]
+            event["TANGO_fom"] = event_data[16]
             events[i] = event
 
         if print_formatted:
             print(f"We have {events['ngam']} tracked gamma rays")
 
-            for i in range(events['ngam']):
+            for i in range(events["ngam"]):
                 print(f"    [{i}]esum     = {events[i]['esum']}")
                 print(f"       fom      = {events[i]['fom']}")
                 print(f"       ndet     = {events[i]['ndet']}")
                 print(f"       tracked  = {events[i]['tracked']}")
                 print(f"       timestamp= {events[i]['timestamp']}")
                 print(f"           interaction[0]= {events[i]['first']}")
-                if events[i]['ndet'] > 1:
+                if events[i]["ndet"] > 1:
                     print(f"           interaction[1]= {events[i]['second']}")
                 print(f"       fhcrID   = {events[i]['fhcrID']}")
                 print(f"       escaped  = {events[i]['escaped']}")
@@ -424,18 +477,22 @@ class GEBdata_file:
             points = []
             clusters = {}
             int_count = 0
-            ts = events[0]['timestamp']
-            for i in range(events['ngam']):
-                ts = min(ts, events[i]['timestamp'])
-                points.append(events[i]['first'])
-                if events[i]['ndet'] > 1:
-                    points.append(events[i]['second'])
-                clusters[i] = list(range(int_count + 1, int_count + 2 + (events[i]['ndet'] > 1)))
+            ts = events[0]["timestamp"]
+            for i in range(events["ngam"]):
+                ts = min(ts, events[i]["timestamp"])
+                points.append(events[i]["first"])
+                if events[i]["ndet"] > 1:
+                    points.append(events[i]["second"])
+                clusters[i] = list(
+                    range(int_count + 1, int_count + 2 + (events[i]["ndet"] > 1))
+                )
                 int_count += len(clusters[i])
             return Event(ts, points), clusters
         return events
 
-    def read_extended_mode1(self, print_formatted:bool =False, as_gr_event:bool = False) -> Dict:
+    def read_extended_mode1(
+        self, print_formatted: bool = False, as_gr_event: bool = False
+    ) -> Dict:
         """
         # Read in a full event from an extended MODE1 data file
 
@@ -460,14 +517,14 @@ class GEBdata_file:
         - For each &gamma;-ray detected indexed [0,`ngam`):
             - `pad` : An integer that indicates
                 - non-0 with a decomp error, value gives error type
-                - `pad = 1`   a null pointer was passed to dl_decomp() 
+                - `pad = 1`   a null pointer was passed to dl_decomp()
                 - `pad = 2`   total energy below threshold
                 - `pad = 3`   no net charge segments in evt
                 - `pad = 4`   too many net charge segments
-                - `pad = 5`   chi^2 is bad following decomp (in this case 
-                             crys_intpts is non-zero but post-processing 
+                - `pad = 5`   chi^2 is bad following decomp (in this case
+                             crys_intpts is non-zero but post-processing
                              step is not applied)
-                - `pad = 6`   bad build, i.e. <40 segment+CC channels found 
+                - `pad = 6`   bad build, i.e. <40 segment+CC channels found
                 - `pad|= 128`  PileUp, i.e. pileup flag or deltaT1<6usec
                     - e.g.:
                         - `pad = 128`  pileup+Good
@@ -487,7 +544,7 @@ class GEBdata_file:
               the &gamma;-ray
             - `interactions` : The interactions (there are `ndet` interactions)
               comprising the event
-                - 
+                -
             - `escaped` : An integer that indicates whether the &gamma;-ray has
               escaped or not. The value is 0 for no escape and 1 for escape.
             - `TANGO` : A half precision float that indicates the TANGO
@@ -496,82 +553,100 @@ class GEBdata_file:
               TANGO energy of the &gamma;-ray
         """
 
-        tracked_gamma_hit_format = 'ii'  # 8 bytes
-        ray_descriptor_format = 'fifiq'  # 24 bytes
-        ray_interaction_format = 'ffff'  # 16 bytes
-        ray_remaining_format = 'hhee'    # 8 bytes
-        
-        ngam, pad = struct.unpack(tracked_gamma_hit_format,
-                                  self.file.read(struct.calcsize(tracked_gamma_hit_format)))
+        tracked_gamma_hit_format = "ii"  # 8 bytes: ngam and pad
+        ray_descriptor_format = "fifiq"  # 24 bytes: esum, ndet, fom, tracked, timestamp
+        ray_interaction_format = (
+            "ffffihe"  # 24 bytes: xyz e, timestamp_offset, crystal_id, energy_factor
+        )
+        ray_remaining_format = "hhee"  # 8 bytes: crystal_id, escaped, tango, tango_fom
 
-        events = {'mode': 1, 'ngam': ngam, 'pad': pad}
+        ngam, pad = struct.unpack(
+            tracked_gamma_hit_format,
+            self.file.read(struct.calcsize(tracked_gamma_hit_format)),
+        )
+
+        events = {"mode": 1, "ngam": ngam, "pad": pad}
         for i in range(ngam):
             event = {}
             event_descriptor_data = tuple(
                 struct.unpack(
                     ray_descriptor_format,
-                    self.file.read(struct.calcsize(ray_descriptor_format))
+                    self.file.read(struct.calcsize(ray_descriptor_format)),
                 )
             )
-            event['esum']      = event_descriptor_data[0]
-            event['ndet']      = event_descriptor_data[1]
-            event['fom']       = event_descriptor_data[2]
-            event['tracked']   = event_descriptor_data[3]
-            event['timestamp'] = event_descriptor_data[4]
+            event["esum"] = event_descriptor_data[0]
+            event["ndet"] = event_descriptor_data[1]
+            event["fom"] = event_descriptor_data[2]
+            event["tracked"] = event_descriptor_data[3]
+            event["timestamp"] = event_descriptor_data[4]
 
             interactions = []
-            event['interactions'] = []
+            event["interactions"] = []
             interaction_data = tuple(
                 struct.unpack(
-                    ray_interaction_format*event['ndet'],
-                    self.file.read(struct.calcsize(ray_interaction_format*event['ndet']))
+                    ray_interaction_format * event["ndet"],
+                    self.file.read(
+                        struct.calcsize(ray_interaction_format * event["ndet"])
+                    ),
                 )
             )
-            for j in range(event['ndet']):
-                interactions.append(interaction_data[(4*j):(4*(j+1))])
+            for j in range(event["ndet"]):
+                interactions.append(
+                    interaction_data[
+                        (len(ray_interaction_format) * j) : (
+                            len(ray_interaction_format) * (j + 1)
+                        )
+                    ]
+                )
 
             remaining_data = tuple(
                 struct.unpack(
                     ray_remaining_format,
-                    self.file.read(struct.calcsize(ray_remaining_format))
+                    self.file.read(struct.calcsize(ray_remaining_format)),
                 )
             )
-            event['fhcrID']    = remaining_data[0]
-            event['escaped']   = remaining_data[1]
-            event['TANGO']     = remaining_data[2]
-            event['TANGO_fom'] = remaining_data[3]
+            event["fhcrID"] = remaining_data[0]
+            event["escaped"] = remaining_data[1]
+            event["TANGO"] = remaining_data[2]
+            event["TANGO_fom"] = remaining_data[3]
 
             for interaction in interactions:
                 if as_gr_event:
                     # Correct units
                     interaction = (
-                        interaction[0]/10,  # mm to cm
-                        interaction[1]/10,  # mm to cm
-                        interaction[2]/10,  # mm to cm
-                        interaction[3]/1000,  # keV to MeV
-                        )
+                        interaction[0] / 10,  # mm to cm
+                        interaction[1] / 10,  # mm to cm
+                        interaction[2] / 10,  # mm to cm
+                        interaction[3] / 1000,  # keV to MeV
+                        interaction[4],  # timestamp offset
+                        interaction[5],  # crystal_id
+                        interaction[6],  # energy correction factor
+                    )
 
-                event['interactions'].append(
+                event["interactions"].append(
                     Interaction(
                         x=interaction[:3],
                         e=interaction[3],
-                        ts=event['timestamp'],
-                        crystal_no=event['fhcrID'],
-                        )
+                        ts=event["timestamp"] + interaction[4],
+                        crystal_no=interaction[5],
+                        energy_factor=interaction[6],
                     )
+                )
             events[i] = event
 
         if print_formatted:
             print(f"We have {events['ngam']} tracked gamma rays")
 
-            for i in range(events['ngam']):
+            for i in range(events["ngam"]):
                 print(f"    [{i}]esum     = {events[i]['esum']}")
                 print(f"       fom      = {events[i]['fom']}")
                 print(f"       ndet     = {events[i]['ndet']}")
                 print(f"       tracked  = {events[i]['tracked']}")
                 print(f"       timestamp= {events[i]['timestamp']}")
-                for j in range(events[i]['ndet']):
-                    print(f"           interaction[{j}]= {events[i]['interactions'][j]}")
+                for j in range(events[i]["ndet"]):
+                    print(
+                        f"           interaction[{j}]= {events[i]['interactions'][j]}"
+                    )
                 print(f"       fhcrID   = {events[i]['fhcrID']}")
                 print(f"       escaped  = {events[i]['escaped']}")
                 print(f"       TANGO    = {events[i]['TANGO']}")
@@ -581,16 +656,18 @@ class GEBdata_file:
             points = []
             clusters = {}
             int_count = 0
-            ts = events[0]['timestamp']
-            for i in range(events['ngam']):
-                ts = min(ts, events[i]['timestamp'])
-                points.extend(events[i]['interactions'])
-                clusters[i] = list(range(int_count + 1, int_count + 1 + len(events[i]['interactions'])))
-                int_count += len(events[i]['interactions'])
+            ts = events[0]["timestamp"]
+            for i in range(events["ngam"]):
+                ts = min(ts, events[i]["timestamp"])
+                points.extend(events[i]["interactions"])
+                clusters[i] = list(
+                    range(int_count + 1, int_count + 1 + len(events[i]["interactions"]))
+                )
+                int_count += len(events[i]["interactions"])
             return Event(ts, points), clusters
         return events
 
-    def read_simulated_data(self, print_formatted:bool=False):
+    def read_simulated_data(self, print_formatted: bool = False):
         """
         #define MAX_SIM_GAMMAS 10
         struct g4Sim_abcd1234 {
@@ -602,38 +679,46 @@ class GEBdata_file:
                 float x, y, z;
                 float phi, theta;
                 float beta;
-            } g4Sim_emittedGamma[MAX_SIM_GAMMAS]; 
+            } g4Sim_emittedGamma[MAX_SIM_GAMMAS];
         };
         """
-        ray_type, ray_num, ray_full = struct.unpack('iii', self.file.read(struct.calcsize('iii')))
+        ray_type, ray_num, ray_full = struct.unpack(
+            "iii", self.file.read(struct.calcsize("iii"))
+        )
         if print_formatted:
             print(f"  Type {ray_type}; Num {ray_num}; Full {ray_full}")
-        format_ = 'f' + 'iffff'*ray_type
+        format_ = "f" + "iffff" * ray_type
         rays = struct.unpack(format_, self.file.read(struct.calcsize(format_)))
         data = []
         first_value = rays[0]
         if print_formatted:
             print(f"  Some value (beta?) {first_value}")
-            print('   unknown val | energy [keV] |   angle 1?   |   angle 2?   |   angle 3?   |')
-            print("  -------------------------------------------------------------------------")
+            print(
+                "   unknown val | energy [keV] |   angle 1?   |   angle 2?   |   angle 3?   |"
+            )
+            print(
+                "  -------------------------------------------------------------------------"
+            )
         for i in range(ray_type):
             data_dict = {
-                'unknown value':rays[5*i + 1],
-                'energy [keV]':rays[5*i + 2],
-                'angle 1?':rays[5*i + 3],
-                'angle 2?':rays[5*i + 4],
-                'angle 3?':rays[5*i + 5]
-                }
+                "unknown value": rays[5 * i + 1],
+                "energy [keV]": rays[5 * i + 2],
+                "angle 1?": rays[5 * i + 3],
+                "angle 2?": rays[5 * i + 4],
+                "angle 3?": rays[5 * i + 5],
+            }
             data.append(data_dict)
             if print_formatted:
-                print(f"  {rays[5*i + 1]:12} | {rays[5*i + 2]:12.4} | {rays[5*i + 3]:12.4}"+\
-                    f" | {rays[5*i + 4]:12.4} | {rays[5*i + 5]:12.4} |")
+                print(
+                    f"  {rays[5*i + 1]:12} | {rays[5*i + 2]:12.4} | {rays[5*i + 3]:12.4}"
+                    + f" | {rays[5*i + 4]:12.4} | {rays[5*i + 5]:12.4} |"
+                )
         output = {
-            'type (number of interactions?)': ray_type,
-            'num (?)': ray_num,
-            'full (?)': ray_full,
-            'first_value (?)': first_value,
-            'rays': data,
+            "type (number of interactions?)": ray_type,
+            "num (?)": ray_num,
+            "full (?)": ray_full,
+            "first_value (?)": first_value,
+            "rays": data,
         }
         return output
 
@@ -643,12 +728,17 @@ class GEBdata_file:
         """
         self.file.close()
 
-def mode1_data(event:Event, clusters:Dict,
-               escapes:Dict = None,
-               fix_units:bool = True,
-               foms:Dict = None,
-               monster_size:int = 8, include_TANGO:bool = False,
-               **FOM_kwargs) -> bytes:
+
+def mode1_data(
+    event: Event,
+    clusters: Dict,
+    escapes: Dict = None,
+    fix_units: bool = True,
+    foms: Dict = None,
+    monster_size: int = 8,
+    include_TANGO: bool = False,
+    **FOM_kwargs,
+) -> bytes:
     """
     # Create byte MODE1 data for writing
 
@@ -682,89 +772,124 @@ def mode1_data(event:Event, clusters:Dict,
     ## Returns:
     - A bytes object that contains the MODE1 data for writing
     """
-    GEBHeader_format = 'iiq'
+    GEBHeader_format = "iiq"
     ngam = len(clusters)
-    tracked_gamma_hit_format = 'ii'
-    mode1_format = 'fifiqffffffffh'
-    extra_data_format = 'hee' # Extra bytes
-    total_format = GEBHeader_format + tracked_gamma_hit_format +\
-        ngam*(mode1_format + extra_data_format)
+    tracked_gamma_hit_format = "ii"
+    mode1_format = "fifiqffffffffh"
+    extra_data_format = "hee"  # Extra bytes
+    total_format = (
+        GEBHeader_format
+        + tracked_gamma_hit_format
+        + ngam * (mode1_format + extra_data_format)
+    )
 
-    mode1_output = struct.pack(GEBHeader_format, int(3.0),
-                               struct.calcsize(tracked_gamma_hit_format +\
-                                   ngam*(mode1_format + extra_data_format)),
-                              int(event.id))
+    mode1_output = struct.pack(
+        GEBHeader_format,
+        int(3.0),
+        struct.calcsize(
+            tracked_gamma_hit_format + ngam * (mode1_format + extra_data_format)
+        ),
+        int(event.id),
+    )
     mode1_output += struct.pack(tracked_gamma_hit_format, ngam, 0)
     if foms is None:
         foms = cluster_FOM(event, clusters, **FOM_kwargs)
     for i, cluster in clusters.items():
-        mode1 = {'format': total_format,
-                 'GEB_type': 3,
-                 'length': struct.calcsize(tracked_gamma_hit_format + ngam*mode1_format),
-                 'esum': sum(event.points[i].e for i in cluster),
-                 'ndet': len(cluster),
-                 'fom': foms[i],
-                 'tracked': int(len(cluster) <= monster_size),
-                 'timestamp': event.points[cluster[0]].ts}
+        mode1 = {
+            "format": total_format,
+            "GEB_type": 3,
+            "length": struct.calcsize(tracked_gamma_hit_format + ngam * mode1_format),
+            "esum": sum(event.points[i].e for i in cluster),
+            "ndet": len(cluster),
+            "fom": foms[i],
+            "tracked": int(len(cluster) <= monster_size),
+            "timestamp": event.points[cluster[0]].ts,
+        }
         if escapes is None or not include_TANGO:
-            mode1['escaped'] = 0
-            mode1['TANGO'] = 0.0
-            mode1['TANGO_fom'] = 0.0
+            mode1["escaped"] = 0
+            mode1["TANGO"] = 0.0
+            mode1["TANGO_fom"] = 0.0
         else:
-            escape_cluster = event.semi_greedy(cluster,
-                                               width=5,
-                                               stride= 3,
-                                               estimate_start_energy=True,
-                                               **FOM_kwargs)
-            mode1['TANGO'] = event.estimate_start_energy(escape_cluster, normalize_by_sigma=False)
-            if mode1['TANGO'] is None:
-                mode1['TANGO'] = 0
-                mode1['TANGO_fom'] = 0
+            escape_cluster = event.semi_greedy(
+                cluster, width=5, stride=3, estimate_start_energy=True, **FOM_kwargs
+            )
+            mode1["TANGO"] = event.estimate_start_energy(
+                escape_cluster, normalize_by_sigma=False
+            )
+            if mode1["TANGO"] is None:
+                mode1["TANGO"] = 0
+                mode1["TANGO_fom"] = 0
             else:
-                mode1['TANGO_fom'] = event.FOM(escape_cluster,
-                                               start_energy=mode1['TANGO'],
-                                               **FOM_kwargs)
+                mode1["TANGO_fom"] = event.FOM(
+                    escape_cluster, start_energy=mode1["TANGO"], **FOM_kwargs
+                )
             # if escapes[i]:
             #     mode1['escaped'] = 1
             # else:
             #     mode1['escaped'] = 0
-            mode1['escaped'] = int(escapes[i])
+            mode1["escaped"] = int(escapes[i])
         # if 0 < mode1['TANGO_fom'] < mode1['fom']:
         #     cluster = escape_cluster
         if fix_units:
-            mode1['esum'] *= 1000
-            mode1['first'] = list(10*event.points[cluster[0]].x) +\
-                [1000*event.points[cluster[0]].e]
-            mode1['second'] = [0,0,0,0] if len(cluster) == 1 else \
-                list(10*event.points[cluster[1]].x) + \
-                [1000*event.points[cluster[1]].e]
-            mode1['TANGO'] = mode1['TANGO']*1000
+            mode1["esum"] *= 1000
+            mode1["first"] = list(10 * event.points[cluster[0]].x) + [
+                1000 * event.points[cluster[0]].e
+            ]
+            mode1["second"] = (
+                [0, 0, 0, 0]
+                if len(cluster) == 1
+                else list(10 * event.points[cluster[1]].x)
+                + [1000 * event.points[cluster[1]].e]
+            )
+            mode1["TANGO"] = mode1["TANGO"] * 1000
         else:
-            mode1['first'] = list(event.points[cluster[0]].x) + [event.points[cluster[0]].e]
-            mode1['second'] = [0,0,0,0] if len(cluster) == 1 else \
-                list(event.points[cluster[1]].x) + \
-                [event.points[cluster[1]].e]
-        mode1['fhcrID'] = (event.points[cluster[0]].crystal_no
-                           if event.points[cluster[0]].crystal_no is not None
-                           else 0)
+            mode1["first"] = list(event.points[cluster[0]].x) + [
+                event.points[cluster[0]].e
+            ]
+            mode1["second"] = (
+                [0, 0, 0, 0]
+                if len(cluster) == 1
+                else list(event.points[cluster[1]].x) + [event.points[cluster[1]].e]
+            )
+        mode1["fhcrID"] = (
+            event.points[cluster[0]].crystal_no
+            if event.points[cluster[0]].crystal_no is not None
+            else 0
+        )
 
-        mode1_output += struct.pack(mode1_format + extra_data_format,
-                                mode1['esum'], int(mode1['ndet']), mode1['fom'], mode1['tracked'],
-                                int(mode1['timestamp']),
-                                mode1['first'][0], mode1['first'][1],
-                                mode1['first'][2], mode1['first'][3],
-                                mode1['second'][0],mode1['second'][1],
-                                mode1['second'][2],mode1['second'][3],
-                                int(mode1['fhcrID']), mode1['escaped'],
-                                mode1['TANGO'], mode1['TANGO_fom'])
+        mode1_output += struct.pack(
+            mode1_format + extra_data_format,
+            mode1["esum"],
+            int(mode1["ndet"]),
+            mode1["fom"],
+            mode1["tracked"],
+            int(mode1["timestamp"]),
+            mode1["first"][0],
+            mode1["first"][1],
+            mode1["first"][2],
+            mode1["first"][3],
+            mode1["second"][0],
+            mode1["second"][1],
+            mode1["second"][2],
+            mode1["second"][3],
+            int(mode1["fhcrID"]),
+            mode1["escaped"],
+            mode1["TANGO"],
+            mode1["TANGO_fom"],
+        )
     return mode1_output
 
-def mode1_extended_data(event:Event, clusters:Dict,
-               escapes:Dict = None,
-               fix_units:bool = True,
-               foms:Dict = None,
-               monster_size:int = 8, include_TANGO:bool = False,
-               **FOM_kwargs) -> bytes:
+
+def mode1_extended_data(
+    event: Event,
+    clusters: Dict,
+    escapes: Dict = None,
+    fix_units: bool = True,
+    foms: Dict = None,
+    monster_size: int = 8,
+    include_TANGO: bool = False,
+    **FOM_kwargs,
+) -> bytes:
     """
     # Create byte extended MODE1 data for writing
 
@@ -799,90 +924,121 @@ def mode1_extended_data(event:Event, clusters:Dict,
     - A bytes object that contains the extended MODE1 data for writing
     """
     GEB_type = 33
-    GEBHeader_format = 'iiq'  # 16 bytes
+    GEBHeader_format = "iiq"  # 16 bytes
     ngam = len(clusters)
-    tracked_gamma_hit_format = 'ii'  # 8 bytes
-    gamma_info_format = 'fifiq'  # 24 bytes
-    interaction_format = 'ffff'  # 16 bytes
-    addendum_format = 'hhee'  # 8 bytes
+    tracked_gamma_hit_format = "ii"  # 8 bytes
+    gamma_info_format = "fifiq"  # 24 bytes
+    interaction_format = "ffffihe"  # 24 bytes
+    addendum_format = "hhee"  # 8 bytes
     # mode1_format = 'fifiqffffffffh'
     # extra_data_format = 'hee' # Extra bytes
-    total_format = GEBHeader_format + tracked_gamma_hit_format +\
-        ngam*(gamma_info_format + addendum_format) + len(event)*interaction_format
-        # ngam*(mode1_format + extra_data_format)
-    data_format = tracked_gamma_hit_format +\
-        ngam*(gamma_info_format + addendum_format) + len(event)*interaction_format
+    total_format = (
+        GEBHeader_format
+        + tracked_gamma_hit_format
+        + ngam * (gamma_info_format + addendum_format)
+        + len(event) * interaction_format
+    )
+    # ngam*(mode1_format + extra_data_format)
+    data_format = (
+        tracked_gamma_hit_format
+        + ngam * (gamma_info_format + addendum_format)
+        + len(event) * interaction_format
+    )
 
-    mode1_output = struct.pack(GEBHeader_format, int(GEB_type),
-                               struct.calcsize(data_format),
-                               int(event.id))
-    mode1_output += struct.pack(tracked_gamma_hit_format, ngam, 0)
+    mode1_output = struct.pack(
+        GEBHeader_format, int(GEB_type), struct.calcsize(data_format), int(event.id)
+    )
+    pad = 0
+    mode1_output += struct.pack(tracked_gamma_hit_format, ngam, pad)
     if foms is None:
         foms = cluster_FOM(event, clusters, **FOM_kwargs)
     for i, cluster in clusters.items():
-        mode1 = {'format': total_format,
-                 'GEB_type': GEB_type,
-                 'length': struct.calcsize(
-                     tracked_gamma_hit_format + ngam*(gamma_info_format + addendum_format) \
-                         + len(event)*interaction_format
-                     ),
-                 'esum': sum(event.points[i].e for i in cluster),
-                 'ndet': len(cluster),
-                 'fom': foms[i],
-                 'tracked': int(len(cluster) <= monster_size),
-                 'timestamp': event.points[cluster[0]].ts}
+        mode1 = {
+            "format": total_format,
+            "GEB_type": GEB_type,
+            "length": struct.calcsize(
+                tracked_gamma_hit_format
+                + ngam * (gamma_info_format + addendum_format)
+                + len(event) * interaction_format
+            ),
+            "esum": sum(event.points[i].e for i in cluster),
+            "ndet": len(cluster),
+            "fom": foms[i],
+            "tracked": int(len(cluster) <= monster_size),
+            "timestamp": event.points[cluster[0]].ts,
+        }
         if escapes is None or not include_TANGO:
-            mode1['escaped'] = 0
-            mode1['TANGO'] = 0.0
-            mode1['TANGO_fom'] = 0.0
+            mode1["escaped"] = 0
+            mode1["TANGO"] = 0.0
+            mode1["TANGO_fom"] = 0.0
         else:
-            escape_cluster = event.semi_greedy(cluster,
-                                               width=5,
-                                               stride= 3,
-                                               estimate_start_energy=True,
-                                               **FOM_kwargs)
-            mode1['TANGO'] = event.estimate_start_energy(escape_cluster, normalize_by_sigma=False)
-            if mode1['TANGO'] is None:
-                mode1['TANGO'] = 0
-                mode1['TANGO_fom'] = 0
+            escape_cluster = event.semi_greedy(
+                cluster, width=5, stride=3, estimate_start_energy=True, **FOM_kwargs
+            )
+            mode1["TANGO"] = event.estimate_start_energy(
+                escape_cluster, normalize_by_sigma=False
+            )
+            if mode1["TANGO"] is None:
+                mode1["TANGO"] = 0
+                mode1["TANGO_fom"] = 0
             else:
-                mode1['TANGO_fom'] = event.FOM(escape_cluster,
-                                               start_energy=mode1['TANGO'],
-                                               **FOM_kwargs)
+                mode1["TANGO_fom"] = event.FOM(
+                    escape_cluster, start_energy=mode1["TANGO"], **FOM_kwargs
+                )
             # if escapes[i]:
             #     mode1['escaped'] = 1
             # else:
             #     mode1['escaped'] = 0
-            mode1['escaped'] = int(escapes[i])
+            mode1["escaped"] = int(escapes[i])
         # if 0 < mode1['TANGO_fom'] < mode1['fom']:
         #     cluster = escape_cluster
         if fix_units:
-            mode1['esum'] *= 1000
-            mode1['interactions'] = []
+            mode1["esum"] *= 1000
+            mode1["interactions"] = []
             for j in cluster:
-                mode1['interactions'].append(
-                    list(10*event.points[j].x) + [1000*event.points[j].e]
-                    )
-            mode1['TANGO'] = mode1['TANGO']*1000
+                mode1["interactions"].append(
+                    list(10 * event.points[j].x)
+                    + [
+                        1000 * event.points[j].e,
+                        int(event.points[j].ts - mode1["timestamp"]),
+                        int(event.points[j].crystal_no)
+                        if event.points[j].crystal_no is not None
+                        else 0,
+                        event.points[j].energy_factor,
+                    ]
+                )
+            mode1["TANGO"] = mode1["TANGO"] * 1000
         else:
-            mode1['interactions'] = []
+            mode1["interactions"] = []
             for j in cluster:
-                mode1['interactions'].append(
+                mode1["interactions"].append(
                     list(event.points[j].x) + [event.points[j].e]
-                    )
-        mode1['fhcrID'] = (event.points[cluster[0]].crystal_no
-                           if event.points[cluster[0]].crystal_no is not None
-                           else 0)
+                )
+        mode1["fhcrID"] = (
+            event.points[cluster[0]].crystal_no
+            if event.points[cluster[0]].crystal_no is not None
+            else 0
+        )
 
-        mode1_output += struct.pack(gamma_info_format,
-                                mode1['esum'], int(mode1['ndet']), mode1['fom'], mode1['tracked'],
-                                int(mode1['timestamp']))
-        for interaction in mode1['interactions']:
+        mode1_output += struct.pack(
+            gamma_info_format,
+            mode1["esum"],
+            int(mode1["ndet"]),
+            mode1["fom"],
+            mode1["tracked"],
+            int(mode1["timestamp"]),
+        )
+        for interaction in mode1["interactions"]:
             mode1_output += struct.pack(interaction_format, *interaction)
-        mode1_output += struct.pack(addendum_format,
-                                    int(mode1['fhcrID']), mode1['escaped'],
-                                    mode1['TANGO'], mode1['TANGO_fom'])
+        mode1_output += struct.pack(
+            addendum_format,
+            int(mode1["fhcrID"]),
+            mode1["escaped"],
+            mode1["TANGO"],
+            mode1["TANGO_fom"],
+        )
     return mode1_output
+
 
 # TODO - tracked intermediate struct format? Extended mode1 with the full event
 
@@ -956,11 +1112,19 @@ def mode1_extended_data(event:Event, clusters:Dict,
 #         except struct.error:
 #             return
 
-def mode2_loader(file: BinaryIO, time_gap: int = 40, debug: bool = False,
-                 print_formatted: bool = False, combine_collisions: bool = True,
-                 monitor_progress: bool = False, coincidence_from: str = 'first',
-                 buffer_size: int = 5, detector:DetectorConfig = default_config,
-                 global_coords:bool = False) -> Generator[Event, None, None]:
+
+def mode2_loader(
+    file: BinaryIO,
+    time_gap: int = 40,
+    debug: bool = False,
+    print_formatted: bool = False,
+    combine_collisions: bool = True,
+    monitor_progress: bool = False,
+    coincidence_from: str = "first",
+    buffer_size: int = 5,
+    detector: DetectorConfig = default_config,
+    global_coords: bool = False,
+) -> Generator[Event, None, None]:
     """
     # Create a generator for events from a MODE2 file
 
@@ -989,46 +1153,53 @@ def mode2_loader(file: BinaryIO, time_gap: int = 40, debug: bool = False,
       MODE2 file
     """
     mode2_data = GEBdata_file(file, detector=detector, global_coords=global_coords)
-    buffer = [] # Initialize the buffer to store tuples (timestamp, event)
-    coincidence = [] # Initialize the coincidence list to store crystal level events within time_gap
+    buffer = []  # Initialize the buffer to store tuples (timestamp, event)
+    coincidence = (
+        []
+    )  # Initialize the coincidence list to store crystal level events within time_gap
     struct_reads = 0
 
     # Determine the index from which to find coincidences in the buffer
-    if coincidence_from == 'first':
+    if coincidence_from == "first":
         find_index = 0
     else:
         find_index = -1
 
     while True:
         proto_event = mode2_data.read(print_formatted=print_formatted)
-        if proto_event is None: # Reached the end of the file
+        if proto_event is None:  # Reached the end of the file
             # Yield the last event in the coincidence list (if it exists)
-            event = mode2_coincidence_to_event(coincidence,
-                                               debug=debug,
-                                               combine_collisions=combine_collisions)
+            event = mode2_coincidence_to_event(
+                coincidence, debug=debug, combine_collisions=combine_collisions
+            )
             if event is not None:
                 if monitor_progress:
                     yield struct_reads, event
                 else:
                     yield event
             return
-        if proto_event['GEBHEADER type'] != 1:
+        if proto_event["GEBHEADER type"] != 1:
             continue
 
-        buffer.append((proto_event['timestamp'], proto_event))
+        buffer.append((proto_event["timestamp"], proto_event))
         struct_reads += 1
 
         try:
             if len(buffer) == buffer_size:
                 if debug:
                     print(f"Buffer size is now {len(buffer)}")
-                pop_inds = [] # Store the indices of buffer items to be popped
+                pop_inds = []  # Store the indices of buffer items to be popped
                 if len(coincidence) > 0:
                     if debug:
-                        print("Looking for proto_events to pop from the buffer near"+\
-                             f" {coincidence[0]['timestamp']}")
+                        print(
+                            "Looking for proto_events to pop from the buffer near"
+                            + f" {coincidence[0]['timestamp']}"
+                        )
                     for i, buffer_item in enumerate(buffer):
-                        if abs(buffer_item[0] - coincidence[find_index]['timestamp']) < time_gap:
+                        if (
+                            abs(buffer_item[0] - coincidence[find_index]["timestamp"])
+                            < time_gap
+                        ):
                             pop_inds.append(i)
                     if debug:
                         print(f"Found pop indices {pop_inds}")
@@ -1041,25 +1212,32 @@ def mode2_loader(file: BinaryIO, time_gap: int = 40, debug: bool = False,
                         # If no more items found to pop, yield the event and
                         # reset the coincidence list
                         if debug:
-                            print("Didn't find any more indices to pop, so we can yield an event")
-                        event = mode2_coincidence_to_event(coincidence,
-                                                           debug=debug,
-                                                           combine_collisions=combine_collisions)
+                            print(
+                                "Didn't find any more indices to pop, so we can yield an event"
+                            )
+                        event = mode2_coincidence_to_event(
+                            coincidence,
+                            debug=debug,
+                            combine_collisions=combine_collisions,
+                        )
                         coincidence = [buffer.pop(0)[1]]
                         yield event
                 else:
                     # If coincidence is empty, just pop the first buffer item
                     # and add it to the coincidence list
                     if debug:
-                        print("Coincidence was empty so we will pop the "+\
-                             f"current buffer item: {buffer[0]}")
+                        print(
+                            "Coincidence was empty so we will pop the "
+                            + f"current buffer item: {buffer[0]}"
+                        )
                     coincidence.append(buffer.pop(0)[1])
         except struct.error:
             return
 
-def mode2_coincidence_to_event(coincidence: list[dict],
-                               combine_collisions: bool=True,
-                               debug:bool=False) -> Event:
+
+def mode2_coincidence_to_event(
+    coincidence: list[dict], combine_collisions: bool = True, debug: bool = False
+) -> Event:
     """
     # Convert mode2 coincidence of crystal proto-events to a single event
 
@@ -1087,17 +1265,26 @@ def mode2_coincidence_to_event(coincidence: list[dict],
     - An Event object that represents the single event converted from the MODE2
     coincidence
 
-    TODO - Implement segment combination
+    TODO - Implement segment combination. Combine all interactions in a segment (barycenter)
     """
+
     def proto_event_hit_points(proto_event):
-        return [Interaction(np.array(intpt['global_int'][:3])/10,
-                               intpt['global_int'][3]/1000*\
-                                   proto_event['tot_e']/proto_event['sum_e'],
-                               ts=proto_event['timestamp'],
-                               crystal_no=proto_event['crystal_id'],
-                               seg_no=intpt['seg'],
-                               crystal_x=np.array(intpt['int'][:3])/10)
-                for intpt in proto_event['intpts'][:proto_event['num']] if intpt['int'][3] > 0]
+        return [
+            Interaction(
+                np.array(intpt["global_int"][:3]) / 10,
+                intpt["global_int"][3]
+                / 1000
+                * proto_event["tot_e"]
+                / proto_event["sum_e"],
+                ts=proto_event["timestamp"],
+                crystal_no=proto_event["crystal_id"],
+                seg_no=intpt["seg"],
+                crystal_x=np.array(intpt["int"][:3]) / 10,
+                energy_factor=proto_event["energy_factor"],
+            )
+            for intpt in proto_event["intpts"][: proto_event["num"]]
+            if intpt["int"][3] > 0
+        ]
 
     hit_points = []
     for proto_event in coincidence:
@@ -1117,10 +1304,12 @@ def mode2_coincidence_to_event(coincidence: list[dict],
         keep_indices = list(range(m))
         for i in range(m):
             for j in range(i + 1, m):
-                if point_matrix[i,j] == 0.0 and j in keep_indices:
+                if point_matrix[i, j] == 0.0 and j in keep_indices:
                     if debug:
-                        print('Found interactions with the same coordinates'+\
-                            ' up to numerical precision')
+                        print(
+                            "Found interactions with the same coordinates"
+                            + " up to numerical precision"
+                        )
                         print("First")
                         print(hit_points[i])
                         print(hit_points[i].crystal_x)
@@ -1130,7 +1319,8 @@ def mode2_coincidence_to_event(coincidence: list[dict],
                     keep_indices.remove(j)
         hit_points = [hit_points[i] for i in keep_indices]
 
-    return Event(coincidence[0]['timestamp'], hit_points)
+    return Event(coincidence[0]["timestamp"], hit_points)
+
 
 # def read_event_csv(csv_filename: str) -> Event:
 #     """
@@ -1144,14 +1334,16 @@ def mode2_coincidence_to_event(coincidence: list[dict],
 #                                         df.loc[i,2]], df.loc[i,3]))
 #     return Event(0, interactions)
 
-def read_agata_simulated_data(filename:str,
-                              extra_zero:bool=False) -> Tuple[List[Event], List[Dict]]:
+
+def read_agata_simulated_data(
+    filename: str, extra_zero: bool = False
+) -> Tuple[List[Event], List[Dict]]:
     """
     This function reads in data from an AGATA GEANT4 simulated data file.
     Returns a 2-tuple, first is the list of events and second is the list
     of true clusters of the data.
     """
-    with open(filename, 'r', encoding="utf-8") as f:
+    with open(filename, "r", encoding="utf-8") as f:
         curr_event = 0
         curr_ray = 0
         curr_step = 1
@@ -1183,13 +1375,17 @@ def read_agata_simulated_data(filename:str,
                 curr_ray = ray
 
             ray_tracks[curr_ray].append(curr_step)
-            curr_interactions.append(Interaction(
-                [x/10,y/10,z/10], energy/1000, interaction_id=curr_step))
+            curr_interactions.append(
+                Interaction(
+                    [x / 10, y / 10, z / 10], energy / 1000, interaction_id=curr_step
+                )
+            )
             curr_step += 1
         # Add in the last event
         events.append(Event(curr_event, curr_interactions))
         all_ray_tracks.append(ray_tracks)
         return events, all_ray_tracks
+
 
 def read_gretina_gamma_rays(filename):
     """
@@ -1198,30 +1394,34 @@ def read_gretina_gamma_rays(filename):
 
     Returns a list of &gamma;-ray Event objects
     """
-    with open(filename, 'r', encoding="utf-8") as f:
+    with open(filename, "r", encoding="utf-8") as f:
         events = []
         for line in f:
-            if line.startswith('filtered'):
+            if line.startswith("filtered"):
                 curr_event = []
-                event_num = int(line.split('_')[1][:3])
-            elif line.startswith('#'):
+                event_num = int(line.split("_")[1][:3])
+            elif line.startswith("#"):
                 # The data are in fields 3..6, ts is at the end
                 split_line = line.split()
-                split_line = list(map(float, split_line[3:7])) + [int(split_line[-1][3:-1])]
+                split_line = list(map(float, split_line[3:7])) + [
+                    int(split_line[-1][3:-1])
+                ]
                 *x, e, ts = split_line
                 curr_event.append(Interaction(x, e, ts=ts))
                 # # The data are in fields 3..6
                 # *x, e = map(float, line.split()[3:7])
                 # curr_event.append(Interaction(x, e))
-            elif line.startswith('We'):
+            elif line.startswith("We"):
                 events.append(Event(event_num, curr_event))
     return events
 
-#TODO - align this class and the interaction class
+
+# TODO - align this class and the interaction class
 class GammaRay:
     """
     Class for representing single &gamma;-rays
     """
+
     def __init__(self, energy, origin, theta, phi, beta):
         self.energy = energy
         self.origin = np.array(origin)
@@ -1229,20 +1429,22 @@ class GammaRay:
         self.phi = phi
         self.beta = beta
 
-        x = np.cos(self.theta)*np.sin(self.phi)
-        y = np.sin(self.theta)*np.sin(self.phi)
+        x = np.cos(self.theta) * np.sin(self.phi)
+        y = np.sin(self.theta) * np.sin(self.phi)
         z = np.cos(self.phi)
-        self.pos = np.array([x,y,z])
+        self.pos = np.array([x, y, z])
 
     def __repr__(self):
         return f"<GammaRay: theta={self.theta}, phi={self.phi}>"
 
-#TODO - replace GammaRay class with Interaction class
+
+# TODO - replace GammaRay class with Interaction class
 def read_simulated_ascii(filename):
     """
     Read UCGretina simulated data.
     """
-    with open(filename, 'r', encoding="utf-8") as f:
+    with open(filename, "r", encoding="utf-8") as f:
+
         def get_line():
             line = f.readline().rstrip()
             if line:
@@ -1253,9 +1455,11 @@ def read_simulated_ascii(filename):
         def read_E_lines(no_rays):
             rays = []
             for _ in range(no_rays):
-                energy, x, y, z, theta, phi, beta = (float(item) for item in get_line().split())
+                energy, x, y, z, theta, phi, beta = (
+                    float(item) for item in get_line().split()
+                )
                 energy /= 1000
-                rays.append(GammaRay(energy, [x,y,z], theta, phi, beta))
+                rays.append(GammaRay(energy, [x, y, z], theta, phi, beta))
             return rays
 
         def read_event():
@@ -1263,9 +1467,11 @@ def read_simulated_ascii(filename):
             if line is None:
                 return None
 
-            if line.startswith('E'):
+            if line.startswith("E"):
                 _, no_rays, full_energy, event_no = line.split()
-                no_rays, full_energy, event_no = map(int, [no_rays, full_energy, event_no])
+                no_rays, full_energy, event_no = map(
+                    int, [no_rays, full_energy, event_no]
+                )
                 rays = read_E_lines(no_rays)
                 return Event(event_no, []), rays
 
@@ -1283,8 +1489,14 @@ def read_simulated_ascii(filename):
                     seg_no, energy, x, y, z = int_line.split()
                     seg_no = int(seg_no)
                     energy, x, y, z = map(float, [energy, x, y, z])
-                    interactions.append(Interaction([x/10,y/10,z/10], energy/1000,
-                                                    seg_no=seg_no, crystal_no=crystal_no))
+                    interactions.append(
+                        Interaction(
+                            [x / 10, y / 10, z / 10],
+                            energy / 1000,
+                            seg_no=seg_no,
+                            crystal_no=crystal_no,
+                        )
+                    )
             next_line = get_line()
             _, no_rays, full_energy, event_no = next_line.split()
             no_rays, full_energy, event_no = map(int, [no_rays, full_energy, event_no])
@@ -1303,10 +1515,11 @@ def read_simulated_ascii(filename):
                 break
         return events, rays
 
+
 def load_m30(
-    filename:str = 'gamma_ray_tracking/data/GammaEvents.Mul30',
-    include_energies:bool = False
-    )-> Tuple[List, List] | Tuple[List, List, List]:
+    filename: str = "gamma_ray_tracking/data/GammaEvents.Mul30",
+    include_energies: bool = False,
+) -> Tuple[List, List] | Tuple[List, List, List]:
     """
     # Load the simulated AGATA multiplicity 30 data
 
@@ -1335,13 +1548,13 @@ def load_m30(
     events_list = []
     clusters_list = []
     true_energies_list = []
-    with open(filename, 'r', encoding="utf-8") as file:
-    # data_file_path = pathlib.Path(importlib.resources('gamma_ray_tracking', 'data')) / 'GammaEvents.Mul30'
-    # with importlib.resources.open_text("gamma_ray_tracking", filename) as file:
-    # with open(data_file_path, 'r', encoding="utf-8") as file:
+    with open(filename, "r", encoding="utf-8") as file:
+        # data_file_path = pathlib.Path(importlib.resources('gamma_ray_tracking', 'data')) / 'GammaEvents.Mul30'
+        # with importlib.resources.open_text("gamma_ray_tracking", filename) as file:
+        # with open(data_file_path, 'r', encoding="utf-8") as file:
         line = " ".join(file.readline().split()).split()
-        while line[0] != '$':
-            if line[0] == 'GAMMA':
+        while line[0] != "$":
+            if line[0] == "GAMMA":
                 N = int(line[1])
             line = " ".join(file.readline().split()).split()
         line = " ".join(file.readline().split()).split()
@@ -1352,31 +1565,39 @@ def load_m30(
             interaction_index = 0
             points = []
             for j in range(N):
-                if line[0] == '-1':
-                    true_energies[j+1] = float(line[1])
-                    clusters[j+1] = []
+                if line[0] == "-1":
+                    true_energies[j + 1] = float(line[1])
+                    clusters[j + 1] = []
                     line = " ".join(file.readline().split()).split()
                     try:
-                        while line and line[0] != '-1':
+                        while line and line[0] != "-1":
                             interaction_index += 1
-                            clusters[j+1].append(interaction_index)
+                            clusters[j + 1].append(interaction_index)
                             crystal_number = int(line[0])
-                            energy = float(line[1])/1000
-                            position = (float(line[2])/10, float(line[3])/10, float(line[4])/10)
+                            energy = float(line[1]) / 1000
+                            position = (
+                                float(line[2]) / 10,
+                                float(line[3]) / 10,
+                                float(line[4]) / 10,
+                            )
                             segment = int(line[5])
                             time = float(line[6])
                             int_type = int(line[7])
-                            points.append(Interaction(x=np.array(position),
-                                                      e=energy,
-                                                      ts=time,
-                                                      crystal_no=crystal_number,
-                                                      seg_no=segment,
-                                                      interaction_type=int_type))
+                            points.append(
+                                Interaction(
+                                    x=np.array(position),
+                                    e=energy,
+                                    ts=time,
+                                    crystal_no=crystal_number,
+                                    seg_no=segment,
+                                    interaction_type=int_type,
+                                )
+                            )
                             line = " ".join(file.readline().split()).split()
                     except IndexError:
                         pass
-                    if len(clusters[j+1]) == 0:
-                        del clusters[j+1]
+                    if len(clusters[j + 1]) == 0:
+                        del clusters[j + 1]
             if len(points) > 0:
                 clusters_list.append(clusters)
                 events_list.append(Event(i, points))
@@ -1386,17 +1607,18 @@ def load_m30(
         return events_list, clusters_list, true_energies_list
     return events_list, clusters_list
 
-def load_options(options_filename:str=None):
+
+def load_options(options_filename: str = None):
     """Load the tracking options specified by the options filename or the default"""
     # Load default options from the package directory
     package_directory = os.path.dirname(os.path.abspath(__file__))
     default_options_path = os.path.join(package_directory, "track_default.yaml")
 
-    with open(default_options_path, "r", encoding='utf-8') as default_options_file:
+    with open(default_options_path, "r", encoding="utf-8") as default_options_file:
         default_options = yaml.safe_load(default_options_file)
 
     if options_filename is not None:
-        with open(options_filename, "r", encoding='utf-8') as options_file:
+        with open(options_filename, "r", encoding="utf-8") as options_file:
             loaded_options = yaml.safe_load(options_file)
     else:
         print("Using default options.")
@@ -1406,6 +1628,7 @@ def load_options(options_filename:str=None):
     options = {**default_options, **loaded_options}
 
     return options
+
 
 def read_filtered(filename):
     """
@@ -1445,7 +1668,7 @@ def read_filtered(filename):
     current_clusters = {}
     num_points = 0
 
-    with open(filename, 'r', encoding='utf-8') as file:
+    with open(filename, "r", encoding="utf-8") as file:
         for line in file:
             parts = line.split()
             if len(parts) > 0:
@@ -1467,10 +1690,10 @@ def read_filtered(filename):
                 elif parts[0][0].isdigit():
                     cluster_id = int(parts[0][0])
                     point_id = num_points + 1
-                    e = float(parts[2])/1000.
-                    x = float(parts[3])/10.
-                    y = float(parts[4])/10.
-                    z = float(parts[5])/10.
+                    e = float(parts[2]) / 1000.0
+                    x = float(parts[3]) / 10.0
+                    y = float(parts[4]) / 10.0
+                    z = float(parts[5]) / 10.0
                     points.append(Interaction([x, y, z], e))
                     if current_clusters.get(cluster_id) is None:
                         current_clusters[cluster_id] = [point_id]
@@ -1483,6 +1706,7 @@ def read_filtered(filename):
         clusters.append(current_clusters)
 
     return events, clusters
+
 
 def read_GEANT4_raw(filename):
     """
@@ -1510,7 +1734,7 @@ def read_GEANT4_raw(filename):
     current_clusters = {}
     num_points = 0
 
-    with open(filename, 'r', encoding='utf-8') as file:
+    with open(filename, "r", encoding="utf-8") as file:
         for line in file:
             parts = line.split()
             if len(parts) > 0:
@@ -1533,10 +1757,10 @@ def read_GEANT4_raw(filename):
                     # and the first bracket
                     if len(parts) == 9:
                         crystal_id = int(parts[2][:-1])
-                        e = float(parts[3])/1000.
-                        x = float(parts[4])/10.
-                        y = float(parts[5])/10.
-                        z = float(parts[6])/10.
+                        e = float(parts[3]) / 1000.0
+                        x = float(parts[4]) / 10.0
+                        y = float(parts[5]) / 10.0
+                        z = float(parts[6]) / 10.0
                         points.append(Interaction([x, y, z], e, crystal_no=crystal_id))
                         if current_clusters.get(cluster_id) is None:
                             current_clusters[cluster_id] = [num_points + 1]
@@ -1545,10 +1769,10 @@ def read_GEANT4_raw(filename):
                         num_points += 1
                     elif len(parts) == 8:
                         crystal_id = int(parts[1][1:-1])
-                        e = float(parts[2])/1000.
-                        x = float(parts[3])/10.
-                        y = float(parts[4])/10.
-                        z = float(parts[5])/10.
+                        e = float(parts[2]) / 1000.0
+                        x = float(parts[3]) / 10.0
+                        y = float(parts[4]) / 10.0
+                        z = float(parts[5]) / 10.0
                         points.append(Interaction([x, y, z], e, crystal_no=crystal_id))
                         if current_clusters.get(cluster_id) is None:
                             current_clusters[cluster_id] = [num_points + 1]
@@ -1562,12 +1786,14 @@ def read_GEANT4_raw(filename):
 
     return events, clusters
 
-#%% Intermediate tracked format saving and loading: not mode2, not mode1
+
+# %% Intermediate tracked format saving and loading: not mode2, not mode1
 
 # It is useful to have an intermediate format where we can save the tracked event
 # and clusters without having throw away any data (as in mode1)
 
-def write_events_clusters(file:BinaryIO, events:list[Event], clusters:list[dict]):
+
+def write_events_clusters(file: BinaryIO, events: list[Event], clusters: list[dict]):
     """
     Write a list of events and clusters to an intermediate datatype
     containing the full event and clusters for a tracked event
@@ -1575,47 +1801,63 @@ def write_events_clusters(file:BinaryIO, events:list[Event], clusters:list[dict]
     for event, clustering in zip(events, clusters):
         write_event_cluster(file, event, clustering)
 
-def write_event_cluster(file:BinaryIO, event:Event, clustering:dict):
+
+def write_event_cluster(file: BinaryIO, event: Event, clustering: dict):
     """
     Write the event and clustering to the file
     """
     pkl.dump((event.coincidence, clustering), file)
 
+
 def read_event_cluster(
-    file:BinaryIO, detector_configuration:DetectorConfig = None
+    file: BinaryIO, detector_configuration: DetectorConfig = None
 ) -> tuple[Event, dict]:
     """
     Read the event object and its clustering
     """
     coincidence, clustering = pkl.load(file)
-    return coincidence.to_event(detector_configuration = detector_configuration), clustering
+    return (
+        coincidence.to_event(detector_configuration=detector_configuration),
+        clustering,
+    )
 
-def tracked_generator(file:BinaryIO, detector_configuration:DetectorConfig = None):
+
+def tracked_generator(file: BinaryIO, detector_configuration: DetectorConfig = None):
     """
     Read the file in pieces via a generator
     """
     while True:
         try:
-            ev, clu = read_event_cluster(file, detector_configuration = detector_configuration)
+            ev, clu = read_event_cluster(
+                file, detector_configuration=detector_configuration
+            )
             detector_configuration = ev.detector_config
             yield ev, clu
         except EOFError:
             break
 
-def tracked_generator_filename(filename:str, detector_configuration:DetectorConfig = None):
+
+def tracked_generator_filename(
+    filename: str, detector_configuration: DetectorConfig = None
+):
     """
     Read the file in pieces via a generator
     """
-    with open(filename, 'rb') as file:
+    with open(filename, "rb") as file:
         while True:
             try:
-                ev, clu = read_event_cluster(file, detector_configuration = detector_configuration)
+                ev, clu = read_event_cluster(
+                    file, detector_configuration=detector_configuration
+                )
                 detector_configuration = ev.detector_config
                 yield ev, clu
             except EOFError:
                 break
 
-def read_events_clusters(file:BinaryIO, detector_configuration:DetectorConfig = None) -> tuple[list[Event], list[dict]]:
+
+def read_events_clusters(
+    file: BinaryIO, detector_configuration: DetectorConfig = None
+) -> tuple[list[Event], list[dict]]:
     """
     Read multiple events and their clusterings
     """
@@ -1623,7 +1865,9 @@ def read_events_clusters(file:BinaryIO, detector_configuration:DetectorConfig = 
     clusters = []
     while True:
         try:
-            event, clustering = read_event_cluster(file, detector_configuration = detector_configuration)
+            event, clustering = read_event_cluster(
+                file, detector_configuration=detector_configuration
+            )
             events.append(event)
             clusters.append(clustering)
             detector_configuration = event.detector_config
