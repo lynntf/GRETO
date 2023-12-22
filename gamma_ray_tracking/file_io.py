@@ -289,10 +289,10 @@ class GEBdata_file:
             intpts.append(intpt)
         event["intpts"] = intpts
         event["sum_e"] = sum(intpt["int"][3] for intpt in event["intpts"])
-        if event["sum_e"] > 0:
-            corr = event["tot_e"] / event["sum_e"]  # correction factor for energy
+        if event["sum_e"] > 0 and event["tot_e"]:
+            corr = np.log(event["tot_e"]) - np.log(event["sum_e"])  # correction factor for energy
         else:
-            corr = 1.0
+            corr = 0.0
         event["energy_factor"] = corr
 
         if print_formatted:
@@ -321,7 +321,7 @@ class GEBdata_file:
                             f"{i:2} | {intpt['int'][0]/10:8.2f} |"
                             + f" {intpt['int'][1]/10:8.2f} |"
                             + f" {intpt['int'][2]/10:8.2f} |"
-                            + f" {intpt['int'][3]*corr:4.0f}/ {event['tot_e']:<4.0f} |"
+                            + f" {intpt['int'][3]*np.exp(corr):4.0f}/ {event['tot_e']:<4.0f} |"
                             + f" {intpt['seg']:^5} | {np.linalg.norm(intpt['int'][:3])/10:6.2f}"
                         )
                     else:
@@ -329,7 +329,7 @@ class GEBdata_file:
                             f"{i:2} | {intpt['global_int'][0]/10:8.2f} |"
                             + f" {intpt['global_int'][1]/10:8.2f} |"
                             + f" {intpt['global_int'][2]/10:8.2f} |"
-                            + f" {intpt['int'][3]*corr:4.0f}/ {event['tot_e']:<4.0f} |"
+                            + f" {intpt['int'][3]*np.exp(corr):4.0f}/ {event['tot_e']:<4.0f} |"
                             + f" {intpt['seg']:^5} |"
                             + f" {np.linalg.norm(intpt['global_int'][:3])/10:6.2f}"
                         )

@@ -31,7 +31,7 @@ class Interaction:
         - `2` - absorption
         - `3` - pair production
         - `99` - interaction after a pair production or possibly other interaction
-    - `energy_factor` : The correction factor used to adjust energy to match the central contact
+    - `energy_factor` : The correction factor used to adjust energy to match the central contact (exponential)
     """
 
     x: Iterable[float]
@@ -43,7 +43,7 @@ class Interaction:
     event_no: int = None
     interaction_id: str = None
     interaction_type: int = None
-    energy_factor: float = 1.0
+    energy_factor: float = None
 
     def __post_init__(self):
         """Convert to numpy arrays"""
@@ -85,7 +85,7 @@ class Interaction:
             out += f", seg_no={self.seg_no}"
         if self.interaction_type is not None:
             out += f", interaction_type={self.interaction_type}"
-        if self.energy_factor > 0:
+        if self.energy_factor is not None:
             out += f", energy_factor={self.energy_factor}"
         out += ")"
         return out
