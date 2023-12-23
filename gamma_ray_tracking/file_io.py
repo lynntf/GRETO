@@ -270,7 +270,7 @@ class GEBdata_file:
         for i in range(event["num"]):
             intpt = {}
             intpt["int"] = event_data[18 + (i * 6) : 22 + (i * 6)]
-            if self.crmat is not None and not self.global_coords:
+            if self.crmat is not None and not self.global_coords and len(intpt["int"]) > 0:
                 try:
                     intpt["global_int"] = np.matmul(
                         self.crmat[event["crystal_id"]],
@@ -286,10 +286,11 @@ class GEBdata_file:
                 intpt["global_int"] = intpt["int"]
             intpt["seg"] = event_data[22 + (i * 6)]
             intpt["seg_ener"] = event_data[23 + (i * 6)]
-            intpts.append(intpt)
+            if len(intpt["int"]) > 0:
+                intpts.append(intpt)
         event["intpts"] = intpts
         event["sum_e"] = sum(intpt["int"][3] for intpt in event["intpts"])
-        if event["sum_e"] > 0 and event["tot_e"]:
+        if event["sum_e"] > 0 and event["tot_e"] > 0:
             corr = np.log(event["tot_e"]) - np.log(event["sum_e"])  # correction factor for energy
         else:
             corr = 0.0
