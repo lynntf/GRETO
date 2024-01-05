@@ -95,7 +95,12 @@ class GEBdata_file:
         self.header = {}
         self.global_coords = global_coords
 
-    def read(self, print_formatted: bool = False, as_gr_event: bool = False) -> Dict:
+    def read(
+        self,
+        print_formatted: bool = False,
+        as_gr_event: bool = False,
+        use_interaction_class: bool = True,
+    ) -> Dict:
         """
         # Read the next event in the GEB data file
 
@@ -153,7 +158,9 @@ class GEBdata_file:
         elif data_type == 3:
             try:
                 data = self.read_mode1(
-                    print_formatted=print_formatted, as_gr_event=as_gr_event
+                    print_formatted=print_formatted,
+                    as_gr_event=as_gr_event,
+                    use_interaction_class=use_interaction_class,
                 )
             except struct.error:
                 return
@@ -162,7 +169,9 @@ class GEBdata_file:
         elif data_type == 33:
             try:
                 data = self.read_extended_mode1(
-                    print_formatted=print_formatted, as_gr_event=as_gr_event
+                    print_formatted=print_formatted,
+                    as_gr_event=as_gr_event,
+                    use_interaction_class=use_interaction_class,
                 )
             except struct.error:
                 return
@@ -270,7 +279,11 @@ class GEBdata_file:
         for i in range(event["num"]):
             intpt = {}
             intpt["int"] = event_data[18 + (i * 6) : 22 + (i * 6)]
-            if self.crmat is not None and not self.global_coords and len(intpt["int"]) > 0:
+            if (
+                self.crmat is not None
+                and not self.global_coords
+                and len(intpt["int"]) > 0
+            ):
                 try:
                     intpt["global_int"] = np.matmul(
                         self.crmat[event["crystal_id"]],
@@ -284,14 +297,19 @@ class GEBdata_file:
                     ) from exc
             else:
                 intpt["global_int"] = intpt["int"]
-            intpt["seg"] = event_data[22 + (i * 6)]
-            intpt["seg_ener"] = event_data[23 + (i * 6)]
+            try:
+                intpt["seg"] = event_data[22 + (i * 6)]
+                intpt["seg_ener"] = event_data[23 + (i * 6)]
+            except IndexError:
+                pass
             if len(intpt["int"]) > 0:
                 intpts.append(intpt)
         event["intpts"] = intpts
         event["sum_e"] = sum(intpt["int"][3] for intpt in event["intpts"])
         if event["sum_e"] > 0 and event["tot_e"] > 0:
-            corr = np.log(event["tot_e"]) - np.log(event["sum_e"])  # correction factor for energy
+            corr = np.log(event["tot_e"]) - np.log(
+                event["sum_e"]
+            )  # correction factor for energy
         else:
             corr = 0.0
         event["energy_factor"] = corr
@@ -340,7 +358,10 @@ class GEBdata_file:
         return event
 
     def read_mode1(
-        self, print_formatted: bool = False, as_gr_event: bool = False
+        self,
+        print_formatted: bool = False,
+        as_gr_event: bool = False,
+        use_interaction_class: bool = True,
     ) -> Dict:
         """
         # Read in an event from a MODE1 data file
@@ -437,24 +458,23 @@ class GEBdata_file:
                     second_int[2] / 10,
                     second_int[3] / 1000,
                 )
-            event["first"] = Interaction(
-                first_int[:3],
-                first_int[3],
-                ts=event["timestamp"],
-                crystal_no=event["fhcrID"],
-            )
-            event["second"] = Interaction(
-                second_int[:3],
-                second_int[3],
-                ts=event["timestamp"],
-                crystal_no=event["fhcrID"],
-            )
-            # event['first'] = Interaction(event_data[5:8], event_data[8],
-            #                              ts=event['timestamp'],
-            #                              crystal_no=event['fhcrID'])
-            # event['second'] = Interaction(event_data[9:12], event_data[12],
-            #                               ts=event['timestamp'],
-            #                               crystal_no=event['fhcrID'])
+            if use_interaction_class:
+                event["first"] = Interaction(
+                    first_int[:3],
+                    first_int[3],
+                    ts=event["timestamp"],
+                    crystal_no=event["fhcrID"],
+                )
+                event["second"] = Interaction(
+                    second_int[:3],
+                    second_int[3],
+                    ts=event["timestamp"],
+                    crystal_no=event["fhcrID"],
+                )
+            else:
+                event["first"] = first_int
+                event["second"] = second_int
+
             event["escaped"] = event_data[14]
             event["TANGO"] = event_data[15]
             event["TANGO_fom"] = event_data[16]
@@ -495,7 +515,10 @@ class GEBdata_file:
         return events
 
     def read_extended_mode1(
-        self, print_formatted: bool = False, as_gr_event: bool = False
+        self,
+        print_formatted: bool = False,
+        as_gr_event: bool = False,
+        use_interaction_class: bool = True,
     ) -> Dict:
         """
         # Read in a full event from an extended MODE1 data file
@@ -626,16 +649,18 @@ class GEBdata_file:
                         interaction[5],  # crystal_id
                         interaction[6],  # energy correction factor
                     )
-
-                event["interactions"].append(
-                    Interaction(
-                        x=interaction[:3],
-                        e=interaction[3],
-                        ts=event["timestamp"] + interaction[4],
-                        crystal_no=interaction[5],
-                        energy_factor=interaction[6],
+                if use_interaction_class:
+                    event["interactions"].append(
+                        Interaction(
+                            x=interaction[:3],
+                            e=interaction[3],
+                            ts=event["timestamp"] + interaction[4],
+                            crystal_no=interaction[5],
+                            energy_factor=interaction[6],
+                        )
                     )
-                )
+                else:
+                    event["interactions"].append(interaction)
             events[i] = event
 
         if print_formatted:
@@ -1877,3 +1902,65 @@ def read_events_clusters(
             detector_configuration = event.detector_config
         except EOFError:
             return events, clusters
+
+
+# %% Convert between the extended mode1 and the standard mode1
+
+def convert_mode1_extended(input_mode1x_file: BinaryIO, output_mode1_file: BinaryIO):
+    """
+    Convert from the extended mode1 to the standard mode1
+    """
+
+    mode1x = GEBdata_file(input_mode1x_file)
+
+    GEBHeader_format = "iiq"
+    tracked_gamma_hit_format = "ii"
+    mode1_format = "fifiqffffffffh"
+    extra_data_format = "hee"  # Extra bytes
+    while True:
+        event = mode1x.read(use_interaction_class=False)
+        try:
+            ngam = event["ngam"]
+        except TypeError:
+            return
+
+        mode1_output = struct.pack(
+            GEBHeader_format,
+            int(3),
+            struct.calcsize(
+                tracked_gamma_hit_format + ngam * (mode1_format + extra_data_format)
+            ),
+            event["GEBHEADER ts"],
+        )
+        mode1_output += struct.pack(tracked_gamma_hit_format, ngam, 0)
+        for i in range(ngam):
+            mode1 = event[i]
+
+            mode1["first"] = list(mode1["interactions"][0])[:4]
+
+            if len(mode1["interactions"]) > 1:
+                mode1["second"] = list(mode1["interactions"][1])[:4]
+            else:
+                mode1["second"] = [0.0, 0.0, 0.0, 0.0]
+
+            mode1_output += struct.pack(
+                mode1_format + extra_data_format,
+                mode1["esum"],
+                mode1["ndet"],
+                mode1["fom"],
+                mode1["tracked"],
+                mode1["timestamp"],
+                mode1["first"][0],
+                mode1["first"][1],
+                mode1["first"][2],
+                mode1["first"][3],
+                mode1["second"][0],
+                mode1["second"][1],
+                mode1["second"][2],
+                mode1["second"][3],
+                mode1["fhcrID"],
+                mode1["escaped"],
+                mode1["TANGO"],
+                mode1["TANGO_fom"],
+            )
+        output_mode1_file.write(mode1_output)
