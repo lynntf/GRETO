@@ -134,8 +134,8 @@ def pack_interactions(event: Event,
             if p == cluster:
                 esum += event.hit_points[i].e
                 position += event.hit_points[i].e*event.hit_points[i].x
-                if event.hit_points[i].type is not None:
-                    interaction_type = max(interaction_type, event.hit_points[i].type)
+                if event.hit_points[i].interaction_type is not None:
+                    interaction_type = max(interaction_type, event.hit_points[i].interaction_type)
         points.append(Interaction(position/esum, esum,
                                     interaction_type=interaction_type))
 
