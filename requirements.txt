@@ -6,5 +6,5 @@ plotly
 cartopy
 pandas
 cvxpy
-sklearn
+scikit-learn
 pyomo
