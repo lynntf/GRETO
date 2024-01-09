@@ -486,7 +486,7 @@ def cluster_eval(
                 complete[cluster_id] = np.abs(true_energies[cluster_id] - cluster_energy_sum) < tol
             elif use_list:
                 complete[cluster_id] = np.min(np.abs(true_energies - cluster_energy_sum)) < tol
-            absorbed[cluster_id] = event.points[clustering[cluster_id][-1]].int_type == 2
+            absorbed[cluster_id] = event.points[clustering[cluster_id][-1]].interaction_type == 2
             if event.points[1].type is not None:
                 pair_prod[cluster_id] = any([event.points[i].type > 2 for i in clustering[cluster_id]])
             else:
