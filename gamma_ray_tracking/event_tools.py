@@ -54,9 +54,13 @@ def split_event(event: Event, clustering: Dict) -> List[Event]:
     """
     events = []
     for c, cluster in clustering.items():
+        if isinstance(event.id, tuple):
+            new_event_id = event.id
+        else:
+            new_event_id = (int(event.id), c)
         events.append(Event(
             # str(event.id) + '_' + str(c),
-            (int(event.id), c),
+            new_event_id,
             [event.points[i] for i in cluster]),
         )
     return events
@@ -72,9 +76,13 @@ def split_event_clusters(event: Event, clustering: Dict) -> Tuple[List[Event], L
     events = []
     clusters = []
     for c, cluster in clustering.items():
+        if isinstance(event.id, tuple):
+            new_event_id = event.id
+        else:
+            new_event_id = (int(event.id), c)
         events.append(Event(
             # str(event.id) + '_' + str(c),
-            (int(event.id), c),
+            new_event_id,
             [event.points[i] for i in sorted(cluster)]),
         )
         clusters.append({c: list(np.argsort(cluster) + 1)})
