@@ -66,7 +66,7 @@ def generate_semi_greedy_data(
 
         if remove_pair_production:
             # remove pair production interactions and others; ordering doesn't make sense here
-            if any(event.points[i].type > 2 for i in cluster):
+            if any(event.points[i].interaction_type > 2 for i in cluster):
                 continue
 
         # l = factorial(len(cluster))
@@ -251,7 +251,7 @@ def generate_all_data(
 
         if remove_pair_production:
             # remove pair production interactions and others
-            if any(event.points[i].type > 2 for i in cluster):
+            if any(event.points[i].interaction_type > 2 for i in cluster):
                 continue
 
         l = factorial(len(cluster))
@@ -487,8 +487,8 @@ def cluster_eval(
             elif use_list:
                 complete[cluster_id] = np.min(np.abs(true_energies - cluster_energy_sum)) < tol
             absorbed[cluster_id] = event.points[clustering[cluster_id][-1]].interaction_type == 2
-            if event.points[1].type is not None:
-                pair_prod[cluster_id] = any([event.points[i].type > 2 for i in clustering[cluster_id]])
+            if event.points[1].interaction_type is not None:
+                pair_prod[cluster_id] = any([event.points[i].interaction_type > 2 for i in clustering[cluster_id]])
             else:
                 pair_prod[cluster_id] = False
         complete_deposits.append(complete)
