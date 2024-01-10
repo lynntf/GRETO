@@ -301,6 +301,19 @@ def make_data(
 
     Repeatedly invokes `generate_all_data` and manages the indices coming from
     there.
+
+    Returns:
+    - features
+    - ordered
+    - complete
+    - energy_sums
+    - lengths
+    - opt_index
+    - other_index
+    - cluster_ids
+    - acceptable
+    - event_ids
+    - true_cluster_ids
     """
     if true_energies is None:
         true_energies = m30_true_energies
