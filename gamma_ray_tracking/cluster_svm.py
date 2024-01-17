@@ -25,6 +25,9 @@ import cvxpy as cp
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression
 
+import warnings
+from sklearn.exceptions import ConvergenceWarning
+
 #%% w0 estimate for linear model
 def mean_of_means(X:np.ndarray[float],
                   I:np.ndarray[int],
@@ -393,6 +396,7 @@ def check_solutions_general(
     @param I  the problem indices (also query ids)
     @param y  indicator if the data index is not a solution (1 if acceptable and
         or correct, 0 otherwise)
+    @return  num correct, num incorrect
     """
     indices = np.arange(y.shape[0], dtype=int)
     num_solved = 0
@@ -463,7 +467,7 @@ def weighted_svc(X:np.ndarray, I:np.ndarray,
                  weighted:bool=True,
                  penalty: Literal['l1', 'l2'] = "l1",
                  loss: Literal['squared_hinge', 'hinge'] = "squared_hinge",
-                 dual: bool = 'auto',
+                #  dual: bool = 'auto',
                  tol: float = 0.0001,
                  C: float = 1e2,
                  fit_intercept: bool = False,
@@ -508,33 +512,43 @@ def weighted_svc(X:np.ndarray, I:np.ndarray,
 
     clf = LinearSVC(penalty=penalty,
                     loss=loss,
-                    dual=dual,
+                    dual=False,
                     tol=tol,
                     C=C/2/num_clusters,
                     # C=C/2,
                     fit_intercept=fit_intercept,
                     **SVCkwargs)
     selected_X = X[indices]
-    if mirror:
-        X_mirror = np.concatenate((selected_X, -selected_X), axis=0)
-        y = np.ones((selected_X.shape[0],))
-        y_mirror = np.concatenate((y, -y), axis=0)
-        if weighted:
-            weights_mirror = np.concatenate((weights, weights), axis=0)
-            clf.fit(X_mirror, y_mirror, sample_weight=weights_mirror)
+    with warnings.catch_warnings(record=True) as w:
+        if mirror:
+            X_mirror = np.concatenate((selected_X, -selected_X), axis=0)
+            y = np.ones((selected_X.shape[0],))
+            y_mirror = np.concatenate((y, -y), axis=0)
+        
+            if weighted:
+                weights_mirror = np.concatenate((weights, weights), axis=0)
+                clf.fit(X_mirror, y_mirror, sample_weight=weights_mirror)
+            else:
+                clf.fit(X_mirror, y_mirror)
         else:
-            clf.fit(X_mirror, y_mirror)
-    else:
-        # y = np.random.choice([-1,1], size = (selected_X.shape[0],))
-        y = np.ones((selected_X.shape[0],))
-        y[:len(y)//2] = -1
-        if weighted:
-            clf.fit(y[:,np.newaxis] * selected_X, y, sample_weight=weights)
+            # y = np.random.choice([-1,1], size = (selected_X.shape[0],))
+            y = np.ones((selected_X.shape[0],))
+            y[:len(y)//2] = -1
+            if weighted:
+                clf.fit(y[:,np.newaxis] * selected_X, y, sample_weight=weights)
+            else:
+                clf.fit(y[:,np.newaxis] * selected_X, y)
+        # Check if there is a ConvergenceWarning
+        if any(isinstance(warn.message, ConvergenceWarning) for warn in w):
+            # Handle the situation when ConvergenceWarning occurs
+            print("SVM did not converge!")
+            convergence_warning = True
         else:
-            clf.fit(y[:,np.newaxis] * selected_X, y)
+            # No ConvergenceWarning occurred
+            convergence_warning = False
     if non_neg:
-        return np.clip(clf.coef_[0], 0, np.inf)
-    return clf.coef_[0]
+        return np.clip(clf.coef_[0], 0, np.inf), convergence_warning
+    return clf.coef_[0], convergence_warning
 
 def weighted_lr(X:np.ndarray, I:np.ndarray,
                 indices:List[int] = None,
@@ -600,31 +614,40 @@ def weighted_lr(X:np.ndarray, I:np.ndarray,
         **LRkwargs
         )
     selected_X = X[indices]
-    if mirror:
-        X_mirror = np.concatenate((selected_X, -selected_X), axis=0)
-        y = np.ones((selected_X.shape[0],))
-        y_mirror = np.concatenate((y, -y), axis=0)
-        # if debug:
-        #     print(f'    Mirrored data with shape {X_mirror.shape}. '+\
-        #           f'False classes with shape {y_mirror.shape}.')
-        if weighted:
-            weights_mirror = np.concatenate((weights, weights), axis=0)
-            clf.fit(X_mirror, y_mirror, sample_weight=weights_mirror)
+    with warnings.catch_warnings(record=True) as w:
+        if mirror:
+            X_mirror = np.concatenate((selected_X, -selected_X), axis=0)
+            y = np.ones((selected_X.shape[0],))
+            y_mirror = np.concatenate((y, -y), axis=0)
+            # if debug:
+            #     print(f'    Mirrored data with shape {X_mirror.shape}. '+\
+            #           f'False classes with shape {y_mirror.shape}.')
+            if weighted:
+                weights_mirror = np.concatenate((weights, weights), axis=0)
+                clf.fit(X_mirror, y_mirror, sample_weight=weights_mirror)
+            else:
+                clf.fit(X_mirror, y_mirror)
         else:
-            clf.fit(X_mirror, y_mirror)
-    else:
-        # y = np.random.choice([-1,1], size = (selected_X.shape[0],))
-        y = np.ones((selected_X.shape[0],))
-        y[:len(y)//2] = -1
-        if weighted:
-            clf.fit(y[:,np.newaxis] * selected_X, y, sample_weight=weights)
+            # y = np.random.choice([-1,1], size = (selected_X.shape[0],))
+            y = np.ones((selected_X.shape[0],))
+            y[:len(y)//2] = -1
+            if weighted:
+                clf.fit(y[:,np.newaxis] * selected_X, y, sample_weight=weights)
+            else:
+                clf.fit(y[:,np.newaxis] * selected_X, y)
+        # Check if there is a ConvergenceWarning
+        if any(isinstance(warn.message, ConvergenceWarning) for warn in w):
+            # Handle the situation when ConvergenceWarning occurs
+            print("SVM did not converge!")
+            convergence_warning = True
         else:
-            clf.fit(y[:,np.newaxis] * selected_X, y)
+            # No ConvergenceWarning occurred
+            convergence_warning = False
     if non_neg:
         # if debug:
         #     print('    Clipping negative weights.')
-        return np.clip(clf.coef_[0], 0, np.inf)
-    return clf.coef_[0]
+        return np.clip(clf.coef_[0], 0, np.inf), convergence_warning
+    return clf.coef_[0], convergence_warning
 
 def LP_method(
     X:np.ndarray, I:np.ndarray,
@@ -962,12 +985,15 @@ def column_generation(
     num_iters = 0
     active_history = [len(indices)]
     w_prev = w0
+    convergence_warning = False
 
     while len(indices) > num_data:  # repeat until the indices don't change (solved)
         num_iters += 1
         num_data = len(indices)
         # solve master using current indices
         w = sol_method(X, I, indices = indices, debug=debug, non_neg=non_neg, C=C, **kwargs)
+        if isinstance(w, tuple):
+            w, convergence_warning = w[0], (w[1] or convergence_warning)
         if non_neg:
             w = np.clip(w, 0, np.inf)
         if normalize_w:
@@ -1020,7 +1046,8 @@ def column_generation(
             "initial_selection_method" : initial_selection_method.__name__,
             "subsequent_selection_method" : subsequent_selection_method.__name__,
             "start_time" : start_time,
-            "end_time" : datetime.datetime.now()
+            "end_time" : datetime.datetime.now(),
+            "convergence_warning": convergence_warning
             }
     if return_indices:
         return w, indices

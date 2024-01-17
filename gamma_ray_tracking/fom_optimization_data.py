@@ -423,6 +423,8 @@ def make_residuals(
     """
     Takes absolute data X and transforms it into residuals for learning the best
     objective function
+
+    @return  (r, I) or (r_train, I_train, r_val, I_val)
     """
     if train_label is None:
         r = np.nan_to_num(X[other_index]) - np.nan_to_num(X[opt_index])

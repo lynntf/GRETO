@@ -1341,7 +1341,8 @@ def FOM_features(event: Event, permutation: Iterable[int],
                  start_point:int = 0,
                  start_energy:float = None,
                  Nmi:int = None,
-                 eres:float = 1e-3) -> Dict:
+                 eres:float = 1e-3,
+                 fix_nan:float= 2*np.pi) -> Dict:
     """Features for learning a synthetic FOM"""
     if len(permutation) == 1:
         return None
@@ -1453,7 +1454,7 @@ def FOM_features(event: Event, permutation: Iterable[int],
 
     features["c_penalty_sum_1"]  = np.sum(comp_penalty)
     features["c_penalty_mean_1"] = np.mean(comp_penalty)
-    
+
     features["c_penalty_ell_sum_1"]  = np.sum(comp_penalty_ell)
     features["c_penalty_ell_mean_1"] = np.mean(comp_penalty_ell)
 
@@ -1489,6 +1490,11 @@ def FOM_features(event: Event, permutation: Iterable[int],
                                                        start_energy=start_energy,
                                                        Nmi=Nmi,
                                                        eres=eres))
+
+    # %% Deal with NaN values
+    if fix_nan > 0:
+        r_theta[np.isnan(r_theta)] = fix_nan
+        r_theta_v[np.isnan(r_theta_v)] = fix_nan
 
     # %%
     r_theta_cap = np.abs(event.res_theta_cap(permutation,

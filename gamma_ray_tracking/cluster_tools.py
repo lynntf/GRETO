@@ -486,7 +486,7 @@ class cluster_properties:
         self.aspect_ratio = self.length/self.width
 
         self.features = {
-            "esum" : self.esum,
+            # "esum" : self.esum,
             "n" : len(self.cluster),
             "centroid_r" : np.linalg.norm(self.centroid),
             "average_r" : np.mean(event.distance[0,list(cluster)]),
