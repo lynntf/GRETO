@@ -15,7 +15,6 @@ from scipy.cluster.hierarchy import fcluster, fclusterdata
 from scipy.spatial.distance import pdist, squareform
 
 from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.fom_tools import cluster_FOM
 from gamma_ray_tracking.geometry import ge_distance
 from gamma_ray_tracking.interaction_class import Interaction
 
@@ -264,6 +263,8 @@ def cluster_summary(event: Event, clusters: Dict[Hashable, int], **FOM_kwargs):
         FOM of clusters
         Points included in clusters
     """
+    from gamma_ray_tracking.fom_tools import cluster_FOM
+
     FOMs = cluster_FOM(event, clusters, **FOM_kwargs)
     summary = f"Event {event.id}\n"
     for i, cluster in clusters.items():

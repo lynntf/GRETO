@@ -45,7 +45,7 @@ from gamma_ray_tracking.physics import (
     theta_theor,
 )
 
-from .utils import perm_to_transition
+from gamma_ray_tracking.utils import perm_to_transition
 
 # TODO change from eres constant to energy uncertainty
 
@@ -268,7 +268,7 @@ class Event:
         **linkage_kwargs: Any,
     ) -> Dict[int, int]:
         """Cluster using a linkage"""
-        from .cluster_tools import cluster_linkage
+        from gamma_ray_tracking.cluster_tools import cluster_linkage
 
         return cluster_linkage(
             self,
@@ -285,7 +285,7 @@ class Event:
         keep_duplicates: bool = False,
     ):
         """Pack interactions"""
-        from .cluster_tools import pack_interactions
+        from gamma_ray_tracking.cluster_tools import pack_interactions
 
         return pack_interactions(
             self,
@@ -1029,7 +1029,7 @@ class Event:
         """
         Get transition quality tensor.
         """
-        from .transition_grade_clustering import (
+        from gamma_ray_tracking.transition_grade_clustering import (
             get_grade_features,
         )  # pylint: disable=import-outside-toplevel
 

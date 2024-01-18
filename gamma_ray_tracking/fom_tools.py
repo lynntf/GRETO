@@ -1468,7 +1468,7 @@ def individual_FOM_feature_names():
     """
     Generate an empty FOM feature dictionary for a single cluster
     """
-    # from .cluster_tools import cluster_properties
+    # from gamma_ray_tracking.cluster_tools import cluster_properties
     # feature_names = list(FOM_features(default_event, default_clusters[1]).keys())
     # feature_names.extend([name + '_tango' for name in feature_names])
 
@@ -2556,7 +2556,7 @@ def cluster_FOM_features(
 
     Want the same output structure regardless if it is single or a full cluster
     """
-    from .cluster_tools import cluster_properties
+    from gamma_ray_tracking.cluster_tools import cluster_properties
 
     features = {}
 
@@ -2634,7 +2634,7 @@ def clusters_relative_FOM_features(
     relative features will not charge (only if we look at the shape of the
     cluster will it change since different orders have different shapes).
     """
-    from .cluster_tools import cluster_pdist
+    from gamma_ray_tracking.cluster_tools import cluster_pdist
 
     cluster_distances_ge = cluster_pdist(
         event, clusters, method="single", metric="germanium"

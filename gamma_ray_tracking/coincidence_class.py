@@ -36,7 +36,7 @@ class Coincidence:
         Returns
         - Event: the full gamma-ray event for calculating FOMs, etc.
         """
-        from .event_class import Event
+        from gamma_ray_tracking.event_class import Event
 
         if detector_configuration is not None:
             return Event(self.event_id, self.points, detector=detector_configuration)

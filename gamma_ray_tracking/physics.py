@@ -15,7 +15,7 @@ from scipy.interpolate import PchipInterpolator, interp1d  # CubicSpline,
 
 # from numba import njit
 
-# from .utils import log_interp
+# from gamma_ray_tracking.utils import log_interp
 
 # %% Constants
 RHO_GE = 5.323  # Density of Germanium [g/cm3] (NIST)

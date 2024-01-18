@@ -11,11 +11,12 @@ from typing import Dict
 
 import pyomo.environ as pyenv
 
-from ..event_class import Event
+from gamma_ray_tracking.event_class import Event
 
 
-def create_weighted_cluster_problem(event:Event, cluster_FOM_mapping:Dict,
-        singleton_weight:float=0.5) -> pyenv.ConcreteModel:
+def create_weighted_cluster_problem(
+    event: Event, cluster_FOM_mapping: Dict, singleton_weight: float = 0.5
+) -> pyenv.ConcreteModel:
     """
     Create a problem to determine the clustering which minimizes the sum
     FOMs of clusters while also maximizing the coverage of the clusterings.
@@ -27,21 +28,24 @@ def create_weighted_cluster_problem(event:Event, cluster_FOM_mapping:Dict,
     model.FOMs = list(cluster_FOM_mapping.values())
 
     # Assign a weight to penalize picking singletons
-    for i in model.cluster_idxs: # pylint: disable=E1133
-        if len(model.clusters[i-1]) == 1:
-            model.FOMs[i-1] = singleton_weight
+    for i in model.cluster_idxs:  # pylint: disable=E1133
+        if len(model.clusters[i - 1]) == 1:
+            model.FOMs[i - 1] = singleton_weight
 
     model.u = pyenv.Var(model.cluster_idxs, within=pyenv.Binary)
     model.intersection_constraints = pyenv.ConstraintList()
-    for (i, j) in combinations(model.cluster_idxs, 2):
-        if len(set(model.clusters[i-1]) & set(model.clusters[j-1])) > 0:
+    for i, j in combinations(model.cluster_idxs, 2):
+        if len(set(model.clusters[i - 1]) & set(model.clusters[j - 1])) > 0:
             model.intersection_constraints.add(model.u[i] + model.u[j] <= 1)
 
     model.full_coverage_constraint = pyenv.Constraint(
-            expr=sum(len(model.clusters[i-1])*model.u[i]
-                     for i in model.cluster_idxs) == len(event.hit_points)) # pylint: disable=E1133
+        expr=sum(len(model.clusters[i - 1]) * model.u[i] for i in model.cluster_idxs)
+        == len(event.hit_points)
+    )  # pylint: disable=E1133
 
-    expr = sum(model.FOMs[i-1]*model.u[i] for i in model.cluster_idxs) # pylint: disable=E1133
+    expr = sum(
+        model.FOMs[i - 1] * model.u[i] for i in model.cluster_idxs
+    )  # pylint: disable=E1133
     model.obj = pyenv.Objective(expr=expr, sense=pyenv.minimize)
 
     return model

@@ -14,12 +14,17 @@ from typing import Iterable
 import numpy as np
 import pyomo.environ as pyenv
 
-from ..event_class import Event
+from gamma_ray_tracking.event_class import Event
 
 
-def create_subset_sum_problem(event:Event, energies:Iterable[float],
-                              point_subset:Iterable[int]=None,
-                              S:int=2, epsilon:float=0.01, M:int=8):
+def create_subset_sum_problem(
+    event: Event,
+    energies: Iterable[float],
+    point_subset: Iterable[int] = None,
+    S: int = 2,
+    epsilon: float = 0.01,
+    M: int = 8,
+):
     """
     Create the subset sum problem model to be passed to the MIP solver
     """
@@ -37,7 +42,7 @@ def create_subset_sum_problem(event:Event, energies:Iterable[float],
     # Initialize variables
     # UB = 1e5
     # UB = 100
-    UB = 2*max(sum(event.points[i].e for i in model.points), 2)
+    UB = 2 * max(sum(event.points[i].e for i in model.points), 2)
     # UB = max(max(event.points[i].e for i in model.points), max(energies) + epsilon) + epsilon
     model.u = pyenv.Var(model.points, model.clusters, within=pyenv.Binary)
     model.E = pyenv.Var(model.clusters, within=pyenv.NonNegativeReals, bounds=(0, UB))
@@ -46,32 +51,33 @@ def create_subset_sum_problem(event:Event, energies:Iterable[float],
     # clustering rules: each point should be in a cluster
     model.each_point_in_cluster = pyenv.ConstraintList()
     for i in model.points:
-        model.each_point_in_cluster.add(sum(model.u[i,s] for s in model.clusters) == 1)
+        model.each_point_in_cluster.add(sum(model.u[i, s] for s in model.clusters) == 1)
 
     # Max cluster size <= 8: cannot have clusters with size larger than 8 interactions
     model.max_cluster_size = pyenv.ConstraintList()
-    for s in model.clusters: # pylint: disable=E1133
-        model.max_cluster_size.add(sum(model.u[i,s] for i in model.points) <= M)
+    for s in model.clusters:  # pylint: disable=E1133
+        model.max_cluster_size.add(sum(model.u[i, s] for i in model.points) <= M)
 
     # Energy computation
     model.energy_sum = pyenv.ConstraintList()
-    for s in model.clusters: # pylint: disable=E1133
-        model.energy_sum.add(sum(model.u[i,s] * event.points[i].e
-                                for i in model.points) == model.E[s])
+    for s in model.clusters:  # pylint: disable=E1133
+        model.energy_sum.add(
+            sum(model.u[i, s] * event.points[i].e for i in model.points) == model.E[s]
+        )
 
     # Cost computation
     domain_pts = [0]
-    range_pts  = [1]
+    range_pts = [1]
     for energy in energies:
         # We add a little v around each energy level
-        domain_pts.extend([energy-epsilon, energy, energy+epsilon])
+        domain_pts.extend([energy - epsilon, energy, energy + epsilon])
         # range_pts.extend([1, 0, 1])
     domain_pts = sorted(domain_pts)
     for domain_pt in domain_pts[1:]:
         min_dist = UB
         for energy in energies:
             min_dist = min(min_dist, *[abs(domain_pt - energy)])
-        range_val = min(min_dist/epsilon, 1)
+        range_val = min(min_dist / epsilon, 1)
         range_pts.append(range_val)
     # Upper bound on domain
     domain_pts.append(UB)
@@ -82,22 +88,30 @@ def create_subset_sum_problem(event:Event, energies:Iterable[float],
     # print(range_pts)
 
     model.cost_computation = pyenv.Piecewise(
-          model.clusters,
-          model.cost, model.E,
-          pw_pts=domain_pts,
-          pw_repn='SOS2',
-          pw_constr_type = 'EQ',
-          f_rule = range_pts,
-          force_pw=True)
+        model.clusters,
+        model.cost,
+        model.E,
+        pw_pts=domain_pts,
+        pw_repn="SOS2",
+        pw_constr_type="EQ",
+        f_rule=range_pts,
+        force_pw=True,
+    )
 
-    model.obj = pyenv.Objective(expr=sum(model.cost[s] for s in model.clusters),
-                                sense=pyenv.minimize)
+    model.obj = pyenv.Objective(
+        expr=sum(model.cost[s] for s in model.clusters), sense=pyenv.minimize
+    )
 
     return model
 
-def create_subset_sum_single_problem(event:Event, energy:float,
-                                     point_subset:Iterable[int]=None,
-                                     S:int=2, M:int=8):
+
+def create_subset_sum_single_problem(
+    event: Event,
+    energy: float,
+    point_subset: Iterable[int] = None,
+    S: int = 2,
+    M: int = 8,
+):
     """
     Create the subset sum problem model to be passed to the MIP solver for a single energy
     """
@@ -113,7 +127,7 @@ def create_subset_sum_single_problem(event:Event, energy:float,
     model.clusters = pyenv.RangeSet(S)
 
     # Initialize variables
-    UB = 2*max(sum(event.points[i].e for i in model.points), 2)
+    UB = 2 * max(sum(event.points[i].e for i in model.points), 2)
     model.u = pyenv.Var(model.points, model.clusters, within=pyenv.Binary)
     model.E = pyenv.Var(model.clusters, within=pyenv.NonNegativeReals, bounds=(0, UB))
     model.cost = pyenv.Var(model.clusters, within=pyenv.NonNegativeReals)
@@ -121,28 +135,35 @@ def create_subset_sum_single_problem(event:Event, energy:float,
     # clustering rules: each point should be in a cluster
     model.each_point_in_cluster = pyenv.ConstraintList()
     for i in model.points:
-        model.each_point_in_cluster.add(sum(model.u[i,s] for s in model.clusters) == 1)
+        model.each_point_in_cluster.add(sum(model.u[i, s] for s in model.clusters) == 1)
 
     # Max cluster size <= 8: cannot have clusters with size larger than 8 interactions
     model.max_cluster_size = pyenv.ConstraintList()
-    for s in model.clusters: # pylint: disable=E1133
-        model.max_cluster_size.add(sum(model.u[i,s] for i in model.points) <= M)
+    for s in model.clusters:  # pylint: disable=E1133
+        model.max_cluster_size.add(sum(model.u[i, s] for i in model.points) <= M)
 
     # Energy computation
     model.energy_sum = pyenv.ConstraintList()
-    for s in model.clusters: # pylint: disable=E1133
-        model.energy_sum.add(sum(model.u[i,s] * event.points[i].e
-                                for i in model.points) == model.E[s])
+    for s in model.clusters:  # pylint: disable=E1133
+        model.energy_sum.add(
+            sum(model.u[i, s] * event.points[i].e for i in model.points) == model.E[s]
+        )
 
-    model.obj = pyenv.Objective(expr=abs(model.E[1] - energy),
-                                sense=pyenv.minimize)
+    model.obj = pyenv.Objective(expr=abs(model.E[1] - energy), sense=pyenv.minimize)
 
     return model
 
-def subset_sum_stack(event:Event, observed_energies:list,
-                     point_subset:list = None, S:int=2,
-                     epsilon:float=0.05, M:int=8,
-                     solver_name:str='scip', debug:bool=False) -> dict:
+
+def subset_sum_stack(
+    event: Event,
+    observed_energies: list,
+    point_subset: list = None,
+    S: int = 2,
+    epsilon: float = 0.05,
+    M: int = 8,
+    solver_name: str = "scip",
+    debug: bool = False,
+) -> dict:
     """
     Do multiple subset sum solves, one for each potential energy, with two
     clusters, one true cluster and one junk cluster. After constructing all
@@ -159,20 +180,22 @@ def subset_sum_stack(event:Event, observed_energies:list,
         continue_flag = False
         potential_tracks = {}
         for energy in observed_energies:
-            model = create_subset_sum_single_problem(event, energy,
-                                                     point_subset=point_subset,
-                                                     S=S, M=M)
+            model = create_subset_sum_single_problem(
+                event, energy, point_subset=point_subset, S=S, M=M
+            )
             solver.solve(model, tee=False)
             track = get_clusters(model)
             if debug:
-                print(f'energy {energy} track {track}')
-                print(f'          energies {event.energy_sums(track)}')
+                print(f"energy {energy} track {track}")
+                print(f"          energies {event.energy_sums(track)}")
             energies = event.energy_sums(track)
             for track_id, track_indices in track.items():
                 if abs(energies[track_id] - energy) < epsilon:
                     # cluster = event.semi_greedy(track_indices, fom_method='agata')
                     # potential_tracks[tuple(cluster)] = event.FOM(cluster, fom_method='angle')
-                    potential_tracks[tuple(track_indices)] = abs(energies[track_id] - energy)
+                    potential_tracks[tuple(track_indices)] = abs(
+                        energies[track_id] - energy
+                    )
         best_fom = np.inf
         for track, fom in potential_tracks.items():
             if fom < best_fom:
@@ -197,15 +220,25 @@ def add_local_distance_constraints(instance, clusters, du):
     for i in instance.points:
         for s in instance.clusters:
             if i in clusters[s]:
-                u_hat[i,s] = 1
+                u_hat[i, s] = 1
             else:
-                u_hat[i,s] = 0
+                u_hat[i, s] = 0
 
-    instance.local_distance = pyenv.Constraint(rule=
-            sum(1 - instance.u[i,s] for i in instance.points
-                for s in instance.clusters if u_hat[i,s] == 1)
-            + sum(instance.u[i,s] for i in instance.points
-                  for s in instance.clusters if u_hat[i,s] == 0) <= du)
+    instance.local_distance = pyenv.Constraint(
+        rule=sum(
+            1 - instance.u[i, s]
+            for i in instance.points
+            for s in instance.clusters
+            if u_hat[i, s] == 1
+        )
+        + sum(
+            instance.u[i, s]
+            for i in instance.points
+            for s in instance.clusters
+            if u_hat[i, s] == 0
+        )
+        <= du
+    )
 
 
 def add_cluster_max_distance_constraints(instance, distance):
@@ -215,12 +248,14 @@ def add_cluster_max_distance_constraints(instance, distance):
     """
     instance.distance_constraints = pyenv.ConstraintList()
 
-    for (i, j) in combinations(instance.points, 2):
+    for i, j in combinations(instance.points, 2):
         pi, pj = instance.event.points[i], instance.event.points[j]
         angle = np.arccos(pi.x @ pj.x / (np.linalg.norm(pi.x) * np.linalg.norm(pj.x)))
         if angle > distance:
             for s in instance.clusters:
-                instance.distance_constraints.add(instance.u[i,s] + instance.u[j,s] <= 1)
+                instance.distance_constraints.add(
+                    instance.u[i, s] + instance.u[j, s] <= 1
+                )
 
 
 def get_clusters(model):
@@ -232,10 +267,10 @@ def get_clusters(model):
         cluster = []
         for i in model.points:
             try:
-                if pyenv.value(model.u[i,s]) > 0.5:
+                if pyenv.value(model.u[i, s]) > 0.5:
                     cluster.append(i)
             except Exception as e:
-                print('****************')
+                print("****************")
                 print(model)
                 raise e
         if len(cluster) > 0:

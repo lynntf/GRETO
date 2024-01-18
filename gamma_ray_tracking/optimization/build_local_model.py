@@ -18,9 +18,10 @@ O(n!/(n-k)!) or direct enumeration in general O(n!).
 """
 import pyomo.environ as pyenv
 
-from ..event_class import Event
+from gamma_ray_tracking.event_class import Event
 
-def build_local_model(event:Event, cluster_indices, error='l2'):
+
+def build_local_model(event: Event, cluster_indices, error="l2"):
     """Use the N^3 transitions (and TANGO estimates) to do clustering"""
     model = pyenv.ConcreteModel()
     model.N = len(cluster_indices) + 1
@@ -32,5 +33,5 @@ def build_local_model(event:Event, cluster_indices, error='l2'):
     model.I_minus = pyenv.RangeSet(model.Nm1)
     model.J = pyenv.RangeSet(model.M)
     model.J0 = pyenv.RangeSet(0, model.M)
-    model.J_minus = pyenv.RangeSet(M-1)
+    model.J_minus = pyenv.RangeSet(M - 1)
     raise NotImplementedError("This model is not complete")

@@ -10,13 +10,9 @@ __version__ = "1.0.0"
 
 from scipy.constants import physical_constants
 
-from gamma_ray_tracking import cluster_tools, event_tools, fom_tools, geometry, physics
-from gamma_ray_tracking.detector_config_class import DetectorConfig, default_config
+from gamma_ray_tracking.detector_config_class import default_config
 from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.file_io import *
 from gamma_ray_tracking.interaction_class import Interaction
-
-# from . import cluster_utils
 
 # %% Define constants
 RHO_GE = 5.323  # Density of Germanium [g/cm3] (NIST)
