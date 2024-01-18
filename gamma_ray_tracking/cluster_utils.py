@@ -5,6 +5,7 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 Utilities for clustering gamma ray interactions and evaluating clusters.
 """
 from __future__ import annotations
+
 from copy import deepcopy
 from itertools import combinations
 from typing import Dict, Iterable
@@ -12,7 +13,7 @@ from typing import Dict, Iterable
 import numpy as np
 import pyomo.environ as pyenv
 
-from .event_class import Event
+from gamma_ray_tracking.event_class import Event
 
 
 class Clustering(dict):
@@ -20,6 +21,7 @@ class Clustering(dict):
     A class which encodes a clustering. Internally it contains a disjoint
     set data structure to enable easy access to the cluster
     """
+
     def __init__(self, starting_clusters):
         """
         starting_clusters is a mapping from cluster index to elements in
@@ -28,14 +30,18 @@ class Clustering(dict):
         dict.__init__(self, starting_clusters)
         # dictionary of parents where each key is mapped to its parent
         # start with everything maps to itself
-        self.parent_map = {elem: cluster[0]
-                            for cluster in starting_clusters.values()
-                            for elem in cluster}
+        self.parent_map = {
+            elem: cluster[0]
+            for cluster in starting_clusters.values()
+            for elem in cluster
+        }
         # dictionary of root: size_of_tree
         # also serves as something to store the roots
-        self.root_size_map = {elem: len(cluster)
-                              for cluster in starting_clusters.values()
-                              for elem in cluster}
+        self.root_size_map = {
+            elem: len(cluster)
+            for cluster in starting_clusters.values()
+            for elem in cluster
+        }
         self.classes = starting_clusters
         self.size = sum(len(cluster) for cluster in starting_clusters.values())
         self.num_clusters = len(starting_clusters)
@@ -46,14 +52,16 @@ class Clustering(dict):
         Add a new value as its own equiv class
         """
         # Check first that it is not already in a member
-        error_msg = (f"Equivalence.add_singleton: {new_value} is already " +
-                    "in the equiv class!")
+        error_msg = (
+            f"Equivalence.add_singleton: {new_value} is already "
+            + "in the equiv class!"
+        )
         assert new_value not in self.parent_map, error_msg
 
         self.parent_map[new_value] = new_value
         self.root_size_map[new_value] = 1
 
-    def merge_classes_of(self, a , b):
+    def merge_classes_of(self, a, b):
         """
         Merge the clusters of a and b together
         by setting each parent's map to point to the same root.
@@ -66,7 +74,7 @@ class Clustering(dict):
         root_of_b = self.compress_to_root(b)
 
         if root_of_a == root_of_b:
-            return # they are already in the same equivalence class
+            return  # they are already in the same equivalence class
 
         # find the "big" root and the "small" root
         if self.root_size_map[root_of_a] < self.root_size_map[root_of_b]:
@@ -127,17 +135,18 @@ class Clustering(dict):
         The dictionary will only contain classes which have more than one
         element.
         """
-        return {rep: class_ for (rep, class_) in self.classes.items()
-                if len(class_) > 1}
+        return {
+            rep: class_ for (rep, class_) in self.classes.items() if len(class_) > 1
+        }
 
-    def compress_to_root(self, elem):# -> 'root of a':
+    def compress_to_root(self, elem):  # -> 'root of a':
         """
         Returns the root of elem, and on the way, set the roots of the
         parents of elem to be the root of elem
         """
         assert elem in self.parent_map, str(elem) + " does not exist."
-        parents_of_elem = set() # set to store the parents of elem
-        curr_val = elem   # current value
+        parents_of_elem = set()  # set to store the parents of elem
+        curr_val = elem  # current value
 
         # We traverse up through the ancestors of elem and keep track
         # of the elements that we see so that we can compress the path
@@ -167,7 +176,7 @@ class Clustering(dict):
         mapping = np.zeros(self.size)
         for c_idx, elems in self.classes.items():
             for elem in elems:
-                mapping[elem-1] = c_idx
+                mapping[elem - 1] = c_idx
         return mapping
 
     def copy(self):
@@ -182,7 +191,7 @@ def get_permutation(instance):
     perm = []
     for j in instance.J:
         for i in instance.I:
-            if instance.z[i,j].value > 0.5:
+            if instance.z[i, j].value > 0.5:
                 perm.append(i)
                 break
     return perm
@@ -190,14 +199,15 @@ def get_permutation(instance):
 
 def get_clusters(instance):
     """Get the clusters for this instance"""
-    perm = {s:[] for s in instance.clusters}
+    perm = {s: [] for s in instance.clusters}
     for s in instance.clusters:
         for j in instance.J:
             for i in instance.I:
-                if instance.z[i,j,s].value > 0.5:
+                if instance.z[i, j, s].value > 0.5:
                     perm[s].append(i)
                     break
     return Clustering(perm)
+
 
 def is_feasible(model, constr_tol=1e-8, var_tol=1e-8):
     """
@@ -206,37 +216,56 @@ def is_feasible(model, constr_tol=1e-8, var_tol=1e-8):
     untransformed GDP models.
     """
     for constr in model.component_data_objects(
-            ctype=pyenv.Constraint, active=True, descend_into=True):
+        ctype=pyenv.Constraint, active=True, descend_into=True
+    ):
         # Check constraint lower bound
-        if (constr.lower is not None and (
-                pyenv.value(constr.lower) - pyenv.value(constr.body)
-                >= constr_tol
-        )):
-            print(constr, "Lower bound not satisfied:", pyenv.value(constr.lower),
-                '>', pyenv.value(constr.body))
+        if constr.lower is not None and (
+            pyenv.value(constr.lower) - pyenv.value(constr.body) >= constr_tol
+        ):
+            print(
+                constr,
+                "Lower bound not satisfied:",
+                pyenv.value(constr.lower),
+                ">",
+                pyenv.value(constr.body),
+            )
         # check constraint upper bound
-        if (constr.upper is not None and (
-                pyenv.value(constr.body) - pyenv.value(constr.upper)
-                >= constr_tol
-        )):
-            print(constr, "Upper bound not satisfied:", pyenv.value(constr.upper),
-                '<', pyenv.value(constr.body))
+        if constr.upper is not None and (
+            pyenv.value(constr.body) - pyenv.value(constr.upper) >= constr_tol
+        ):
+            print(
+                constr,
+                "Upper bound not satisfied:",
+                pyenv.value(constr.upper),
+                "<",
+                pyenv.value(constr.body),
+            )
     for var in model.component_data_objects(ctype=pyenv.Var, descend_into=True):
         # Check variable lower bound
-        if (var.has_lb() and
-                pyenv.value(var.lb) - pyenv.value(var) >= var_tol):
-            print(var, "Lower bound not satisfied:", pyenv.value(var.lb), '>', pyenv.value(var))
+        if var.has_lb() and pyenv.value(var.lb) - pyenv.value(var) >= var_tol:
+            print(
+                var,
+                "Lower bound not satisfied:",
+                pyenv.value(var.lb),
+                ">",
+                pyenv.value(var),
+            )
         # Check variable upper bound
-        if (var.has_ub() and
-                pyenv.value(var) - pyenv.value(var.ub) >= var_tol):
-            print(var, "Upper bound not satisfied:", pyenv.value(var.ub), '<', pyenv.value(var))
+        if var.has_ub() and pyenv.value(var) - pyenv.value(var.ub) >= var_tol:
+            print(
+                var,
+                "Upper bound not satisfied:",
+                pyenv.value(var.ub),
+                "<",
+                pyenv.value(var),
+            )
 
 
 def reorder_clusters(clusters):
     """Reorder the clusters"""
     new_clusters = {}
     for j, (_, cluster) in enumerate(sorted(clusters.items(), key=lambda x: min(x[1]))):
-        new_clusters[j+1] = cluster
+        new_clusters[j + 1] = cluster
     return Clustering(new_clusters)
 
 
@@ -252,36 +281,38 @@ def clusters_as_dictionary(model, clusters):
     for i in model.I0:
         for s in model.clusters:
             if i in clusters[s]:
-                u[i,s] = 1
+                u[i, s] = 1
             else:
-                u[i,s] = 0
+                u[i, s] = 0
 
     for s in model.clusters:
-        z[0,0,s] = 1
+        z[0, 0, s] = 1
         for j in model.J:
-            z[0,j,s] = 0
+            z[0, j, s] = 0
         for i in model.I:
-            z[i,0,s] = 0
+            z[i, 0, s] = 0
 
     for i in model.I:
         for j in model.J:
             for s in model.clusters:
-                if len(clusters[s]) >= j and clusters[s][j-1] == i:
-                    z[i,j,s] = 1
+                if len(clusters[s]) >= j and clusters[s][j - 1] == i:
+                    z[i, j, s] = 1
                 else:
-                    z[i,j,s] = 0
+                    z[i, j, s] = 0
     return u, z
 
 
 def add_local_branching_heuristic(model, u, d=2, z=None):
     """Add a local branching heuristic"""
-    expr = (sum(model.u[i,s] for ((i,s), val) in u.items() if val == 0) +
-            sum(1 - model.u[i,s] for ((i,s), val) in u.items() if val == 1))
+    expr = sum(model.u[i, s] for ((i, s), val) in u.items() if val == 0) + sum(
+        1 - model.u[i, s] for ((i, s), val) in u.items() if val == 1
+    )
     if z is not None:
-        expr += (sum(model.z[i,j,s] for ((i,j,s), val) in z.items() if val == 0) +
-                 sum(1 - model.z[i,j,s] for ((i,j,s), val) in z.items() if val == 1))
+        expr += sum(
+            model.z[i, j, s] for ((i, j, s), val) in z.items() if val == 0
+        ) + sum(1 - model.z[i, j, s] for ((i, j, s), val) in z.items() if val == 1)
 
-    model.local_branch_constraint = pyenv.Constraint(expr=expr<=d)
+    model.local_branch_constraint = pyenv.Constraint(expr=expr <= d)
 
 
 def cost_function(x, energies, epsilon=0.01):
@@ -291,8 +322,9 @@ def cost_function(x, energies, epsilon=0.01):
     return 0
 
 
-def compute_different_energy_spectra(events, tracks, alpha=0.4, S=2,
-                                     link=False, distance='great_circle'):
+def compute_different_energy_spectra(
+    events, tracks, alpha=0.4, S=2, link=False, distance="great_circle"
+):
     """
     Compute the following energy spectra:
         full_energies: the energy for each event (no clustering)
@@ -319,13 +351,19 @@ def compute_different_energy_spectra(events, tracks, alpha=0.4, S=2,
         if t is not None:
             if isinstance(t, Clustering):
                 track = t
-                energies = [sum(event.points[i].e for i in cluster)
-                                for cluster in track.values() if len(cluster) > 0]
+                energies = [
+                    sum(event.points[i].e for i in cluster)
+                    for cluster in track.values()
+                    if len(cluster) > 0
+                ]
                 cost = sum(cost_function(e, [1.173, 1.333]) for e in energies)
             else:
                 (track, cost) = t
-            subset_energies = [sum(event.points[i].e for i in cluster)
-                                for cluster in track.values() if len(cluster) > 0]
+            subset_energies = [
+                sum(event.points[i].e for i in cluster)
+                for cluster in track.values()
+                if len(cluster) > 0
+            ]
             subset_sum_energies.extend(subset_energies)
 
             if cost == 2:
@@ -333,7 +371,12 @@ def compute_different_energy_spectra(events, tracks, alpha=0.4, S=2,
             else:
                 track_and_cluster_energies.extend(subset_energies)
 
-    return full_energies, subset_sum_energies, track_and_cluster_energies, cluster_energies
+    return (
+        full_energies,
+        subset_sum_energies,
+        track_and_cluster_energies,
+        cluster_energies,
+    )
 
 
 def clusters_match(clustering1, clustering2):
@@ -361,9 +404,9 @@ def get_track_energies(events, tracks):
     return energies
 
 
-def mismatch_count(approx_clusters: dict,
-                   true_clusters: dict,
-                   return_cluster_indices: bool = False):
+def mismatch_count(
+    approx_clusters: dict, true_clusters: dict, return_cluster_indices: bool = False
+):
     """
     For each cluster in approx_clusters, find the cluster in true_clusters
     which is closest in terms of size of symmetric difference.
@@ -395,8 +438,7 @@ def mismatch_count(approx_clusters: dict,
     return mismatches, matched_clusters
 
 
-def compute_reclustered_energies(events, tracks,
-                                 ray_tracks, observed_energies):
+def compute_reclustered_energies(events, tracks, ray_tracks, observed_energies):
     """
     Categorize clusters by the type of event they emerged from, either an escape
     event, or a full absorption event.
@@ -413,7 +455,7 @@ def compute_reclustered_energies(events, tracks,
         observed_energies (list): The list of observed energies
     """
     reclustered_energies = {energy: [] for energy in observed_energies}
-    reclustered_energies['Other'] = []
+    reclustered_energies["Other"] = []
     for event, track, ray_track in zip(events, tracks, ray_tracks):
         if track is None:
             continue
@@ -429,7 +471,7 @@ def compute_reclustered_energies(events, tracks,
                     reclustered_energies[observed_energy].append(energy)
                     break
             else:
-                reclustered_energies['Other'].append(energy)
+                reclustered_energies["Other"].append(energy)
     return reclustered_energies
 
 
@@ -468,9 +510,9 @@ def find_misclustered_indices(tracks, true_tracks):
     return bad_idxs
 
 
-def compute_subset_and_cluster_tracks(events, subset_tracks,
-                                      observed_energies, alpha=0.4,
-                                      distance='great_circle'):
+def compute_subset_and_cluster_tracks(
+    events, subset_tracks, observed_energies, alpha=0.4, distance="great_circle"
+):
     """Compute subset and cluster tracks
 
     Args:
@@ -492,7 +534,9 @@ def compute_subset_and_cluster_tracks(events, subset_tracks,
 
         # Accept the SubSum clusters if the energies match the expected values,
         # otherwise accept the distance clustering
-        energies = list(event.energy_sums(track).values()) # Compute energies for tracks
+        energies = list(
+            event.energy_sums(track).values()
+        )  # Compute energies for tracks
         if sum(cost_function(e, observed_energies) for e in energies) == len(energies):
             # If the energy sum doesn't match the observed_energies (here the 2
             # indicates that energy does not match for either expected gamma
@@ -516,12 +560,13 @@ def combine_clusterings(events1, events2, track1, track2):
     combined_tracks = []
     for e1, e2, t1, t2 in zip(events1, events2, track1, track2):
         combined_track = {}
-        for (e, t) in [(e1, t1), (e2, t2)]:
+        for e, t in [(e1, t1), (e2, t2)]:
             for _, cluster in t.items():
                 if len(cluster) == 0:
                     continue
-                combined_track[max(combined_track, default=0)+1] = \
-                    [e.points[j].number for j in cluster]
+                combined_track[max(combined_track, default=0) + 1] = [
+                    e.points[j].number for j in cluster
+                ]
         combined_tracks.append(Clustering(combined_track))
     return combined_tracks
 
@@ -582,7 +627,8 @@ def invert_clusters(clusters):
             p_to_cluster_idx[val] = c
     return p_to_cluster_idx
 
-def labels_to_clusters(labels:dict):
+
+def labels_to_clusters(labels: dict):
     """
     Opposite of invert_clusters
     """
@@ -597,11 +643,12 @@ def labels_to_clusters(labels:dict):
 
 
 def compute_purity(clusters, true_clusters):
-    """ Compute the purity of the clusters"""
+    """Compute the purity of the clusters"""
     purity = 0
     for c in clusters.keys():
-        closest_cluster = max(true_clusters,
-                              key=lambda x: len(set(true_clusters[x]) & set(clusters[c])))
+        closest_cluster = max(
+            true_clusters, key=lambda x: len(set(true_clusters[x]) & set(clusters[c]))
+        )
         purity += len(set(true_clusters[closest_cluster]) & set(clusters[c]))
     purity /= max(max(c) for c in clusters.values())
     return purity
@@ -669,6 +716,7 @@ def compute_jaccard_index(clusters, true_clusters):
 
     return tp / (tp + fp + fn)
 
+
 def count_fully_recovered_clusters(clusters, true_clusters):
     """Count the fully recovered clusters"""
     mismatch_counts, _ = mismatch_count(true_clusters, clusters)
@@ -682,12 +730,14 @@ def compute_cluster_statistics(tracks, true_tracks):
     rands = []
     jaccards = []
     recovered_clusters = []
-    for (clusters, true_clusters) in zip(tracks, true_tracks):
+    for clusters, true_clusters in zip(tracks, true_tracks):
         precisions.append(compute_precision(clusters, true_clusters))
         recalls.append(compute_recall(clusters, true_clusters))
         rands.append(compute_rand_index(clusters, true_clusters))
         jaccards.append(compute_jaccard_index(clusters, true_clusters))
-        recovered_clusters.append(count_fully_recovered_clusters(clusters, true_clusters))
+        recovered_clusters.append(
+            count_fully_recovered_clusters(clusters, true_clusters)
+        )
     return precisions, recalls, rands, jaccards, recovered_clusters
 
 
@@ -700,7 +750,9 @@ def get_event_ray_subset(events, tracks, ray_nums):
     new_tracks = []
     for e, t in zip(events, tracks):
         idxs = sum([t.get(num, []) for num in ray_nums], start=[])
-        new_t = {num:[idxs.index(p)+1 for p in t[num]] for num in ray_nums if num in t}
+        new_t = {
+            num: [idxs.index(p) + 1 for p in t[num]] for num in ray_nums if num in t
+        }
         new_e = e.subset(idxs, reset_idxs=True)
         new_events.append(new_e)
         new_tracks.append(new_t)
@@ -724,10 +776,10 @@ def get_all_clusters(linkage, n_points):
     Given a linkage array from a hierarchical clustering algorithm, return
     the list of all clusters produced.
     """
-    clusters = {i:[i+1] for i in range(n_points)}
-    for i in range(n_points-1):
-        c1_idx, c2_idx = linkage[i,[0,1]]
-        clusters[n_points+i] = clusters[c1_idx] + clusters[c2_idx]
+    clusters = {i: [i + 1] for i in range(n_points)}
+    for i in range(n_points - 1):
+        c1_idx, c2_idx = linkage[i, [0, 1]]
+        clusters[n_points + i] = clusters[c1_idx] + clusters[c2_idx]
     return clusters
 
 
@@ -735,7 +787,8 @@ def angular_distance(x1, x2):
     """
     Angle between two points in R3.
     """
-    return abs(np.arccos(np.dot(x1, x2)/ (np.linalg.norm(x1)*np.linalg.norm(x2))))
+    return abs(np.arccos(np.dot(x1, x2) / (np.linalg.norm(x1) * np.linalg.norm(x2))))
+
 
 # def combine_events_clusters(events1: list, events2: list,
 #                             tracks1: list[dict], tracks2: list[dict]):
@@ -781,9 +834,14 @@ def angular_distance(x1, x2):
 
 #     return combined_events, combined_tracks
 
-def combine_events(event1:Event, event2:Event,
-                   tracks1:dict=None, tracks2:dict=None,
-                   return_escapes_label: bool =False):
+
+def combine_events(
+    event1: Event,
+    event2: Event,
+    tracks1: dict = None,
+    tracks2: dict = None,
+    return_escapes_label: bool = False,
+):
     """Combine two events"""
     total_event = Event(event1.id, event1.hit_points + event2.hit_points)
     escapes_label = {}
@@ -805,7 +863,8 @@ def combine_events(event1:Event, event2:Event,
         return total_event, total_tracks
     return total_event
 
-def fix_order(event, al_event, al_tracks:dict) -> dict:
+
+def fix_order(event, al_event, al_tracks: dict) -> dict:
     """
     Convert indices related to the altered event in the altered tracks back to
     the indices related to the original event.
@@ -825,9 +884,12 @@ def fix_order(event, al_event, al_tracks:dict) -> dict:
         fixed_tracks[index] = [index_map[altered] for altered in track]
     return fixed_tracks
 
-def cluster_matrix(clusters: Dict[int, list],
-                   cluster_validity:bool = True,
-                   order_validity: bool = True) -> np.ndarray:
+
+def cluster_matrix(
+    clusters: Dict[int, list],
+    cluster_validity: bool = True,
+    order_validity: bool = True,
+) -> np.ndarray:
     """
     Return the connectivity matrix for the provided clusters
     """
@@ -845,7 +907,8 @@ def cluster_matrix(clusters: Dict[int, list],
                 y[i, j] += 1
     return y
 
-def remove_interactions(event: Event, removal_indices: Iterable, clusters: Dict =None):
+
+def remove_interactions(event: Event, removal_indices: Iterable, clusters: Dict = None):
     """
     Remove interactions from an event by index and correct cluster indices
     """
@@ -872,6 +935,7 @@ def remove_interactions(event: Event, removal_indices: Iterable, clusters: Dict 
         return Event(event.id, new_points), new_clusters
     return Event(event.id, new_points)
 
+
 def remove_zero_energy(events, list_of_clusters=None, **kwargs):
     """
     Remove interactions from events with zero energy
@@ -884,7 +948,9 @@ def remove_zero_energy(events, list_of_clusters=None, **kwargs):
             if point.e <= 0:
                 removal_indices.append(i + 1)
         if list_of_clusters is not None:
-            ev, clu = remove_interactions(event, removal_indices, list_of_clusters[j], **kwargs)
+            ev, clu = remove_interactions(
+                event, removal_indices, list_of_clusters[j], **kwargs
+            )
             clusters_copy.append(clu)
         else:
             ev = remove_interactions(event, removal_indices, **kwargs)
@@ -893,7 +959,8 @@ def remove_zero_energy(events, list_of_clusters=None, **kwargs):
         return events_copy, clusters_copy
     return events_copy
 
-def remove_zero_energy_interactions(event, clusters=None, energy_threshold:float = 0):
+
+def remove_zero_energy_interactions(event, clusters=None, energy_threshold: float = 0):
     """
     Remove zero energies for a single event
     """
@@ -905,8 +972,12 @@ def remove_zero_energy_interactions(event, clusters=None, energy_threshold:float
         return remove_interactions(event, removal_indices, clusters)
     return remove_interactions(event, removal_indices)
 
-def join_validity(ground_truth_clusters:Dict[int, Iterable[int]],
-                  cluster1:Iterable[int], cluster2:Iterable[int]):
+
+def join_validity(
+    ground_truth_clusters: Dict[int, Iterable[int]],
+    cluster1: Iterable[int],
+    cluster2: Iterable[int],
+):
     """
     Should proposed clusters 1 and 2 be joined into the same cluster?
 
@@ -914,13 +985,18 @@ def join_validity(ground_truth_clusters:Dict[int, Iterable[int]],
     cluster in ground_truth_clusters
     """
     for key in ground_truth_clusters.keys():
-        if all( i in ground_truth_clusters[key] for i in cluster1) and\
-           all( j in ground_truth_clusters[key] for j in cluster2):
+        if all(i in ground_truth_clusters[key] for i in cluster1) and all(
+            j in ground_truth_clusters[key] for j in cluster2
+        ):
             return True
     return False
 
-def end_validity(ground_truth_clusters:Dict[int, Iterable[int]],
-                  cluster1:Iterable[int], cluster2:Iterable[int]):
+
+def end_validity(
+    ground_truth_clusters: Dict[int, Iterable[int]],
+    cluster1: Iterable[int],
+    cluster2: Iterable[int],
+):
     """
     Should proposed clusters 1 and 2 be joined end to end in the same cluster?
 
@@ -931,13 +1007,14 @@ def end_validity(ground_truth_clusters:Dict[int, Iterable[int]],
         for key in ground_truth_clusters.keys():
             for i, index in enumerate(ground_truth_clusters[key][:-1]):
                 if cluster1[-1] == index:
-                    if cluster2[0] == ground_truth_clusters[key][i+1]:
+                    if cluster2[0] == ground_truth_clusters[key][i + 1]:
                         return True
                     else:
                         return False
     return False
 
-def valid_transition(ground_truth_clusters, i,j):
+
+def valid_transition(ground_truth_clusters, i, j):
     """
     Is the transition from i -> j valid?
     """
@@ -957,6 +1034,7 @@ def valid_transition(ground_truth_clusters, i,j):
             return False
     return False
 
+
 def same_cluster(ground_truth_clusters, i, j):
     """
     Are the interactions i and j in the same cluster?
@@ -973,6 +1051,7 @@ def same_cluster(ground_truth_clusters, i, j):
                 return True
             return False
     return False
+
 
 def reindex_clusters(clusters: dict):
     """
@@ -993,11 +1072,10 @@ def reindex_clusters(clusters: dict):
         keys.remove(selected_key)
     return new_clusters
 
+
 def fraction_of_true_clusters_captured_dict(
-    clusters_true:dict[int, list],
-    clusters_pred:dict[int, list],
-    debug:bool = False
-    ) -> tuple[dict, dict, dict]:
+    clusters_true: dict[int, list], clusters_pred: dict[int, list], debug: bool = False
+) -> tuple[dict, dict, dict]:
     """Evaluate the predicted clusters compared to the true clusters
 
     Arguments are the true clusters dictionary and the predicted clusters dictionary
@@ -1008,13 +1086,21 @@ def fraction_of_true_clusters_captured_dict(
     - joined together in the predicted clusters
     - ordered correctly
     """
-    labels_pred = invert_clusters(clusters_pred)  # The predicted cluster ids for each point
+    labels_pred = invert_clusters(
+        clusters_pred
+    )  # The predicted cluster ids for each point
     labels_true = invert_clusters(clusters_true)  # The cluster ids for each point
-    correct = split_up = joined = 0  # A cluster can be both split up and joined, but not correct
-    correct = {}   # Is the true cluster captured as a single cluster?
-    ordered = {}   # Is the true cluster captured as a single cluster and ordered correctly?
+    correct = (
+        split_up
+    ) = joined = 0  # A cluster can be both split up and joined, but not correct
+    correct = {}  # Is the true cluster captured as a single cluster?
+    ordered = (
+        {}
+    )  # Is the true cluster captured as a single cluster and ordered correctly?
     split_up = {}  # Is the true cluster split up across multiple predicted clusters?
-    joined = {}    # Is the true cluster joined together with other true clusters in the predicted clusters?
+    joined = (
+        {}
+    )  # Is the true cluster joined together with other true clusters in the predicted clusters?
 
     # What are the true cluster sources for each predicted cluster?
     pred_cluster_sources = {k: set() for k in clusters_pred.keys()}
@@ -1041,7 +1127,7 @@ def fraction_of_true_clusters_captured_dict(
 
     # Joined means that indices from different true clusters appear in the same predicted cluster
     # i.e., multiple sources in pred_cluster_sources
-    joined = {k : False for k in clusters_true.keys()}
+    joined = {k: False for k in clusters_true.keys()}
     for k, sources in pred_cluster_sources.items():
         if len(sources) > 1:
             for source in sources:
@@ -1051,12 +1137,15 @@ def fraction_of_true_clusters_captured_dict(
         print("Split ", split_up)
         print("Joined", joined)
     # Complete means not split up or joined
-    correct = {k : ((not split_up[k]) and (not joined[k])) for k in joined.keys()}
+    correct = {k: ((not split_up[k]) and (not joined[k])) for k in joined.keys()}
     # Ordered means correct and the order of interactions is also correct
     for k in clusters_true.keys():
         if correct[k]:
-            ordered[k] = all(clusters_pred[labels_pred[clusters_true[k][i]]][i] == clusters_true[k][i]
-                             for i in range(len(clusters_true[k])))
+            ordered[k] = all(
+                clusters_pred[labels_pred[clusters_true[k][i]]][i]
+                == clusters_true[k][i]
+                for i in range(len(clusters_true[k]))
+            )
         else:
             ordered[k] = False
     return correct, split_up, joined, ordered

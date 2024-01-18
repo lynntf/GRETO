@@ -10,15 +10,11 @@ __version__ = "1.0.0"
 
 from scipy.constants import physical_constants
 
-from .detector_config_class import default_config, DetectorConfig
-from .event_class import Event
-from . import event_tools
-from .file_io import *
-from . import fom_tools
-from . import geometry
-from .interaction_class import Interaction
-from . import physics
-from . import cluster_tools
+from gamma_ray_tracking import cluster_tools, event_tools, fom_tools, geometry, physics
+from gamma_ray_tracking.detector_config_class import DetectorConfig, default_config
+from gamma_ray_tracking.event_class import Event
+from gamma_ray_tracking.file_io import *
+from gamma_ray_tracking.interaction_class import Interaction
 
 # from . import cluster_utils
 

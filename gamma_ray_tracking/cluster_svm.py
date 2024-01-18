@@ -13,17 +13,16 @@ unweighted logistic regression methods using scikit-learn, SVM methods using
 cvxpy, and linear relaxations of the binary variable problem using cvxpy.
 """
 from __future__ import annotations
+
 import datetime
-from typing import List, Tuple, Callable, Literal, Dict
 import warnings
+from typing import Callable, Dict, List, Literal, Tuple
 
-import numpy as np
 import cvxpy as cp
-from sklearn.svm import LinearSVC
-from sklearn.linear_model import LogisticRegression
-
+import numpy as np
 from sklearn.exceptions import ConvergenceWarning
-
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
 
 # %% w0 estimate for linear model
 

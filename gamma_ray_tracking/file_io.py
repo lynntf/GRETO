@@ -5,21 +5,21 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 File in/out for reading/writing GEB files and ASCII simulated files
 """
 from __future__ import annotations
+
 import os
+import pickle as pkl
 import struct
 from typing import BinaryIO, Dict, Generator, List, Tuple
-
-import pickle as pkl
 
 import numpy as np
 import yaml
 from scipy.spatial.distance import pdist, squareform
 
-from . import default_config
-from .detector_config_class import DetectorConfig
-from .event_class import Event
-from .fom_tools import cluster_FOM
-from .interaction_class import Interaction
+from gamma_ray_tracking import default_config
+from gamma_ray_tracking.detector_config_class import DetectorConfig
+from gamma_ray_tracking.event_class import Event
+from gamma_ray_tracking.fom_tools import cluster_FOM
+from gamma_ray_tracking.interaction_class import Interaction
 
 
 class GEBdata_file:
@@ -1905,6 +1905,7 @@ def read_events_clusters(
 
 
 # %% Convert between the extended mode1 and the standard mode1
+
 
 def convert_mode1_extended(input_mode1x_file: BinaryIO, output_mode1_file: BinaryIO):
     """

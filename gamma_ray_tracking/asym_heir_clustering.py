@@ -5,12 +5,15 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 Asymmetric hierarchical clustering
 """
 from __future__ import annotations
+
 from typing import Tuple
 
 import numpy as np
 
-def combine_clusters(distances: np.ndarray[float],
-                     eligible: np.ndarray[bool] = None) -> Tuple[int, int]:
+
+def combine_clusters(
+    distances: np.ndarray[float], eligible: np.ndarray[bool] = None
+) -> Tuple[int, int]:
     """
     # Find the pair of clusters with the minimum distance between them.
 
@@ -41,20 +44,28 @@ def combine_clusters(distances: np.ndarray[float],
     if eligible is not None:
         if eligible.shape != A.shape:
             print(eligible.shape, A.shape)
-            raise ValueError("Eligible array does not match the shape of distances matrix.")
+            raise ValueError(
+                "Eligible array does not match the shape of distances matrix."
+            )
         A[~eligible] = np.max(distances)
     A[np.diag_indices(A.shape[0])] = np.inf
 
     # Find the indices of the minimum element in the masked matrix
-    i, j = np.unravel_index(np.argmin(A), A.shape) # pylint: disable=unbalanced-tuple-unpacking
+    i, j = np.unravel_index(
+        np.argmin(A), A.shape
+    )  # pylint: disable=unbalanced-tuple-unpacking
 
     # Return the indices as a tuple
     return i, j
 
-def update_distances(distances: np.ndarray,
-                     i: int, j: int,
-                     method: str = 'directional',
-                     weight: float = 0.1) -> Tuple[np.ndarray]:
+
+def update_distances(
+    distances: np.ndarray,
+    i: int,
+    j: int,
+    method: str = "directional",
+    weight: float = 0.1,
+) -> Tuple[np.ndarray]:
     """
     # Update the distance matrix for clustering after joining two clusters.
 
@@ -96,36 +107,43 @@ def update_distances(distances: np.ndarray,
     if distances.shape[0] != distances.shape[1]:
         raise ValueError("Distances must be a square matrix.")
     if i < 0 or i >= distances.shape[0] or j < 0 or j >= distances.shape[0]:
-        raise ValueError("Indices must be in range [0, n), where n is the number of clusters.")
+        raise ValueError(
+            "Indices must be in range [0, n), where n is the number of clusters."
+        )
     if not isinstance(method, str):
         raise ValueError("Method must be a string.")
-    if method not in ['single', 'directional', 'weighted_directional']:
-        raise ValueError("Method must be one of ['single', 'directional', 'weighted_directional'].")
+    if method not in ["single", "directional", "weighted_directional"]:
+        raise ValueError(
+            "Method must be one of ['single', 'directional', 'weighted_directional']."
+        )
     if not isinstance(weight, (int, float)):
         raise ValueError("Weight must be a number.")
     if weight < 0 or weight > 1:
         raise ValueError("Weight must be between 0 and 1.")
 
     # Update distances according to method
-    if method == 'single':
-        update_row = np.minimum(distances[i,:],distances[j,:])
-        update_column = np.minimum(distances[:,i],distances[:,j])
-    elif method == 'directional':
-        update_row = distances[i,:]
+    if method == "single":
+        update_row = np.minimum(distances[i, :], distances[j, :])
+        update_column = np.minimum(distances[:, i], distances[:, j])
+    elif method == "directional":
+        update_row = distances[i, :]
         update_column = distances[:, j]
-    elif method == 'weighted_directional':
-        update_row = (1-weight)*distances[i,:] + weight*distances[j,:]
-        update_column = weight*distances[:,i] + (1-weight)*distances[:,j]
+    elif method == "weighted_directional":
+        update_row = (1 - weight) * distances[i, :] + weight * distances[j, :]
+        update_column = weight * distances[:, i] + (1 - weight) * distances[:, j]
 
     # Return updated row and column as a tuple
     return update_row, update_column
 
-def asym_hier_linkage(distances: np.ndarray,
-                      clusters: dict = None,
-                      max_cluster_length: int = None,
-                      debug: bool = False,
-                      method: str = 'directional',
-                      weight: float = 0.5) -> np.ndarray:
+
+def asym_hier_linkage(
+    distances: np.ndarray,
+    clusters: dict = None,
+    max_cluster_length: int = None,
+    debug: bool = False,
+    method: str = "directional",
+    weight: float = 0.5,
+) -> np.ndarray:
     """
     # Perform asymmetric hierarchical clustering on a distance matrix.
 
@@ -191,7 +209,7 @@ def asym_hier_linkage(distances: np.ndarray,
     inds = np.arange(N)
 
     # Create an array for storing linkage information and an array for shifting indices
-    linkage = np.zeros((N-1,4))
+    linkage = np.zeros((N - 1, 4))
     index_shift = np.arange(N)
 
     # Handle edge case when there is only one element
@@ -199,14 +217,15 @@ def asym_hier_linkage(distances: np.ndarray,
         linkage = np.zeros((1, 4))
 
     # Loop over N-1 iterations of joining two clusters
-    for ii in range(N-1):
+    for ii in range(N - 1):
         # Find the pair of eligible clusters with minimum distance between them
         if min(lengths[valid]) < max_cluster_length:
             eligible = combined_cluster_lengths <= max_cluster_length
-            i, j = combine_clusters((distances_copy[valid,:])[:,valid],
-                                    (eligible[valid,:])[:,valid])
+            i, j = combine_clusters(
+                (distances_copy[valid, :])[:, valid], (eligible[valid, :])[:, valid]
+            )
         else:
-            i, j = combine_clusters((distances_copy[valid,:])[:,valid])
+            i, j = combine_clusters((distances_copy[valid, :])[:, valid])
 
         # Get the actual indices of the selected clusters from the valid indices array
         i = (inds[valid])[i]
@@ -214,30 +233,32 @@ def asym_hier_linkage(distances: np.ndarray,
 
         # Print debugging messages if debug flag is True
         if debug:
-            print(f'Selected clusters: {distances_copy[i,j]:4.4f} {clusters[i]} and {clusters[j]}')
+            print(
+                f"Selected clusters: {distances_copy[i,j]:4.4f} {clusters[i]} and {clusters[j]}"
+            )
 
         # Update lengths, linkage, index_shift, and clusters arrays
-        lengths[min(i,j)] = lengths[i] + lengths[j]
-        linkage[ii,0] = index_shift[i]
-        linkage[ii,1] = index_shift[j]
-        linkage[ii,2] = distances_copy[i,j]
-        linkage[ii,3] = lengths[min(i,j)]
+        lengths[min(i, j)] = lengths[i] + lengths[j]
+        linkage[ii, 0] = index_shift[i]
+        linkage[ii, 1] = index_shift[j]
+        linkage[ii, 2] = distances_copy[i, j]
+        linkage[ii, 3] = lengths[min(i, j)]
         index_shift[i] = N + ii
         index_shift[j] = N + ii
-        combined_cluster_lengths[min(i,j),:] += lengths[max(i,j)]
-        combined_cluster_lengths[:,min(i,j)] += lengths[max(i,j)]
-        combined_cluster_lengths[min(i,j),min(i,j)] -= lengths[max(i,j)]
-        clusters[min(i,j)] = clusters[i] + clusters[j]
+        combined_cluster_lengths[min(i, j), :] += lengths[max(i, j)]
+        combined_cluster_lengths[:, min(i, j)] += lengths[max(i, j)]
+        combined_cluster_lengths[min(i, j), min(i, j)] -= lengths[max(i, j)]
+        clusters[min(i, j)] = clusters[i] + clusters[j]
 
         # Mark the maximum index of the selected clusters as invalid
-        valid[max(i,j)] = False
+        valid[max(i, j)] = False
 
         # Update the distance matrix using the update_distances function
-        update_row, update_column = update_distances(distances_copy,
-                                                     i, j, method=method,
-                                                     weight=weight)
-        distances_copy[min(i,j),:] = update_row
-        distances_copy[:,min(i,j)] = update_column
+        update_row, update_column = update_distances(
+            distances_copy, i, j, method=method, weight=weight
+        )
+        distances_copy[min(i, j), :] = update_row
+        distances_copy[:, min(i, j)] = update_column
 
     # Return the linkage array as the result
     return linkage

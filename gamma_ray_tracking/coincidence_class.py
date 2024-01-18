@@ -6,8 +6,9 @@ Class for storing just the basics for a gamma-ray coincidence of interactions
 """
 from dataclasses import dataclass
 from typing import List
-from .interaction_class import Interaction
-from .detector_config_class import DetectorConfig
+
+from gamma_ray_tracking.detector_config_class import DetectorConfig
+from gamma_ray_tracking.interaction_class import Interaction
 
 
 @dataclass
@@ -19,9 +20,10 @@ class Coincidence:
     - points: list of interaction points
     - detector_name: string name of the detector
     """
-    event_id : int
-    points : List[Interaction]
-    detector : str
+
+    event_id: int
+    points: List[Interaction]
+    detector: str
 
     def to_event(self, detector_configuration: DetectorConfig = None):
         """
@@ -35,6 +37,7 @@ class Coincidence:
         - Event: the full gamma-ray event for calculating FOMs, etc.
         """
         from .event_class import Event
+
         if detector_configuration is not None:
             return Event(self.event_id, self.points, detector=detector_configuration)
         return Event(self.event_id, self.points, detector=self.detector)

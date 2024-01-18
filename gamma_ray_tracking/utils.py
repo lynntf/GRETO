@@ -13,7 +13,7 @@ from scipy.interpolate import interp1d
 
 
 @lru_cache(maxsize=100)
-def perm_to_transition(permutation:Tuple, D:int = 3) -> Tuple[np.ndarray]:
+def perm_to_transition(permutation: Tuple, D: int = 3) -> Tuple[np.ndarray]:
     """
     Transform a permutation to transition indices with dimension D
 
@@ -23,16 +23,20 @@ def perm_to_transition(permutation:Tuple, D:int = 3) -> Tuple[np.ndarray]:
     a single FOM evaluation.
     """
     p = np.array(permutation)
-    return tuple( p[i:len(p)-(D - i) + 1] for i in range(D) )
+    return tuple(p[i : len(p) - (D - i) + 1] for i in range(D))
 
-def log_interp(x : np.ndarray, xp : np.ndarray, fp : np.ndarray) -> np.ndarray:
+
+def log_interp(x: np.ndarray, xp: np.ndarray, fp: np.ndarray) -> np.ndarray:
     """
     Logarithmic interpolation with logarithmic extrapolation.
     """
-    l_interp = interp1d(np.log(xp), np.log(fp), kind='slinear', fill_value='extrapolate')
+    l_interp = interp1d(
+        np.log(xp), np.log(fp), kind="slinear", fill_value="extrapolate"
+    )
     return np.exp(l_interp(np.log(x)))
 
-def get_file_size(file:BinaryIO) -> int:
+
+def get_file_size(file: BinaryIO) -> int:
     """Get the file size (in bytes) of an opened file object"""
     # Get the current position of the read cursor
     current_position = file.tell()
@@ -48,8 +52,9 @@ def get_file_size(file:BinaryIO) -> int:
 
     return file_size
 
+
 @lru_cache(maxsize=10)
-def get_ordered_partitions(items: Iterable, max_items:int = 9) -> Dict[int, Tuple]:
+def get_ordered_partitions(items: Iterable, max_items: int = 9) -> Dict[int, Tuple]:
     """
     Get all possible ordered partitions of the items.
 
@@ -76,7 +81,7 @@ def get_ordered_partitions(items: Iterable, max_items:int = 9) -> Dict[int, Tupl
         raise ValueError("Too many items requested.")
     # Base case: if there's only one item, return it as a single partition
     if len(items) <= 1:
-        return [{1:tuple(items)}]
+        return [{1: tuple(items)}]
 
     # Get ordered partitions for the items excluding the last element
     previous_partitions = get_ordered_partitions(items[:-1])
@@ -94,10 +99,14 @@ def get_ordered_partitions(items: Iterable, max_items:int = 9) -> Dict[int, Tupl
             for k in range(len(partition) + 1):
                 # Create a new partition by inserting the last element at the given position
                 new_partitions = deepcopy(partitions)
-                new_partitions[j] = tuple(list(new_partitions[j][:k]) + [last_element] + list(new_partitions[j][k:]))
+                new_partitions[j] = tuple(
+                    list(new_partitions[j][:k])
+                    + [last_element]
+                    + list(new_partitions[j][k:])
+                )
                 updated_partitions.append(new_partitions)
 
         # Create a new partition by appending the last element as a new singleton partition
-        updated_partitions.append(partitions | {len(partitions) + 1 : (last_element,)})
+        updated_partitions.append(partitions | {len(partitions) + 1: (last_element,)})
 
     return updated_partitions

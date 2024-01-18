@@ -5,9 +5,10 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 Gamma-ray Interaction class
 """
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Iterable
 from functools import cached_property
+from typing import Iterable
 
 import numpy as np
 

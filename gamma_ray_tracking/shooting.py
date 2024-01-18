@@ -6,13 +6,19 @@ Forward estimate of tracking using geometry to pre-screen interactions
 """
 from typing import List
 
-from .event_class import Event
-from .physics import theta_theor
+from gamma_ray_tracking.event_class import Event
+from gamma_ray_tracking.physics import theta_theor
 
 
-def interactions_in_cone(event:Event, pt_idx:int, energy:float,
-                         angle_tol:float, max_distance:float,
-                         start_pt:int=0, energy_tol:float=0.01) -> List[int]:
+def interactions_in_cone(
+    event: Event,
+    pt_idx: int,
+    energy: float,
+    angle_tol: float,
+    max_distance: float,
+    start_pt: int = 0,
+    energy_tol: float = 0.01,
+) -> List[int]:
     """
     Given an Event, an interaction point in the event, and an energy level,
     compute the points which make approximately the expected angle given
@@ -64,9 +70,15 @@ def interactions_in_cone(event:Event, pt_idx:int, energy:float,
     return good_interactions
 
 
-def construct_trajectories_(event:Event, pt_idx:int, energy:float,
-                            angle_tol:float, max_distance:float,
-                            energy_tol:float, curr_path:List[int]):
+def construct_trajectories_(
+    event: Event,
+    pt_idx: int,
+    energy: float,
+    angle_tol: float,
+    max_distance: float,
+    energy_tol: float,
+    curr_path: List[int],
+):
     """
     Function that recursively searches through possible cone defined
     trajectories
@@ -83,8 +95,9 @@ def construct_trajectories_(event:Event, pt_idx:int, energy:float,
     curr_trajectories = []
 
     start_pt = event.points[curr_path[-2]]
-    next_pt_cands = interactions_in_cone(event, pt_idx, energy,
-                                         angle_tol, max_distance, start_pt)
+    next_pt_cands = interactions_in_cone(
+        event, pt_idx, energy, angle_tol, max_distance, start_pt
+    )
     for cand in next_pt_cands:
         if cand in curr_path:
             continue
@@ -95,15 +108,27 @@ def construct_trajectories_(event:Event, pt_idx:int, energy:float,
         if pt.e + cand_pt.e > energy + energy_tol or distance > max_distance:
             continue
 
-        for traj in construct_trajectories_(event, cand, energy-pt.e,
-                                           angle_tol, max_distance-distance,
-                                           energy_tol, curr_path + [cand]):
+        for traj in construct_trajectories_(
+            event,
+            cand,
+            energy - pt.e,
+            angle_tol,
+            max_distance - distance,
+            energy_tol,
+            curr_path + [cand],
+        ):
             curr_trajectories.append(traj)
     return curr_trajectories
 
 
-def construct_trajectories(event:Event, pt_idx:int, energy:float, angle_tol:float,
-                           max_distance:float, energy_tol:float):
+def construct_trajectories(
+    event: Event,
+    pt_idx: int,
+    energy: float,
+    angle_tol: float,
+    max_distance: float,
+    energy_tol: float,
+):
     """
     Given an Event, an interaction point in the event, and an energy level,
     compute all trajectories which start at origin, hit the given point first,
@@ -136,6 +161,6 @@ def construct_trajectories(event:Event, pt_idx:int, energy:float, angle_tol:floa
     if pt.e > energy + energy_tol:
         return []
 
-    return construct_trajectories_(event, pt_idx, energy,
-                                   angle_tol, max_distance,
-                                   energy_tol, [0, pt_idx])
+    return construct_trajectories_(
+        event, pt_idx, energy, angle_tol, max_distance, energy_tol, [0, pt_idx]
+    )

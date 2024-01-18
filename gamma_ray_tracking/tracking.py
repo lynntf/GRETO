@@ -5,33 +5,31 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 Methods for executing the tracking of gamma-rays.
 """
 
-# import multiprocessing as mp
-from datetime import datetime
-from typing import ByteString, Dict, Tuple, BinaryIO, List
 import pickle as pkl
+from datetime import datetime
+from typing import BinaryIO, ByteString, Dict, List, Tuple
 
 import multiprocess as mp
 from tqdm import tqdm
 
-from .cluster_tools import (
+from gamma_ray_tracking.cluster_tools import (
     cluster_linkage,
     join_events,
     remove_zero_energy_interactions,
     split_event,
 )
-from .detector_config_class import default_config
-from .event_class import Event
-from .file_io import (
+from gamma_ray_tracking.detector_config_class import default_config
+from gamma_ray_tracking.event_class import Event
+from gamma_ray_tracking.file_io import load_options  # write_event_cluster,
+from gamma_ray_tracking.file_io import (
     mode1_data,
     mode1_extended_data,
     mode2_loader,
-    load_options,
     read_agata_simulated_data,
     tracked_generator,
-    # write_event_cluster,
 )
-from .fom_tools import cluster_FOM, semi_greedy, semi_greedy_clusters
-from .utils import get_file_size
+from gamma_ray_tracking.fom_tools import cluster_FOM, semi_greedy, semi_greedy_clusters
+from gamma_ray_tracking.utils import get_file_size
 
 
 def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
@@ -96,7 +94,7 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                             order_FOM_kwargs,
                             secondary_order_FOM_kwargs,
                             options["SAVE_INTERMEDIATE"],
-                            options["SAVE_EXTENDED_MODE1"]
+                            options["SAVE_EXTENDED_MODE1"],
                         ),
                     )
                 )
@@ -199,7 +197,7 @@ def track_simulated(events: List[Event], output_file: BinaryIO, options: Dict):
                             order_FOM_kwargs,
                             secondary_order_FOM_kwargs,
                             options["SAVE_INTERMEDIATE"],
-                            options["SAVE_EXTENDED_MODE1"]
+                            options["SAVE_EXTENDED_MODE1"],
                         ),
                     )
                 )
@@ -282,7 +280,7 @@ def track_simulated_serial(events: List[Event], output_file: BinaryIO, options: 
                     order_FOM_kwargs,
                     secondary_order_FOM_kwargs,
                     options["SAVE_INTERMEDIATE"],
-                    options["SAVE_EXTENDED_MODE1"]
+                    options["SAVE_EXTENDED_MODE1"],
                 )
             except ValueError as e:
                 print(f"Found a bad event at id {num_events}")
@@ -400,7 +398,7 @@ def track_and_get_energy(
     order_FOM_kwargs: Dict = None,
     secondary_order_FOM_kwargs: Dict = None,
     SAVE_INTERMEDIATE: bool = False,
-    SAVE_EXTENDED_MODE1: bool = False
+    SAVE_EXTENDED_MODE1: bool = False,
 ) -> ByteString:
     """
     Track a single event by clustering and then ordering.
@@ -427,7 +425,11 @@ def track_and_get_energy(
         )
         if SAVE_EXTENDED_MODE1:
             return mode1_extended_data(
-                gr_event, clusters, foms=foms, monster_size=monster_size, **eval_FOM_kwargs
+                gr_event,
+                clusters,
+                foms=foms,
+                monster_size=monster_size,
+                **eval_FOM_kwargs,
             )
         return mode1_data(
             gr_event, clusters, foms=foms, monster_size=monster_size, **eval_FOM_kwargs
