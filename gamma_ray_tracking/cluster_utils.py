@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from itertools import combinations
-from typing import Dict, Iterable
+from typing import Dict, Iterable, List
 
 import numpy as np
 import pyomo.environ as pyenv
@@ -174,8 +174,8 @@ class Clustering(dict):
         is the cluster that element i belongs too
         """
         mapping = np.zeros(self.size)
-        for c_idx, elems in self.classes.items():
-            for elem in elems:
+        for c_idx, elements in self.classes.items():
+            for elem in elements:
                 mapping[elem - 1] = c_idx
         return mapping
 
@@ -503,11 +503,11 @@ def find_misclustered_indices(tracks, true_tracks):
     """
     Find the indices for which the clustering doesn't match the true clustering.
     """
-    bad_idxs = []
+    bad_indices = []
     for i, (track, true_track) in enumerate(zip(tracks, true_tracks)):
         if track is None or not clusters_match(track, true_track):
-            bad_idxs.append(i)
-    return bad_idxs
+            bad_indices.append(i)
+    return bad_indices
 
 
 def compute_subset_and_cluster_tracks(
@@ -600,26 +600,28 @@ def remove_peak_events(events, tracks, observed_energies, epsilon=0.01):
     peak_clusters = []
     for event, track in zip(events, tracks):
         energy_sums = event.energy_sums(track)
-        peak_idxs = []
+        peak_indices = []
         peak_cluster = {}
-        curr_idx = 1
+        current_index = 1
         for i, energy in energy_sums.items():
             for obs_energy in observed_energies:
                 if abs(energy - obs_energy) < epsilon:
-                    peak_idxs.extend(track[i])
-                    peak_cluster[i] = [j + curr_idx for j in range(len(track[i]))]
-                    curr_idx += len(track[i])
+                    peak_indices.extend(track[i])
+                    peak_cluster[i] = [j + current_index for j in range(len(track[i]))]
+                    current_index += len(track[i])
                     break
-        bg_idxs = [i for i in range(1, len(event.points)) if i not in peak_idxs]
-        peak_event = event.subset(peak_idxs)
+        background_indices = [
+            i for i in range(1, len(event.points)) if i not in peak_indices
+        ]
+        peak_event = event.subset(peak_indices)
         peak_events.append(peak_event)
-        bg_event = event.subset(bg_idxs)
+        bg_event = event.subset(background_indices)
         bg_events.append(bg_event)
         peak_clusters.append(Clustering(peak_cluster))
     return peak_events, bg_events, peak_clusters
 
 
-def invert_clusters(clusters):
+def invert_clusters(clusters: dict):
     """Invert the cluster from {cluster index: items} to {items: cluster index}"""
     p_to_cluster_idx = {}
     for c, vals in clusters.items():
@@ -630,12 +632,11 @@ def invert_clusters(clusters):
 
 def labels_to_clusters(labels: dict):
     """
-    Opposite of invert_clusters
+    Invert labels from {items: cluster index} to {cluster index: items}
     """
     clusters = {}
-    num_clusters = max(labels.values())
     for i, c in labels.items():
-        if c not in clusters.keys():
+        if c not in clusters.keys():  # pylint: disable=consider-iterating-dictionary
             clusters[c] = [i]
         else:
             clusters[c].append(i)
@@ -709,7 +710,7 @@ def compute_rand_index(clusters, true_clusters):
 
 
 def compute_jaccard_index(clusters, true_clusters):
-    """Compute the jaccard index"""
+    """Compute the Jaccard index"""
     tp, _, fp, fn = cluster_summary(clusters, true_clusters)
     if tp + fp + fn == 0:
         return 1
@@ -749,26 +750,26 @@ def get_event_ray_subset(events, tracks, ray_nums):
     new_events = []
     new_tracks = []
     for e, t in zip(events, tracks):
-        idxs = sum([t.get(num, []) for num in ray_nums], start=[])
+        indices = sum([t.get(num, []) for num in ray_nums], start=[])
         new_t = {
-            num: [idxs.index(p) + 1 for p in t[num]] for num in ray_nums if num in t
+            num: [indices.index(p) + 1 for p in t[num]] for num in ray_nums if num in t
         }
-        new_e = e.subset(idxs, reset_idxs=True)
+        new_e = e.subset(indices, reset_idxs=True)  # TODO - event class restructured
         new_events.append(new_e)
         new_tracks.append(new_t)
     return new_events, new_tracks
 
 
-def in_peak(energy, observed_energies, epsilon=0.005):
+def in_peak(energy: float, observed_energies: List[float], tolerance:float=0.005):
     """
-    Return True if energy is within epsilon of one of the observed_energies
+    Return True if energy is within tolerance of one of the observed_energies
 
     Args:
         energy (float): The energy to be checked if they are in the supplied peaks
         observed_energies (list[float]): The energies we are checking against (peaks)
-        epsilon (float): The tolerance for the difference between energy and peak energy
+        tolerance (float): The tolerance for the difference between energy and peak energy
     """
-    return np.any(np.abs(energy - observed_energies) < epsilon)
+    return np.any(np.abs(energy - observed_energies) < tolerance)
 
 
 def get_all_clusters(linkage, n_points):
@@ -897,7 +898,7 @@ def cluster_matrix(
     for cluster in clusters.values():
         max_index = max(*cluster, max_index)
     y = np.zeros((max_index + 1, max_index + 1), dtype=int)
-    for index, cluster in clusters.items():
+    for _, cluster in clusters.items():
         if cluster_validity:
             for i in [0] + list(cluster):
                 for j in cluster:

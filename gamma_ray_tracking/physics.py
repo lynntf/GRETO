@@ -61,14 +61,14 @@ def compton_edge_incoming(
     """
     E_out minimal, deposit maximal. Find E_in (maximal).
     Assume that E_out is minimum energy coming out of a scatter (deposited the
-    maximum; complete backscatter) and compute the incoming energy that deposited it
+    maximum; complete back-scatter) and compute the incoming energy that deposited it
 
     Returns the maximum incoming energy given the outgoing energy (MeV) (larger
     incoming energy implies larger than physical deposit)
 
     E_out = E_in / (1 + (E_in / MEC2) (1 - cos theta) )
 
-    Maximum deposit is a backscatter where cos theta = -1
+    Maximum deposit is a back-scatter where cos theta = -1
 
     Solve for E_in:
     E_out = E_in / (1 + 2 (E_in / MEC2))
@@ -96,11 +96,11 @@ def compton_edge_outgoing(E_in: np.ndarray[float] | float) -> np.ndarray[float] 
     What is the smallest energy that could come out of a scatter with incoming
     energy E_in?
 
-    Returns the minimum undeposited energy given the incoming energy (MeV)
+    Returns the minimum un-deposited energy given the incoming energy (MeV)
 
     E_out = E_in / (1 + (E_in / MEC2) (1 - cos theta) )
 
-    Maximum deposit is a backscatter where cos theta = -1
+    Maximum deposit is a back-scatter where cos theta = -1
 
     Outgoing energy was at least...
     """
@@ -326,8 +326,8 @@ def tango_incoming_sigma(
     """
     Error of estimated incoming energy using local information
     """
-    d_de, d_dcos = partial_tango_incoming_derivatives(e=e, o_m_cos_ijk=o_m_cos_ijk)
-    return np.sqrt((eres * d_de) ** 2 + (err_cosines * d_dcos) ** 2)
+    d_de, d_d_cos = partial_tango_incoming_derivatives(e=e, o_m_cos_ijk=o_m_cos_ijk)
+    return np.sqrt((eres * d_de) ** 2 + (err_cosines * d_d_cos) ** 2)
 
 
 # %% Compton Scattering Formula: Local outbound energy (TANGO)
@@ -344,9 +344,9 @@ def partial_tango_outgoing_derivatives(
     e: np.ndarray[float], o_m_cos_ijk: np.ndarray[float]
 ) -> np.ndarray[float]:
     """Partial derivatives of outgoing TANGO energies"""
-    d_de, d_dcos = partial_tango_incoming_derivatives(e, o_m_cos_ijk)
+    d_de, d_d_cos = partial_tango_incoming_derivatives(e, o_m_cos_ijk)
     d_de -= 1.0
-    return d_de, d_dcos
+    return d_de, d_d_cos
 
 
 def tango_outgoing_sigma(
@@ -356,13 +356,14 @@ def tango_outgoing_sigma(
     eres: float = 1e-3,
 ) -> np.ndarray[float]:
     """Error of estimated outgoing energy using local information"""
-    d_de, d_dcos = partial_tango_outgoing_derivatives(e=e, o_m_cos_ijk=o_m_cos_ijk)
-    return np.sqrt((eres * d_de) ** 2 + (err_cosines * d_dcos) ** 2)
+    d_de, d_d_cos = partial_tango_outgoing_derivatives(e=e, o_m_cos_ijk=o_m_cos_ijk)
+    return np.sqrt((eres * d_de) ** 2 + (err_cosines * d_d_cos) ** 2)
 
 
 # %% Tabulated cross section data
 # Data from NIST XCOM data file for Germanium 32
 
+# fmt: off
 # Energies [eV]
 sig_energies = np.array([
 1.00000E+03, 1.21660E+03, 1.21670E+03, 1.24770E+03, 1.24780E+03, 1.41420E+03,
@@ -456,6 +457,7 @@ sig_pair_electron = np.array([
 2.470E-01, 2.505E-01, 2.543E-01, 2.565E-01, 2.579E-01, 2.589E-01, 2.601E-01, 2.609E-01,
 2.620E-01, 2.627E-01, 2.633E-01, 2.637E-01, 2.639E-01, 2.641E-01, 2.642E-01, 2.643E-01
 ])
+# fmt: on
 
 # %% Cross sections
 # Interpolation code adapted version from nist-calculators by Mikhail Zelenyi,
@@ -472,9 +474,9 @@ def interpolateAbsorptionEdge(
     """
     Adapted version from nist-calculators by Mikhail Zelenyi, an adaptation of XCOM by NIST
     """
-    indx = x > edge
+    idx = x > edge
     if not linear:
-        cs = PchipInterpolator(np.log(x[indx]), np.log(y[indx]))
+        cs = PchipInterpolator(np.log(x[idx]), np.log(y[idx]))
     linear = interp1d(np.log(x), np.log(y), kind="linear", fill_value="extrapolate")
 
     def interpolator(x_sample: np.ndarray) -> np.ndarray:
@@ -565,15 +567,15 @@ def make_pair_interpolator(
     """
     Create spline of linearized log-log data
     """
-    indx = x > threshold
+    idx = x > threshold
     if not linear:
         cs = PchipInterpolator(
-            x=np.log(x[indx]),
-            y=np.log(y[indx] / (x[indx] * (x[indx] - threshold)) ** 3),
+            x=np.log(x[idx]),
+            y=np.log(y[idx] / (x[idx] * (x[idx] - threshold)) ** 3),
         )
     linear = interp1d(
-        x=np.log(x[indx]),
-        y=np.log(y[indx] / (x[indx] * (x[indx] - threshold)) ** 3),
+        x=np.log(x[idx]),
+        y=np.log(y[idx] / (x[idx] * (x[idx] - threshold)) ** 3),
         kind="linear",
         fill_value="extrapolate",
     )
@@ -585,14 +587,14 @@ def make_pair_interpolator(
                 + "using linear extrapolation",
                 UserWarning,
             )
-        indx = x_sample > threshold
+        idx = x_sample > threshold
         y = np.zeros(x_sample.shape[0])
-        y[indx] = np.where(
-            x_sample[indx] < np.max(x),
-            np.exp(cs(np.log(x_sample[indx])))
-            * (x_sample[indx] * (x_sample[indx] - threshold)) ** 3,
-            np.exp(linear(np.log(x_sample[indx])))
-            * (x_sample[indx] * (x_sample[indx] - threshold)) ** 3,
+        y[idx] = np.where(
+            x_sample[idx] < np.max(x),
+            np.exp(cs(np.log(x_sample[idx])))
+            * (x_sample[idx] * (x_sample[idx] - threshold)) ** 3,
+            np.exp(linear(np.log(x_sample[idx])))
+            * (x_sample[idx] * (x_sample[idx] - threshold)) ** 3,
         )
         return y
 
@@ -603,11 +605,11 @@ def make_pair_interpolator(
                 + "using linear extrapolation",
                 UserWarning,
             )
-        indx = x_sample > threshold
+        idx = x_sample > threshold
         y = np.zeros(x_sample.shape[0])
-        y[indx] = (
-            np.exp(linear(np.log(x_sample[indx])))
-            * (x_sample[indx] * (x_sample[indx] - threshold)) ** 3
+        y[idx] = (
+            np.exp(linear(np.log(x_sample[idx])))
+            * (x_sample[idx] * (x_sample[idx] - threshold)) ** 3
         )
         return y
 

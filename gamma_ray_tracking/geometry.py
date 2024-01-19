@@ -557,7 +557,7 @@ def cone_ray_lengths(
     return lengths
 
 
-@lru_cache(1)
+@lru_cache(1)  # cache the latest value, which is the most likely to be reused
 def cone_get_first_ray(apex: tuple, direction: tuple, opening_angle: float):
     """Get first ray for cone lengths"""
     apex = np.array(apex)

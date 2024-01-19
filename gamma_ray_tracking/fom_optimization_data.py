@@ -26,8 +26,8 @@ from gamma_ray_tracking.fom_tools import (
 feature_names = list(individual_FOM_feature_names().keys())
 
 m30_true_energies = {}  # true energies in MeV
-for i in range(1, 31):
-    m30_true_energies[i] = 0.08 + 0.09 * (i - 1)
+for idx in range(1, 31):
+    m30_true_energies[idx] = 0.08 + 0.09 * (idx - 1)
 
 
 def get_fom_pieces(event: Event, cluster: List, **kwargs):
@@ -518,7 +518,7 @@ def make_train_label(
     """
     Randomly select the training data and validation data
     """
-    rng = np.random.RandomState(seed=seed)
+    rng = np.random.RandomState(seed=seed)    # pylint: disable=no-member
     labels = {}
     for i in np.unique(I):
         if rng.uniform() < val_ratio:

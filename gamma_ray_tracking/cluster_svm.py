@@ -64,7 +64,10 @@ def mean_of_means(
 
 
 def all_indices(
-    w: np.ndarray, X: np.ndarray, qid: np.ndarray, w_prev: np.ndarray = None
+    w: np.ndarray,  # pylint: disable=unused-argument
+    X: np.ndarray,  # pylint: disable=unused-argument
+    qid: np.ndarray,
+    w_prev: np.ndarray = None,  # pylint: disable=unused-argument
 ) -> List[int]:
     """
     Given w, data X, and qid, return all indices
@@ -81,7 +84,10 @@ def all_indices(
 
 
 def select_indices(
-    w: np.ndarray, X: np.ndarray, qid: np.ndarray, w_prev: np.ndarray = None
+    w: np.ndarray,
+    X: np.ndarray,
+    qid: np.ndarray,
+    w_prev: np.ndarray = None,  # pylint: disable=unused-argument
 ) -> List[int]:
     """
     Given `w`, data `X`, and `qid`, find the indices of data `X` that are the worst
@@ -105,7 +111,10 @@ def select_indices(
 
 
 def select_indices_pos_neg(
-    w: np.ndarray, X: np.ndarray, qid: np.ndarray, w_prev: np.ndarray = None
+    w: np.ndarray,
+    X: np.ndarray,
+    qid: np.ndarray,
+    w_prev: np.ndarray = None,  # pylint: disable=unused-argument
 ) -> List[int]:
     """
     Given `w`, data `X`, and `qid`, find the indices of data `X` that are the worst if
@@ -136,7 +145,10 @@ def select_indices_pos_neg(
 
 
 def select_indices_neg(
-    w: np.ndarray, X: np.ndarray, qid: np.ndarray, w_prev: np.ndarray = None
+    w: np.ndarray,
+    X: np.ndarray,
+    qid: np.ndarray,
+    w_prev: np.ndarray = None,  # pylint: disable=unused-argument
 ) -> List[int]:
     """
     Given `w`, data `X`, and `qid`, find the indices of data `X` that are the worst if negative
@@ -197,7 +209,11 @@ def select_indices_change_sign(
 
 
 def select_indices_n_neg(
-    w: np.ndarray, X: np.ndarray, qid: np.ndarray, n: int = 2, w_prev: np.ndarray = None
+    w: np.ndarray,
+    X: np.ndarray,
+    qid: np.ndarray,
+    n: int = 2,
+    w_prev: np.ndarray = None,  # pylint: disable=unused-argument
 ) -> List[int]:
     """
     Given `w`, data `X`, and `qid`, find the indices of data `X` that are the worst if negative
@@ -228,7 +244,10 @@ def select_indices_n_neg(
 
 
 def select_indices_all_neg(
-    w: np.ndarray, X: np.ndarray, qid: np.ndarray, w_prev: np.ndarray = None
+    w: np.ndarray,
+    X: np.ndarray,
+    qid: np.ndarray,  # pylint: disable=unused-argument
+    w_prev: np.ndarray = None,  # pylint: disable=unused-argument
 ) -> List[int]:
     """
     Given `w`, data `X`, and `qid`, find the all of the indices of data `X` that are negative
@@ -249,7 +268,10 @@ def select_indices_all_neg(
 
 
 def select_indices_best(
-    w: np.ndarray, X: np.ndarray, qid: np.ndarray, w_prev: np.ndarray = None
+    w: np.ndarray,
+    X: np.ndarray,
+    qid: np.ndarray,
+    w_prev: np.ndarray = None,  # pylint: disable=unused-argument
 ) -> List[int]:
     """
     Given `w`, data `X`, and `qid`, find the indices of data `X` that are closest to the decision boundary
@@ -278,7 +300,10 @@ def select_indices_best(
 
 
 def select_indices_neg_best(
-    w: np.ndarray, X: np.ndarray, qid: np.ndarray, w_prev: np.ndarray = None
+    w: np.ndarray,
+    X: np.ndarray,
+    qid: np.ndarray,
+    w_prev: np.ndarray = None,  # pylint: disable=unused-argument
 ) -> List[int]:
     """
     Given `w`, data `X`, and `qid`, find the indices of data `X` that are the best
@@ -546,8 +571,8 @@ def weighted_svc(
     tol: float = 0.0001,
     C: float = 1e2,
     fit_intercept: bool = False,
-    debug: bool = False,
-    relaxation: bool = False,
+    debug: bool = False,  # pylint: disable=unused-argument
+    relaxation: bool = False,  # pylint: disable=unused-argument
     mirror: bool = True,
     **SVCkwargs,
 ) -> None:
@@ -591,7 +616,7 @@ def weighted_svc(
     clf = LinearSVC(
         penalty=penalty,
         loss=loss,
-        dual=False,
+        dual=dual,
         tol=tol,
         C=C / 2 / num_clusters,
         # C=C/2,
@@ -638,13 +663,13 @@ def weighted_lr(
     non_neg: bool = True,
     weighted: bool = True,
     penalty: Literal["l1", "l2", "elasticnet"] | None = "l1",
-    loss: str = None,
+    loss: str = None,  # pylint: disable=unused-argument
     dual: bool = False,
     tol: float = 0.0001,
     C: float = 1e2,
     fit_intercept: bool = False,
-    debug: bool = False,
-    relaxation: bool = False,
+    debug: bool = False,  # pylint: disable=unused-argument
+    relaxation: bool = False,  # pylint: disable=unused-argument
     mirror: bool = True,
     **LRkwargs,
 ) -> None:
@@ -746,12 +771,12 @@ def LP_method(
     C: float = 1e2,
     clustered: bool = True,
     verbose: bool = False,
-    debug: bool = False,
-    relaxation: bool = True,
-    **kwargs,
+    debug: bool = False,  # pylint: disable=unused-argument
+    relaxation: bool = True,  # pylint: disable=unused-argument
+    **kwargs,  # pylint: disable=unused-argument
 ) -> np.ndarray:
     """
-    Clusterized single-class SVC for relative (centered) data
+    Clustered single-class SVC for relative (centered) data
 
     .. math::
         \\min_w            \\|\\mathbf{w}\\|_1 + C\\sum_{k=1}^{K} \\zeta_k\\
@@ -764,7 +789,8 @@ def LP_method(
     :param indices:  selected data indices
     :param non_neg:  set negative weights in w to zero if `True`
     :param penalty:  regularization penalty parameter
-    :param loss:  slack error term (hinge is :math:`\\max(0, 1 - y_i(w^\\top x_i + b))`; `squared_hinge` is `(hinge)**2`)
+    :param loss:  slack error term (hinge is :math:`\\max(0, 1 - y_i(w^\\top x_i + b))`;
+        `squared_hinge` is `(hinge)**2`)
     :param C:  regularization parameter (large `C` means regularization is not as important)
     :param clustered:  should the loss be applied to the cluster or the individual data points
     :param verbose:  print more information to standard out
@@ -772,8 +798,8 @@ def LP_method(
     :param relaxation: not used
     :param **kwargs: not used, catches potentially unwanted kwargs
     :return:  weight vector for the centered SVC
-    
-    TODO - warn on kwargs
+
+    TODO - warn on kwargs?
     """
     if indices is None:
         indices = np.arange(X.shape[0], dtype=int)
@@ -842,10 +868,10 @@ def MILP_method(
     verbose: bool = False,
     eps_min: float = 1e-5,
     eps_max: float = 0.99,
-    **kwargs,
+    **kwargs,  # pylint: disable=unused-argument
 ) -> np.ndarray:
     """
-    Clusterized single-class MILP for relative (centered) data
+    Clustered single-class MILP for relative (centered) data
 
     .. math::
         \\min_w            -\\varepsilon + \\sum_{k=1}^{K} z_k\\
@@ -954,7 +980,7 @@ class csvm(LinearSVC):
         self.w = None
         self.sol_method = sol_method
 
-    def fit(self, R: np.ndarray, qid: np.ndarray, **kwargs):
+    def fit(self, R: np.ndarray, qid: np.ndarray, **kwargs):  # pylint: disable=arguments-differ
         """Fit the parameters of the clustered classifier
 
         :param R:  residual data
@@ -1033,17 +1059,21 @@ def column_generation(
     :param sol_method:  solution method (e.g., "lp" or `LP_method`, "svc" or
         `weighted_svc`, "milp" or `MILP_method`, "lr" or `weighted_lr`)
     :param initial_selection_method:  method for selecting initial data indices
-    :param subsequent_selection_method:  method for selecting data indices to add to the problem after a solve
-    :param allow_duplicates:  allow indices to be selected multiple times (eventually biases data indices by true importance, but grows the size of the problem quickly)
+    :param subsequent_selection_method:  method for selecting data indices to add
+        to the problem after a solve
+    :param allow_duplicates:  allow indices to be selected multiple times (eventually
+        biases data indices by true importance, but grows the size of the problem quickly)
     :param non_neg:  should the weights be non negative (or allow negative weights if `False`)
     :param debug:  print more information
     :param return_indices:  return the indices of the data used
     :param normalize_w:  apply a l1 norm to the weight vector `w`
-    :param return_report:  return a dictionary with solution information, performance history, weights, and indices
+    :param return_report:  return a dictionary with solution information, performance
+        history, weights, and indices
     :param validation_X:  validation data
     :param validation_qid:  validation data qid's
     :param **kwargs:  keyword arguments for the solution method(s)
-    :return:  weight vector for the hyperplane, or weight vector and data indices, or a dictionary report of the solution
+    :return:  weight vector for the hyperplane, or weight vector and data indices,
+        or a dictionary report of the solution
     """
     start_time = datetime.datetime.now()
     assert X.shape[0] == qid.shape[0]

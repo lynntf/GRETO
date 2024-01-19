@@ -95,29 +95,29 @@ def construct_trajectories_(
     curr_trajectories = []
 
     start_pt = event.points[curr_path[-2]]
-    next_pt_cands = interactions_in_cone(
+    next_pt_candidates = interactions_in_cone(
         event, pt_idx, energy, angle_tol, max_distance, start_pt
     )
-    for cand in next_pt_cands:
-        if cand in curr_path:
+    for candidate in next_pt_candidates:
+        if candidate in curr_path:
             continue
-        cand_pt = event.points[cand]
-        distance = event.ge_distance[cand, pt_idx]
+        candidate_pt = event.points[candidate]
+        distance = event.ge_distance[candidate, pt_idx]
 
         # Too much energy at candidate point, or too far
-        if pt.e + cand_pt.e > energy + energy_tol or distance > max_distance:
+        if pt.e + candidate_pt.e > energy + energy_tol or distance > max_distance:
             continue
 
-        for traj in construct_trajectories_(
+        for trajectory in construct_trajectories_(
             event,
-            cand,
+            candidate,
             energy - pt.e,
             angle_tol,
             max_distance - distance,
             energy_tol,
-            curr_path + [cand],
+            curr_path + [candidate],
         ):
-            curr_trajectories.append(traj)
+            curr_trajectories.append(trajectory)
     return curr_trajectories
 
 

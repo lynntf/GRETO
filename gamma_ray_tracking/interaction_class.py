@@ -32,7 +32,8 @@ class Interaction:
         - `2` - absorption
         - `3` - pair production
         - `99` - interaction after a pair production or possibly other interaction
-    - `energy_factor` : The correction factor used to adjust energy to match the central contact (exponential)
+    - `energy_factor` : The correction factor used to adjust energy to match
+        the central contact (exponential); (central contact energy) / (energy sum)
     """
 
     x: Iterable[float]

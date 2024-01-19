@@ -47,7 +47,7 @@ from gamma_ray_tracking.physics import (
 
 from gamma_ray_tracking.utils import perm_to_transition
 
-# TODO change from eres constant to energy uncertainty
+# TODO - change from eres constant to energy uncertainty
 
 
 class Event:
@@ -317,7 +317,7 @@ class Event:
             self.distance, self.cos_act, self.position_uncertainty
         )
         # TODO - should the center point be made more accurate here or in position_uncertainty?
-        # err[0,:,:] /= 2 # Center point is more accurate
+        # err[0,:,:] /= 2 # Center point is more accurate as in AFT
         return err
 
     # %% Permuted geometric cosine and error
@@ -371,7 +371,7 @@ class Event:
 
     @cached_property
     def tango_partial_derivatives(self) -> Tuple[np.ndarray]:
-        """d/de and d/dcos for the TANGO estimates"""
+        """d/de and d/d_cos for the TANGO estimates"""
         return partial_tango_incoming_derivatives(
             self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
         )
@@ -485,7 +485,6 @@ class Event:
         self,
         permutation: Iterable[int],
         estimate: float,
-        start_point: int = 0,
     ):
         """Use the TANGO estimate if physical, otherwise use the energy sum"""
         e_sum = self.energy_sum(permutation)
@@ -678,12 +677,12 @@ class Event:
             print("a ", eres**2 * (Ns + 1) + (err_cos * (e_scatter**2 / MEC2)) ** 2)
             print("b ", eres * (e_scatter / e_sum_lm1) ** 2)
             print(
-                "delta_escatter ",
+                "delta_e_scatter ",
                 eres * np.sqrt(Ns * (1 - (e_scatter / e_sum_lm1) ** 2)),
             )
-            print("delta_escatter ", eres * np.sqrt(Ns))
+            print("delta_e_scatter ", eres * np.sqrt(Ns))
             print("d ", (1 - (e_scatter / e_sum_lm1) ** 2))
-            print("delta_escattern ", (err_cos * (e_scatter**2 / MEC2)))
+            print("delta_e_scatter_n ", (err_cos * (e_scatter**2 / MEC2)))
 
         # # Old error computation (does not include some error from energy)
         # return np.sqrt(eres**2 * Ns  + \
@@ -730,8 +729,10 @@ class Event:
             permutation=permutation, start_point=start_point
         )
         d_de = self.tango_partial_derivatives[0][perm_to_transition(full_perm)]
-        d_dcos = self.tango_partial_derivatives[1][perm_to_transition(full_perm)]
-        return np.sqrt((eres**2 * ((1 - d_de) ** 2 + Ns)) + (err_cos * (d_dcos)) ** 2)
+        (d_d_cos) = self.tango_partial_derivatives[1][perm_to_transition(full_perm)]
+        return np.sqrt(
+            (eres**2 * ((1 - d_de) ** 2 + Ns)) + (err_cos * (d_d_cos)) ** 2
+        )
 
     def res_loc_geo(
         self,
@@ -775,11 +776,11 @@ class Event:
         Ns = np.arange(Nmi, Nmi - len(e_sum), -1, dtype=int)
         full_perm = tuple([start_point] + list(permutation))
         d_de = self.tango_partial_derivatives[0][perm_to_transition(full_perm)] - 1
-        d_dcos = self.tango_partial_derivatives[1][perm_to_transition(full_perm)]
+        d_d_cos = self.tango_partial_derivatives[1][perm_to_transition(full_perm)]
         return np.sqrt(
             eres**2
             * ((d_de - (e_scatter / e_sum) ** 2) ** 2 + Ns * (e_scatter / e_sum) ** 4)
-            + err_cos**2 * (d_dcos - e_scatter**2 / MEC2) ** 2
+            + err_cos**2 * (d_d_cos - e_scatter**2 / MEC2) ** 2
         )
 
     def res_cos(
@@ -1029,9 +1030,9 @@ class Event:
         """
         Get transition quality tensor.
         """
-        from gamma_ray_tracking.transition_grade_clustering import (
+        from gamma_ray_tracking.transition_grade_clustering import (  # pylint: disable=import-outside-toplevel
             get_grade_features,
-        )  # pylint: disable=import-outside-toplevel
+        )
 
         f = get_grade_features(self)
         # TODO - implement a feature reduction here

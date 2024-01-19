@@ -140,7 +140,8 @@ def get_grade_features(
     8. D_ij: Distance `ij`
     9. D_jk: Distance `jk`
     10. one_minus_cosine_ijk: `1 - cos theta_ijk`
-    11. two_int_one_minus_cos_theo: `1 - cos theta_theo_ij` theoretical scattering angle assuming only two interactions
+    11. two_int_one_minus_cos_theo: `1 - cos theta_theo_ij` theoretical scattering angle
+        assuming only two interactions
     12. square_cos_diff: difference between actual and theoretical cosines
     13. `e_i`: energy at i
     14. `e_j`: energy at j

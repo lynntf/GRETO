@@ -337,8 +337,8 @@ def solve_clusters(
 
         # Order each split event/cluster
         ordered_clusters = []
-        for ev, clus in zip(split_events, split_clusters):
-            clu = list(clus.values())[0]
+        for ev, clusters in zip(split_events, split_clusters):
+            clu = list(clusters.values())[0]
             ordered_clusters.append({1: semi_greedy(ev, clu, **order_FOM_kwargs)})
 
         # Recombine the split event into a single event
@@ -374,8 +374,8 @@ def solve_clusters_secondary_fom(
     if split_event_by_cluster:
         split_events, split_clusters = split_event(event, pred_clusters)
         ordered_clusters = []
-        for ev, clus in zip(split_events, split_clusters):
-            clu = list(clus.values())[0]
+        for ev, clusters in zip(split_events, split_clusters):
+            clu = list(clusters.values())[0]
             ordered_clusters.append(
                 {1: semi_greedy(ev, clu, **secondary_order_FOM_kwargs)}
             )

@@ -3,6 +3,21 @@ Copyright (C) 2023 Argonne National Laboratory
 This software is provided without warranty and is licensed under the GNU GPL 2.0 license
 
 Asymmetric hierarchical clustering
+
+Typical hierarchical clustering is done to combine nearby points obeying a
+distance hierarchy. The distances between clusters at some level of the
+hierarchy is symmetric, i.e., for clusters `A` and `B`, the distance `A -> B` is
+the same as the distance from `B -> A`. In the case of gamma-ray interaction
+sequences (or any causal sequence), the clusters `A` and `B` are ordered
+sequences with an explicit order of head to tail and combining clusters `A -> B`
+maintains that order (tail of `A` to head of `B`). This introduces asymmetry in
+cluster distances (swapping the order exchanges heads and tails).
+
+This ordered clustering is not typically desired as it results in long chains of
+points rather than groups of points. However, long chains are the desired output
+of gamma-ray tracking. In order to accommodate this, the hierarchical clustering
+methods from `scipy` are extended here to handle the asymmetric distances that
+this creates.
 """
 from __future__ import annotations
 
@@ -51,9 +66,9 @@ def combine_clusters(
     A[np.diag_indices(A.shape[0])] = np.inf
 
     # Find the indices of the minimum element in the masked matrix
-    i, j = np.unravel_index(
-        np.argmin(A), A.shape
-    )  # pylint: disable=unbalanced-tuple-unpacking
+    i, j = np.unravel_index(  # pylint: disable=unbalanced-tuple-unpacking
+        np.argmin(A), A.shape  # pylint: disable=unbalanced-tuple-unpacking
+    )
 
     # Return the indices as a tuple
     return i, j

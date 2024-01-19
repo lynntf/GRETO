@@ -93,7 +93,7 @@ def get_ordered_partitions(items: Iterable, max_items: int = 9) -> Dict[int, Tup
     updated_partitions = []
 
     # Iterate through each partition from the previous step
-    for i, partitions in enumerate(previous_partitions):
+    for _, partitions in enumerate(previous_partitions):
         # Iterate through each position to insert the last element
         for j, partition in partitions.items():
             for k in range(len(partition) + 1):

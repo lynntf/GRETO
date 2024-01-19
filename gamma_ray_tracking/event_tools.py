@@ -168,7 +168,7 @@ def flatten_cluster(
         randomize_heading = True
         randomize_initial_heading = True
         if rng is None:
-            rng = np.random.RandomState()
+            rng = np.random.RandomState()  # pylint: disable=no-member
     angles = np.arccos(event.cos_act_perm(permutation, start_point=start_point))
     ge_distances = event.ge_distance_perm(permutation, start_point=start_point)
     init_direction = event.points[permutation[0]].x - event.points[start_point].x
@@ -223,7 +223,10 @@ def flatten_event(
     new_points = [0] * len(event.hit_points)
     for cluster in clusters.values():
         points = flatten_cluster(
-            event, cluster, rng=np.random.RandomState(random_seed), **kwargs
+            event,
+            cluster,
+            rng=np.random.RandomState(random_seed),  # pylint: disable=no-member
+            **kwargs,
         )
         for p, i in zip(points, cluster):
             new_points[i - 1] = p

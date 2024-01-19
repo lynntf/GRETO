@@ -173,7 +173,7 @@ def apply_agata_error_model(event: Event, seed: int = None) -> Event:
 
     TODO - add support for subsets?
     """
-    rng = np.random.RandomState(seed=seed)
+    rng = np.random.RandomState(seed=seed)  # pylint: disable=no-member
     hit_points = deepcopy(event.hit_points)
     for p in hit_points:
         pos_std = (0.5 * np.sqrt(0.1 / p.e)) / 2.3548
@@ -203,7 +203,7 @@ def apply_error_model(event: Event, seed: int = None) -> Event:
 
     TODO - add support for subsets?
     """
-    rng = np.random.RandomState(seed=seed)
+    rng = np.random.RandomState(seed=seed)  # pylint: disable=no-member
     hit_points = deepcopy(event.hit_points)
     for i, p in enumerate(hit_points):
         pos_std = event.position_uncertainty[i + 1]
@@ -224,8 +224,7 @@ def cluster_linkage(
 ) -> Dict[int, int]:
     """
     Clusters based on the linkage for the event
-    TODO - add AGATA alpha
-    TODO - add AGATA clustering method
+    TODO - add AGATA adaptive alpha
     """
     if len(event.hit_points) == 0:
         return {}
@@ -652,13 +651,13 @@ class cluster_calcs:
 
         if method in ["single", "complete", "average"]:
             for p1, p2 in product(cluster1, cluster2):
-                dnew = metric_method(p1, p2)
+                d_new = metric_method(p1, p2)
                 if method == "single":
-                    d = min(d, dnew)
+                    d = min(d, d_new)
                 if method == "complete":
-                    d = max(d, dnew)
+                    d = max(d, d_new)
                 if method == "average":
-                    d += dnew / (len(cluster1) * len(cluster2))
+                    d += d_new / (len(cluster1) * len(cluster2))
 
         if method == "centroid":
             if metric == "euclidean":
@@ -678,7 +677,8 @@ class cluster_calcs:
                     )[0]
                 )
             if metric == "germanium":
-                # TODO - This is not entirely clear. Centroids might be computed differently here...
+                # Centroids could be computed in many ways for germanium
+                # distances, this is just one way
                 d = ge_distance(
                     np.array(
                         [
@@ -702,11 +702,11 @@ class cluster_calcs:
         """
         centroid = self.cluster_centroid(cluster)
 
-        vecs = [
+        cluster_vectors = [
             self.event.points[i].x - self.event.points[j].x
             for i, j in zip(cluster, [0] + cluster)
         ]
-        dirs = [vec / np.linalg.norm(vec) for vec in vecs]
+        dirs = [vec / np.linalg.norm(vec) for vec in cluster_vectors]
         e_sum = sum(self.event.points[i].e for i in cluster)
 
         if len(cluster) > 1:
@@ -715,14 +715,14 @@ class cluster_calcs:
                 self.event.points[cluster[-1]].x - self.event.points[cluster[0]].x
             )
             length_dir = length_vec / np.linalg.norm(length_vec)
-            centroid_vecs = np.array(
+            centroid_vectors = np.array(
                 [self.event.points[i].x - centroid for i in cluster]
             )
-            lengths = np.array([vec @ length_dir for vec in centroid_vecs])
+            lengths = np.array([vec @ length_dir for vec in centroid_vectors])
             length = 2 * np.sqrt(np.var(lengths))
-            length_vecs = length * length_dir
-            width_vecs = centroid_vecs - length_vecs
-            widths = np.array([np.linalg.norm(vec) for vec in width_vecs])
+            length_vectors = length * length_dir
+            width_vectors = centroid_vectors - length_vectors
+            widths = np.array([np.linalg.norm(vec) for vec in width_vectors])
             width = 2 * np.sqrt(np.var(widths))
 
             first_e_diff = (
@@ -848,10 +848,10 @@ class cluster_calcs:
             ),
             "tango_12 - 2e_sum": np.abs(
                 tango12 - c2p["2e_sum"]
-            ),  # If cluster2 is a complete tail, the energy coming in is equal to the energy present
+            ),  # If cluster2 is a complete tail: energy coming in == the energy present
             "1tango_origin - tango12 - 1e_sum": np.abs(
                 c1p["1tango_origin"] - (tango12 + c1p["1e_sum"])
-            ),  # If cluster1 is a complete head, the energy between entry and exit is equal to the energy present
+            ),  # If cluster1 is a complete head: energy b/t entry and exit == the energy present
             "1final_r - 2first_r": c1p["1final_r"] - c2p["2first_r"],
             "1tango_origin - 1e_sum": np.abs(
                 c1p["1tango_origin"] - c1p["1e_sum"]
@@ -899,10 +899,10 @@ class cluster_calcs:
             "agata_FOM_TANGO": self.event.FOM(
                 cluster1 + cluster2, fom_method="agata", start_energy=total_tango
             ),
-            #                                '1tango'
-            #                                'FOM' we want something like a FOM, comparing cosine values or energy values
-            #                                FOM of new joined cluster
-            #                                Something like the Compton scattering formula needs to be included
+            # '1tango'
+            # 'FOM' we want something like a FOM, comparing cosine values or energy values
+            # FOM of new joined cluster
+            # Something like the Compton scattering formula needs to be included
         }
         del (
             c1p["1first_dir"],
@@ -941,6 +941,10 @@ def cluster_using_classifier(
     Uses numpy arrays to store scores. Uses the entire event assuming that
     points have indices 1..n
     """
+    from gamma_ray_tracking import cluster_utils
+
+    overwrite_index = None
+
     if prediction_func is None and not return_data:
         raise ValueError("Prediction function is needed to return data.")
 
@@ -969,7 +973,7 @@ def cluster_using_classifier(
         if balance_data and return_data:  # Duplicate data if requested
             multiplicity = len(new_clusters) - 2
         batch = []  # Perform predictions on a batch of values
-        preds = []
+        predictions = []
         indices = []  # Indicate the indices for the batched values
         best_clusters = []
         if first:  # Populate the scores for all pairs on the first pass
@@ -980,7 +984,7 @@ def cluster_using_classifier(
                         if not any(np.isnan(x)) and not any(np.isinf(x)):
                             batch.append(x)
                             if use_oracle:
-                                preds.append(
+                                predictions.append(
                                     float(cluster_utils.join_validity(clusters, c1, c2))
                                     + float(
                                         cluster_utils.end_validity(clusters, c1, c2)
@@ -994,7 +998,7 @@ def cluster_using_classifier(
                                 X.append(x)
                                 y.append(y_local)
                                 if y_local > 0:
-                                    for k in range(multiplicity):
+                                    for _ in range(multiplicity):
                                         X.append(x)
                                         y.append(y_local)
                         else:
@@ -1010,7 +1014,7 @@ def cluster_using_classifier(
                     if not any(np.isnan(x)) and not any(np.isinf(x)):
                         batch.append(x)
                         if use_oracle:
-                            preds.append(
+                            predictions.append(
                                 float(cluster_utils.join_validity(clusters, c1, c2))
                                 + float(cluster_utils.end_validity(clusters, c1, c2))
                             )
@@ -1022,7 +1026,7 @@ def cluster_using_classifier(
                             X.append(x)
                             y.append(y_local)
                             if y_local > 0:
-                                for k in range(multiplicity):
+                                for _ in range(multiplicity):
                                     X.append(x)
                                     y.append(y_local)
                     else:
@@ -1032,7 +1036,7 @@ def cluster_using_classifier(
                     if not any(np.isnan(x)) and not any(np.isinf(x)):
                         batch.append(x)
                         if use_oracle:
-                            preds.append(
+                            predictions.append(
                                 float(cluster_utils.join_validity(clusters, c2, c1))
                                 + float(cluster_utils.end_validity(clusters, c2, c1))
                             )
@@ -1044,7 +1048,7 @@ def cluster_using_classifier(
                             X.append(x)
                             y.append(y_local)
                             if y_local > 0:
-                                for k in range(multiplicity):
+                                for _ in range(multiplicity):
                                     X.append(x)
                                     y.append(y_local)
                     else:
@@ -1053,8 +1057,8 @@ def cluster_using_classifier(
         if not use_oracle:
             if len(batch) == 0:
                 break
-            preds = prediction_func(batch)
-        for (i, j), pred in zip(indices, preds):
+            predictions = prediction_func(batch)
+        for (i, j), pred in zip(indices, predictions):
             scores[i, j] = pred
         if np.max(scores) > cutoff:
             if not use_oracle:

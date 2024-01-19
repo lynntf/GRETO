@@ -313,7 +313,7 @@ def agata_FOM(
     eres: float = 1e-3,
     exponential: bool = False,
     debug=False,
-    **kwargs,
+    **kwargs,  # pylint: disable=unused-argument
 ) -> float:
     """
     # AGATA or OFT FOM
@@ -452,9 +452,9 @@ def angle_FOM(
     start_point: int = 0,
     start_energy: float = None,
     Nmi: int = None,
-    eres: float = 1e-3,
+    eres: float = 1e-3,  # pylint: disable=unused-argument
     penalty: float = 0.4,
-    **kwargs,
+    **kwargs,  # pylint: disable=unused-argument
 ) -> float:
     """Angle FOM used with GRETINA"""
     if len(permutation) <= 1:
@@ -503,9 +503,9 @@ def cosine_FOM(
     start_point: int = 0,
     start_energy: float = None,
     Nmi: int = None,
-    eres: float = 1e-3,
+    eres: float = 1e-3,  # pylint: disable=unused-argument
     penalty: float = 0.4,
-    **kwargs,
+    **kwargs,  # pylint: disable=unused-argument
 ) -> float:
     """Cosine of angle FOM used with GRETINA"""
     if len(permutation) <= 1:
@@ -558,7 +558,7 @@ def local_tango_FOM(
     eres: float = 1e-3,
     use_variance: bool = False,
     norm: int = 2,
-    **kwargs,
+    **kwargs,  # pylint: disable=unused-argument
 ):
     """FOM using local energy estimates"""
     r_sum_loc = np.abs(
@@ -899,7 +899,7 @@ def singles_depth(
     singles_penalty_min: float = 0.0,
     singles_penalty_max: float = 1.85,
     detector: DetectorConfig = default_config,
-    **kwargs,
+    **kwargs,  # pylint: disable=unused-argument
 ) -> float:
     """
     # Reject singles based on their energy and depth
@@ -1312,7 +1312,7 @@ def selected_FOM(
     start_energy: float = None,
     Nmi: int = None,
     eres: float = 1e-3,
-    **kwargs,
+    **kwargs,  # pylint: disable=unused-argument
 ):
     """Features for learning a synthetic FOM"""
     perm = tuple(permutation)
@@ -2291,7 +2291,7 @@ def FOM_sequence_features(
         )
     )
 
-    zeroed = (max(comp_penalty.shape) - np.sum(comp_penalty)) < 1
+    # zeroed = (max(comp_penalty.shape) - np.sum(comp_penalty)) < 1
 
     features["c_penalty_1"] = comp_penalty
     features["c_penalty_mean_1"] = comp_penalty / len(comp_penalty)
@@ -2505,8 +2505,8 @@ def escape_probability(
     linear_attenuation = lin_att_total(np.array([E_x]))[0]
 
     def probability(theta):
-        # TODO - not clear if its faster to exploit symmetry and only integrate
-        # over pi instead of 2*pi
+        # not clear if its faster to exploit symmetry and only integrate over
+        # [0, pi) and multiply by 2 instead of integrating over [0, 2*pi)
         return np.exp(-linear_attenuation * c.ray_lengths(theta)) / 2 / np.pi
 
     return integrate.quad(probability, 0, 2 * np.pi)[0]
@@ -2531,11 +2531,11 @@ def escape_prob_cluster(
     )
 
 
-# TODO - emittance likelihood for a ray: basically backtracking where we look at
-# a cone for the ray in the reverse direction and determine if the ray is likely
-# to have come from the origin? I'm not sure how best to do this, but should be a
-# nice feature for evaluating a gamma-ray track. The backtracking angle is the
-# same as the forward theta_theoretical...
+# TODO - likelihood for a ray being emitted from a specific location: basically
+# backtracking where we look at a cone for the ray in the reverse direction and
+# determine if the ray is likely to have come from the origin? I'm not sure how
+# best to do this, but should be a nice feature for evaluating a gamma-ray
+# track. The backtracking angle is the same as the forward theta_theoretical...
 
 
 def cluster_FOM_features(

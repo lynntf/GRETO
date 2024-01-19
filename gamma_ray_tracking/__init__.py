@@ -31,18 +31,6 @@ ALPHA = physical_constants["fine-structure constant"][
     0
 ]  # fine structure constant 1/137
 
-# %% Continue import
-
-# def outer_test_func(event:Event, radius=None):
-#     """Test function for attribute assignment"""
-#     if radius is None:
-#         radius = default_config.get_inner_radius()
-#     print(event)
-#     print(radius)
-#     print(default_config.get_inner_radius())
-
-# setattr(Event, 'outer_test_func', outer_test_func)
-
 # %% Default event and clusters for testing (non-physical)
 default_event = Event(
     0,
