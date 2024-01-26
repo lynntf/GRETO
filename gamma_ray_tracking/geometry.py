@@ -34,7 +34,7 @@ def cos_act(
     cos_theta_act = (y1 @ y2) / (np.linalg.norm(y1) * np.linalg.norm(y2))
 
     # This will only ever be outside of (-1, 1) if there are rounding errors
-    np.clip(cos_theta_act, -1.0, 1.0, out=cos_theta_act)
+    cos_theta_act = np.clip(cos_theta_act, -1.0, 1.0)
     return cos_theta_act
 
 
