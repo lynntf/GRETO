@@ -341,7 +341,8 @@ def germanium_extension(
 
 
 def cartesian_to_spherical(xyz: np.ndarray) -> np.ndarray:
-    """Adapted from https://stackoverflow.com/questions/4116658/faster-numpy-cartesian-to-spherical-coordinate-conversion
+    """Adapted from
+    https://stackoverflow.com/questions/4116658/faster-numpy-cartesian-to-spherical-coordinate-conversion
     Returns [[r, phi (elevation), theta (azimuthal)],...]
     """
     rpt = np.zeros(xyz.shape)
