@@ -834,27 +834,27 @@ def LP_method(
     # Define the loss
     if clustered:
         if loss == "squared_hinge":
-            loss = cp.sum(cp.square(zeta_k))
+            loss_fun = cp.sum(cp.square(zeta_k))
         elif loss == "hinge":
-            loss = cp.sum(zeta_k)
+            loss_fun = cp.sum(zeta_k)
         else:
-            loss = cp.sum(zeta_k)
+            loss_fun = cp.sum(zeta_k)
     else:
         if loss == "squared_hinge":
-            loss = cp.sum(cp.square(xi_i))
+            loss_fun = cp.sum(cp.square(xi_i))
         elif loss == "hinge":
-            loss = cp.sum(xi_i)
+            loss_fun = cp.sum(xi_i)
         else:
-            loss = cp.sum(xi_i)
+            loss_fun = cp.sum(xi_i)
 
     lamb = 1 / C  # lambda parameter
 
     # equivalent C in SVC is C/num_clusters
     prob = cp.Problem(
-        cp.Minimize(loss / num_clusters + lamb * reg), constraints=constraints
+        cp.Minimize(loss_fun / num_clusters + lamb * reg), constraints=constraints
     )
 
-    prob.solve(verbose=verbose)
+    prob.solve(verbose=verbose, solver="CLARABEL")
     return w.value
 
 
@@ -954,8 +954,11 @@ def MILP_method(
 
     # equivalent C in SVC is C/num_clusters
     prob = cp.Problem(cp.Minimize(loss - epsilon), constraints=constraints)
-
-    prob.solve(verbose=verbose)
+    if relaxation:
+        solver_name = "CLARABEL"
+    else:
+        solver_name = "SCIPY"
+    prob.solve(verbose=verbose, solver=solver_name)
     if debug:
         print(f"  Found solution with epsilon (margin half-width) {epsilon.value}")
     return w.value
@@ -980,7 +983,9 @@ class csvm(LinearSVC):
         self.w = None
         self.sol_method = sol_method
 
-    def fit(self, R: np.ndarray, qid: np.ndarray, **kwargs):  # pylint: disable=arguments-differ
+    def fit(
+        self, R: np.ndarray, qid: np.ndarray, **kwargs
+    ):  # pylint: disable=arguments-differ
         """Fit the parameters of the clustered classifier
 
         :param R:  residual data
@@ -1194,6 +1199,7 @@ def column_generation(
             "indices": indices,
             "num_problems": len(np.unique(qid)),
             "active": len(indices),
+            "num_data": X.shape[0],
             "active_history": active_history,
             "solved": solved_history[-1],
             "solved_history": solved_history,
