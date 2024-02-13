@@ -17,33 +17,9 @@ from gamma_ray_tracking import default_config
 from gamma_ray_tracking.asym_heir_clustering import asym_hier_linkage
 from gamma_ray_tracking.coincidence_class import Coincidence
 from gamma_ray_tracking.detector_config_class import DetectorConfig
-from gamma_ray_tracking.geometry import (
-    cartesian_to_spherical,
-    err_cos_vec_precalc,
-    err_theta_vec_precalc,
-    ge_distance,
-    one_minus_cosine_ijk,
-    pairwise_distance,
-)
+import gamma_ray_tracking.geometry as geo
 from gamma_ray_tracking.interaction_class import Interaction
-from gamma_ray_tracking.physics import (
-    MEC2,
-    KN_differential_cross,
-    KN_vec,
-    compton_penalty,
-    compton_penalty_ell1,
-    cos_theor,
-    cos_theor_sigma,
-    lin_att_abs,
-    lin_att_compt,
-    lin_att_pair,
-    lin_att_total,
-    outgoing_energy_csf,
-    outgoing_energy_csf_sigma,
-    partial_tango_incoming_derivatives,
-    tango_incoming_estimate,
-    theta_theor,
-)
+import gamma_ray_tracking.physics as phys
 
 from gamma_ray_tracking.utils import perm_to_transition
 
@@ -128,7 +104,7 @@ class Event:
     @property
     def spherical_point_matrix(self) -> np.ndarray:
         """Matrix of interaction point coordinates in spherical including the origin"""
-        return cartesian_to_spherical(self.point_matrix)
+        return geo.cartesian_to_spherical(self.point_matrix)
 
     @property
     def hit_point_matrix(self) -> np.ndarray:
@@ -173,7 +149,7 @@ class Event:
     @cached_property
     def distance(self) -> np.ndarray:
         """Distance between two points"""
-        return squareform(pairwise_distance(self.point_matrix))
+        return squareform(geo.pairwise_distance(self.point_matrix))
 
     def distance_perm(
         self, permutation: Iterable[int], start_point: int = 0
@@ -199,7 +175,7 @@ class Event:
     def ge_distance(self) -> np.ndarray:
         """Distance between two points"""
         return squareform(
-            ge_distance(self.point_matrix, d12_euc=squareform(self.distance))
+            geo.ge_distance(self.point_matrix, d12_euc=squareform(self.distance))
         )
 
     def ge_distance_perm(
@@ -298,12 +274,12 @@ class Event:
     @cached_property
     def cos_act(self) -> np.ndarray:
         """Cosine between interaction points"""
-        return 1 - one_minus_cosine_ijk(self.point_matrix)
+        return 1 - geo.one_minus_cosine_ijk(self.point_matrix)
 
     @cached_property
     def cos_err(self) -> np.ndarray:
         """Error in cosine due to position uncertainty"""
-        err = err_cos_vec_precalc(
+        err = geo.err_cos_vec_precalc(
             self.distance, self.cos_act, self.position_uncertainty
         )
         # TODO - should the center point be made more accurate here or in position_uncertainty?
@@ -313,7 +289,7 @@ class Event:
     @cached_property
     def theta_err(self) -> np.ndarray:
         """Error in cosine due to position uncertainty"""
-        err = err_theta_vec_precalc(
+        err = geo.err_theta_vec_precalc(
             self.distance, self.cos_act, self.position_uncertainty
         )
         # TODO - should the center point be made more accurate here or in position_uncertainty?
@@ -365,14 +341,14 @@ class Event:
     @cached_property
     def tango_estimates(self) -> np.ndarray:
         """Local incoming energy estimates"""
-        return tango_incoming_estimate(
+        return phys.tango_incoming_estimate(
             self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
         )
 
     @cached_property
     def tango_partial_derivatives(self) -> Tuple[np.ndarray]:
         """d/de and d/d_cos for the TANGO estimates"""
-        return partial_tango_incoming_derivatives(
+        return phys.partial_tango_incoming_derivatives(
             self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
         )
 
@@ -428,7 +404,7 @@ class Event:
             e_sum = self.energy_sum(permutation)
             e_final = self.energy_matrix[permutation[-1]]
             estimated_outgoing = estimate - e_sum
-            if cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
+            if phys.cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
                 return e_sum
         return estimate
 
@@ -477,7 +453,7 @@ class Event:
             e_sum = self.energy_sum(permutation)
             e_final = self.energy_matrix[permutation[-1]]
             estimated_outgoing = estimate - e_sum
-            if cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
+            if phys.cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
                 return e_sum
         return estimate
 
@@ -490,7 +466,7 @@ class Event:
         e_sum = self.energy_sum(permutation)
         e_final = self.energy_matrix[permutation[-1]]
         estimated_outgoing = estimate - e_sum
-        if cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
+        if phys.cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
             return e_sum
         return estimate
         # if estimated_outgoing + e_final > compton_edge_incoming(estimated_outgoing):
@@ -509,7 +485,7 @@ class Event:
         energies = self.cumulative_energies(
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
-        return cos_theor(energies[:-1], energies[1:], **cos_theor_kwargs)
+        return phys.cos_theor(energies[:-1], energies[1:], **cos_theor_kwargs)
 
     def cos_theor_sigma_perm(
         self,
@@ -523,7 +499,7 @@ class Event:
         energies = self.cumulative_energies(
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
-        return cos_theor_sigma(energies[:-1], energies[1:], Nmi, **cos_theor_kwargs)
+        return phys.cos_theor_sigma(energies[:-1], energies[1:], Nmi, **cos_theor_kwargs)
 
     # %% Permuted theoretical theta and error
     def theta_theor_perm(
@@ -537,7 +513,7 @@ class Event:
         energies = self.cumulative_energies(
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
-        return theta_theor(energies[:-1], energies[1:], **theta_theor_kwargs)
+        return phys.theta_theor(energies[:-1], energies[1:], **theta_theor_kwargs)
 
     def theta_theor_sigma_perm(
         self,
@@ -575,7 +551,7 @@ class Event:
             full_perm = tuple([start_point] + list(permutation))
         else:
             full_perm = tuple(permutation)
-        return outgoing_energy_csf(
+        return phys.outgoing_energy_csf(
             energies, 1 - self.cos_act[perm_to_transition(full_perm)]
         )
 
@@ -593,7 +569,7 @@ class Event:
         energies = self.cumulative_energies(
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )[:-1]
-        return outgoing_energy_csf_sigma(
+        return phys.outgoing_energy_csf_sigma(
             energies,
             1 - self.cos_act_perm(permutation, start_point),
             self.cos_act_err_perm(permutation, start_point),
@@ -674,7 +650,7 @@ class Event:
         Ns = np.arange(Nmi, Nmi - len(e_sum_lm1), -1, dtype=int)
         if debug:  # Debug information
             print("Ns ", Ns)
-            print("a ", eres**2 * (Ns + 1) + (err_cos * (e_scatter**2 / MEC2)) ** 2)
+            print("a ", eres**2 * (Ns + 1) + (err_cos * (e_scatter**2 / phys.MEC2)) ** 2)
             print("b ", eres * (e_scatter / e_sum_lm1) ** 2)
             print(
                 "delta_e_scatter ",
@@ -682,18 +658,18 @@ class Event:
             )
             print("delta_e_scatter ", eres * np.sqrt(Ns))
             print("d ", (1 - (e_scatter / e_sum_lm1) ** 2))
-            print("delta_e_scatter_n ", (err_cos * (e_scatter**2 / MEC2)))
+            print("delta_e_scatter_n ", (err_cos * (e_scatter**2 / phys.MEC2)))
 
         # # Old error computation (does not include some error from energy)
         # return np.sqrt(eres**2 * Ns  + \
-        #                (err_cos * (e_scatter**2/MEC2))**2)
+        #                (err_cos * (e_scatter**2/phys.MEC2))**2)
         return np.sqrt(
             eres**2
             * (
                 (e_scatter / e_sum_lm1) ** 4
                 + Ns * (1 - (e_scatter / e_sum_lm1) ** 2) ** 2
             )
-            + (err_cos * (e_scatter**2 / MEC2)) ** 2
+            + (err_cos * (e_scatter**2 / phys.MEC2)) ** 2
         )
 
     def res_sum_loc(
@@ -780,7 +756,7 @@ class Event:
         return np.sqrt(
             eres**2
             * ((d_de - (e_scatter / e_sum) ** 2) ** 2 + Ns * (e_scatter / e_sum) ** 4)
-            + err_cos**2 * (d_d_cos - e_scatter**2 / MEC2) ** 2
+            + err_cos**2 * (d_d_cos - e_scatter**2 / phys.MEC2) ** 2
         )
 
     def res_cos(
@@ -913,7 +889,7 @@ class Event:
             start_energy=start_energy,
             **cos_theor_kwargs,
         )
-        return compton_penalty(theo)
+        return phys.compton_penalty(theo)
 
     def compton_penalty_ell1(
         self,
@@ -929,7 +905,7 @@ class Event:
             start_energy=start_energy,
             **cos_theor_kwargs,
         )
-        return compton_penalty_ell1(theo)
+        return phys.compton_penalty_ell1(theo)
 
     # %% Linear attenuation and cross-sections
     def linear_attenuation_abs(
@@ -942,7 +918,7 @@ class Event:
         energies = self.cumulative_energies(
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
-        return lin_att_abs(energies)
+        return phys.lin_att_abs(energies)
 
     def linear_attenuation_compt(
         self,
@@ -954,7 +930,7 @@ class Event:
         energies = self.cumulative_energies(
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
-        return lin_att_compt(energies)
+        return phys.lin_att_compt(energies)
 
     def linear_attenuation_pair(
         self,
@@ -966,7 +942,7 @@ class Event:
         energies = self.cumulative_energies(
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
-        return lin_att_pair(energies)
+        return phys.lin_att_pair(energies)
 
     def lin_mu_total(
         self,
@@ -978,7 +954,7 @@ class Event:
         energies = self.cumulative_energies(
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
-        return lin_att_total(energies)
+        return phys.lin_att_total(energies)
 
     def klein_nishina(
         self,
@@ -993,13 +969,13 @@ class Event:
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
         if use_ei:
-            return KN_vec(
+            return phys.KN_vec(
                 energies[:-1],
                 1 - self.cos_act_perm(permutation),
                 Ei=energies[1:],
                 **kwargs,
             )
-        return KN_vec(energies[:-1], 1 - self.cos_act_perm(permutation), **kwargs)
+        return phys.KN_vec(energies[:-1], 1 - self.cos_act_perm(permutation), **kwargs)
 
     def klein_nishina_differential_cross_section(
         self,
@@ -1014,13 +990,13 @@ class Event:
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
         if use_ei:
-            return KN_differential_cross(
+            return phys.KN_differential_cross(
                 energies[:-1],
                 1 - self.cos_act_perm(permutation),
                 Ei=energies[1:],
                 **kwargs,
             )
-        return KN_differential_cross(
+        return phys.KN_differential_cross(
             energies[:-1], 1 - self.cos_act_perm(permutation), **kwargs
         )
 
