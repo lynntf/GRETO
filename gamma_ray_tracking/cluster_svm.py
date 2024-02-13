@@ -826,10 +826,14 @@ def LP_method(
     if non_neg:
         constraints.append(0 <= w)
 
-    # Add constraints on zeta values for each cluster
-    for i, k in zip(range(num_data), updated_I[list(range(num_data))]):
-        constraints.append(xi_i[i] <= zeta_k[k])
-        # If there is only one data point per cluster, zeta_{k_i} = xi_i
+    # # Add constraints on zeta values for each cluster
+    # for i, k in zip(range(num_data), updated_I[list(range(num_data))]):
+    #     constraints.append(xi_i[i] <= zeta_k[k])
+    #     # If there is only one data point per cluster, zeta_{k_i} = xi_i
+
+    # Reformulated constraint without explicit loop
+    constraints.append(cp.max(xi_i - zeta_k[updated_I]) <= 0)
+    # Ensure xi_i <= zeta_k[k] for all i, k pairs
 
     # Define the loss
     if clustered:
@@ -853,8 +857,8 @@ def LP_method(
     prob = cp.Problem(
         cp.Minimize(loss_fun / num_clusters + lamb * reg), constraints=constraints
     )
-
-    prob.solve(verbose=verbose, solver="CLARABEL")
+    solver_name = "CLARABEL"
+    prob.solve(verbose=verbose, solver=solver_name)
     return w.value
 
 
@@ -944,10 +948,14 @@ def MILP_method(
         constraints.append(0 <= w_minus)
         constraints.append(cp.sum(w_plus + w_minus) == 1)
 
-    # Add constraints on zeta values for each cluster
-    for i, k in zip(range(num_data), updated_I[list(range(num_data))]):
-        constraints.append(y_i[i] <= z_k[k])
-        # If there is only one data point per cluster, z_{k_i} = y_i
+    # # Add constraints on zeta values for each cluster
+    # for i, k in zip(range(num_data), updated_I[list(range(num_data))]):
+    #     constraints.append(y_i[i] <= z_k[k])
+    #     # If there is only one data point per cluster, z_{k_i} = y_i
+
+    # Reformulated constraint without explicit loop
+    constraints.append(cp.max(y_i - z_k[updated_I]) <= 0)
+    # Ensure y_i <= z_k[k] for all i, k pairs
 
     # Define the loss
     loss = cp.sum(z_k)
@@ -957,7 +965,7 @@ def MILP_method(
     if relaxation:
         solver_name = "CLARABEL"
     else:
-        solver_name = "SCIPY"
+        solver_name = None
     prob.solve(verbose=verbose, solver=solver_name)
     if debug:
         print(f"  Found solution with epsilon (margin half-width) {epsilon.value}")
