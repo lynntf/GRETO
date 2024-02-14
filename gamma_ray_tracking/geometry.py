@@ -4,6 +4,7 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 
 Geometrical computations using interaction positions
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -269,9 +270,7 @@ def ge_distance(
             jjs[m * i + j - ((i + 2) * (i + 1)) // 2] = j
     gamma = (points[jjs] - points[iis]) / d12_euc[:, np.newaxis]
     d1 = np.sum(points[iis] * (-gamma), axis=1)
-    d_squared = (
-        (-d1) ** 2 - np.linalg.norm(points[iis], axis=1) ** 2 + inner_radius**2
-    )
+    d_squared = (-d1) ** 2 - np.linalg.norm(points[iis], axis=1) ** 2 + inner_radius**2
     indicator = d_squared >= 0
     d = np.zeros(d_squared.shape)
     np.sqrt(d_squared, where=indicator, out=d)
@@ -402,6 +401,21 @@ class cone:
         match the same directions as ray construction. By construction, theta=0
         should provide a minimum distance and theta=pi a maximum distance.
 
+        Derivation notes:
+        Spherical law of cosines:
+        $A = \\theta$
+        $a = \\phi$ (angle between orientation by theta and apex)
+        $b = \\beta$ (angle from apex to direction)
+        $c = \\alpha$ opening angle
+        $\\cos(a) = \\cos(b)\\cos(c) + \\sin(b)\\sin(c)\\cos(A)$
+        $\\cos(\\phi) = \\cos(\\beta) \\cos(\\alpha) + \\sin(\\beta) \\sin(\\alpha) \\cos(\\theta)
+
+        Given $\\cos(\\phi)$, we can then get the distance from the apex to the sphere, $x$
+        Make a triangle with $x \\sin(\\phi)$ by $x \\cos(\\phi)$.
+        $\\|a\\| + x \\cos(\\phi)$ (apex length is $\\|a\\|$) is one side,
+        $x \\sin(\\phi)$ is another, and $r$ is the third. Solve using quadratic formula:
+        $x = -\\cos(\\phi) \\|a\\| + \\sqrt{ \\|a\\|^2 (\\cos^2(\\phi) - 1) + r^2 }$
+
         Parameters:
             theta:  angles about cone where theta=0 is oriented to the smallest
                 distance and theta=pi is oriented to the largest distance (not
@@ -440,6 +454,7 @@ class cone:
         b = np.dot(2 * ray_direction, self.apex)
         # c = np.dot(self.apex, self.apex) - self.sphere_radius ** 2
         # length = (-b + np.sqrt(np.square(b) - 4 * c)) / (2)
+        # This is just the quadratic formula:
         length = (-b + np.sqrt(np.square(b) - 4 * self.squared_dist_apex_to_sphere)) / (
             2
         )
@@ -647,8 +662,6 @@ def crystal_depth(global_coords: np.ndarray, crystal_coords: np.ndarray):
     r_from_crystal_axis = np.linalg.norm(crystal_coords[:, 0:2], axis=-1)
     z_crystal = crystal_coords[:, 2]
     c_depth = (
-        r_from_target
-        * z_crystal
-        / np.sqrt(r_from_target**2 - r_from_crystal_axis**2)
+        r_from_target * z_crystal / np.sqrt(r_from_target**2 - r_from_crystal_axis**2)
     )
     return c_depth
