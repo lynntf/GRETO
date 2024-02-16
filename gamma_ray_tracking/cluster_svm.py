@@ -872,6 +872,7 @@ def MILP_method(
     verbose: bool = False,
     eps_min: float = 1e-5,
     eps_max: float = 0.99,
+    use_eta: bool = False,
     **kwargs,  # pylint: disable=unused-argument
 ) -> np.ndarray:
     """
@@ -912,30 +913,31 @@ def MILP_method(
     y_i = cp.Variable(num_data, boolean=not relaxation)
     z_k = cp.Variable(num_clusters, boolean=not relaxation)
     epsilon = cp.Variable()
-    eta_i = cp.Variable()  # Define eta_i as epsilon*y_i
+    if use_eta:
+        eta_i = cp.Variable()  # Define eta_i as epsilon*y_i
 
-    # # Define the constraints
-    # constraints = [
-    #     # epsilon - (selected_X @ w) <= y_i * (1 + epsilon),
-    #     # epsilon - (selected_X @ w) <= y_i,
-    #     (selected_X @ w) >= epsilon - y_i,
-    #     0 <= y_i,
-    #     0 <= z_k,
-    #     eps_min <= epsilon,
-    #     epsilon <= eps_max,
-    # ]
-    # Define constraints using eta_i and convex hull reformulation
-    constraints = [
-        selected_X @ w >= epsilon - y_i - eta_i,
-        0 <= y_i,
-        0 <= z_k,
-        -1 + y_i <= eta_i - epsilon,
-        eta_i - epsilon <= 1 - y_i,
-        0 <= eta_i,
-        eta_i <= y_i,
-        eps_min <= epsilon,
-        epsilon <= eps_max,
-    ]
+    if use_eta:
+        # Define constraints using eta_i and convex hull reformulation
+        constraints = [
+            selected_X @ w >= epsilon - y_i - eta_i,
+            0 <= y_i,
+            0 <= z_k,
+            -1 + y_i <= eta_i - epsilon,
+            eta_i - epsilon <= 1 - y_i,
+            0 <= eta_i,
+            eta_i <= y_i,
+            eps_min <= epsilon,
+            epsilon <= eps_max,
+        ]
+    else:
+        # Approximate constraints (violation with probability 0, but possible)
+        constraints = [
+            selected_X @ w >= epsilon - y_i,
+            0 <= y_i,
+            0 <= z_k,
+            eps_min <= epsilon,
+            epsilon <= eps_max,
+        ]
 
     if non_neg:  # enforce the 1-norm
         constraints.append(0 <= w)
@@ -968,7 +970,11 @@ def MILP_method(
         solver_name = None
     prob.solve(verbose=verbose, solver=solver_name)
     if debug:
-        print(f"  Found solution with epsilon (margin half-width) {epsilon.value}")
+        print(f"  Found solution with epsilon (margin half-width) {epsilon.value}; Objective {loss.value}")
+    if verbose:
+        print(f"    {'i':4s} {'wtx':10s} {'y_i':6s} {'ind':4s} {'z_k':6s}")
+        for i, (wtx, y, index) in enumerate(zip(selected_X @ w.value, y_i.value, updated_I)):
+            print(f"    {i:4d} {wtx:10.5f} {y:6.3f} {index:4d} {z_k.value[index]:6.3f}")
     return w.value
 
 
