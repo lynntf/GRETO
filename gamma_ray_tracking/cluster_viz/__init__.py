@@ -345,7 +345,7 @@ def plot_flat_event_px(
         df["cluster_id"] = [cluster_id] * len(cluster)
         df["colors"] = [colors[cluster_id % len(colors)]] * len(cluster)
         df["energy"] = event.energy_matrix[list(cluster)]
-        df["type"] = [event.points[i].type for i in cluster]
+        df["type"] = [event.points[i].interaction_type for i in cluster]
         df["cumu_energy"] = event.cumulative_energies(tuple(cluster))
         df["angle"] = list(event.theta_act_perm(tuple(cluster))) + [0]
         df["hover_info"] = list(
@@ -503,7 +503,7 @@ def plot_event_3d(
         df["cluster_id"] = [cluster_id] * len(cluster)
         df["colors"] = [colors[cluster_id % len(colors)]] * len(cluster)
         df["energy"] = event.energy_matrix[list(cluster)]
-        df["type"] = [event.points[i].type for i in cluster]
+        df["type"] = [event.points[i].interaction_type for i in cluster]
         df["cumu_energy"] = event.cumulative_energies(tuple(cluster))
         df["tot_energy"] = np.ones(df["cumu_energy"].shape) * df["cumu_energy"][0]
         df["angle"] = list(event.theta_act_perm(tuple(cluster))) + [0]
