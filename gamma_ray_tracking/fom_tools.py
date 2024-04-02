@@ -4,11 +4,12 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 
 FOM tools
 """
+
 from __future__ import annotations
 
 from copy import deepcopy
 from itertools import permutations
-from typing import Callable, Dict, Hashable, Iterable, List, Tuple
+from typing import Callable, Dict, Hashable, Iterable, List, Optional, Tuple
 
 import numpy as np
 from scipy import integrate
@@ -25,6 +26,16 @@ from gamma_ray_tracking.physics import (
     lin_att_total,
     theta_theor,
 )
+
+
+# TODO - finish this up?
+# class FOM_model:
+#     """Container for a FOM computing model"""
+
+#     def __init__(self, model_evaluation: Callable, columns: Optional[List[str]] = None):
+#         self.predict = model_evaluation
+#         if columns is not None:
+#             self.columns = columns
 
 
 # %% Clustered FOM
@@ -301,6 +312,37 @@ def FOM(
             raise NotImplementedError("The FOM method name is not implemented.")
 
 
+# %% general FOM
+def feature_weight_FOM(
+    event: Event,
+    permutation: Iterable[int],
+    feature_names: Iterable[str],
+    feature_weights: Iterable[float],
+    start_point: int = 0,
+    start_energy: Optional[float] = None,
+    Nmi: int = None,
+    eres: float = 1e-3,
+    detector: DetectorConfig = default_config,
+) -> float:
+    """
+    Combine FOM features by weight using a general call
+    """
+    features = cluster_FOM_features(
+        event=event,
+        permutation=permutation,
+        start_point=start_point,
+        start_energy=start_energy,
+        Nmi=Nmi,
+        eres=eres,
+        detector=detector,
+        columns=feature_names,
+    )
+    out = 0.0
+    for feature, weight in zip(feature_names, feature_weights):
+        out += features.get(feature, 0.0) * weight
+    return out
+
+
 # %% Predefined FOMs
 
 
@@ -354,6 +396,17 @@ def agata_FOM(
       messages to the standard output or not. The default value is False, which
       means no debug messages are printed.
     - `**kwargs` : Keyword arguments (currently unused)
+
+    Features:
+    ```
+    [
+        "rsg_sum_2v",
+        "cross_compt_ge_dist_sum",
+        "-log_p_compt_sum_nonfinal",
+        "cross_abs_ge_dist_final",
+        "-log_p_abs_final",
+    ]
+    ```
 
     ## Returns:
     - A float that represents the FOM value for the given event and permutation
@@ -456,7 +509,17 @@ def angle_FOM(
     penalty: float = 0.4,
     **kwargs,  # pylint: disable=unused-argument
 ) -> float:
-    """Angle FOM used with GRETINA"""
+    """
+    Angle FOM used with GRETINA
+    Features:
+    ```
+    [
+        "rth_cap_sum_2",
+        "c_penalty_ell_sum_1",  # or
+        # "c_penalty_sum_1",  # or
+    ]
+    ```
+    """
     if len(permutation) <= 1:
         return None
     if start_energy is None:
@@ -492,9 +555,7 @@ def angle_FOM(
         )
     )
 
-    return np.sqrt(np.sum(r_theta_cap**2) + np.sum(penalty * comp_penalty)) / (
-        Nmi - 1
-    )
+    return np.sqrt(np.sum(r_theta_cap**2) + np.sum(penalty * comp_penalty)) / (Nmi - 1)
 
 
 def cosine_FOM(
@@ -985,6 +1046,97 @@ def semi_greedy_clusters(
     return best_ordered_clusters
 
 
+def semi_greedy_batch(
+    event: Event,
+    cluster: Iterable = None,
+    width: int = 3,
+    stride: int = 1,
+    direction: str = "forward",
+    return_score: bool = False,
+    max_cluster_size: int = 8,
+    short_stop: bool = False,
+    debug: bool = False,
+    model: FOM_model = None,
+    model_columns: Optional[List[str]] = None,
+    **FOM_kwargs,
+) -> List:
+    """
+    Batched version of semi_greedy. Computes a feature array that is passed to
+    the FOM_model as a batch and then find the min of that batch.
+    """
+    raise NotImplemented("Still some TODO here")
+    # TODO - finish
+    # FOM_kwargs['filter_singles'] = False
+    if cluster is None:
+        cluster = list(range(0, len(event.hit_points) + 1))
+    if FOM_kwargs.get("fom_method") == "agata":
+        FOM_kwargs["negative"] = True
+    if len(cluster) > max_cluster_size:
+        if return_score:
+            return (tuple(cluster), FOM(event, cluster, **FOM_kwargs))
+        return cluster
+    if model_columns is None:
+        model_columns = model.columns
+    if direction == "forward":
+        curr_e = sum(event.points[i].e for i in cluster)
+        # excess_e = 0
+        start_point = 0
+        order = []
+        remaining_points = list(deepcopy(cluster))
+        best_perm = [0] * width
+        while len(order) < len(cluster):
+            # start_point_index = best_perm[stride - 1]
+            best_perm = remaining_points[:width]
+            best_score = np.inf
+            # Special case where excluding the last point does not result in a
+            # reduced number of evaluations, just removes last point from computation
+            if len(remaining_points) == width + 1:
+                width += 1
+            features = []
+            perms = list(
+                permutations(remaining_points, r=min(width, len(remaining_points)))
+            )
+            for i, perm in enumerate(
+                permutations(remaining_points, r=min(width, len(remaining_points)))
+            ):
+                features[i] = FOM_features_from_columns(
+                    event=event,
+                    permutation=order + list(perm),
+                    start_point=start_point,
+                    start_energy=curr_e,
+                    columns=model_columns,
+                )  # TODO: other keywords?
+                scores = model.predict(features)
+            best_perm = perms[np.argmin(scores)]
+            best_score = np.min(scores)
+            if debug:
+                print(f"***{order + list(best_perm), best_score}")
+            # print('**************')
+            # Can accept all remaining points if they are all included in the combinatorial window
+            if width >= len(remaining_points):
+                order.extend(best_perm)
+            else:
+                order.extend(best_perm[:stride])
+                # print(f'{order} {best_score}')
+                for point in best_perm[:stride]:
+                    # excess_e += self.points[point].e
+                    remaining_points.remove(point)
+                    # curr_e -= self.points[point].e
+            if short_stop:  # stop after sorting the first interaction
+                return order
+        if return_score:
+            # print(FOM_kwargs)
+            # print(self.FOM(order,**FOM_kwargs))
+            return (tuple(order), FOM(event, order, **FOM_kwargs))
+        return order
+    if direction == "backward":
+        return semi_greedy_backward(
+            event, cluster, width=width, stride=stride, debug=debug, **FOM_kwargs
+        )
+    if direction == "hybrid":
+        raise NotImplementedError
+
+
 def semi_greedy(
     event: Event,
     cluster: Iterable = None,
@@ -1054,7 +1206,7 @@ def semi_greedy(
             # Special case where excluding the last point does not result in a
             # reduced number of evaluations, just removes last point from computation
             if len(remaining_points) == width + 1:
-                width = len(remaining_points)
+                width += 1
             for perm in permutations(
                 remaining_points, r=min(width, len(remaining_points))
             ):
@@ -1083,7 +1235,7 @@ def semi_greedy(
                     # excess_e += self.points[point].e
                     remaining_points.remove(point)
                     # curr_e -= self.points[point].e
-            if short_stop:
+            if short_stop:  # stop after sorting the first interaction
                 return order
         if return_score:
             # print(FOM_kwargs)
@@ -1528,21 +1680,21 @@ def single_FOM_features(
         permutation = (permutation,)
     if len(permutation) > 1:
         return {
-            "penetration_cm": 0,
-            "edge_cm": 0,
-            "linear_attenuation_cm-1": 0,
-            "energy": 0,
-            "pen_attenuation": 0,
-            "pen_prob_remain": 0,
-            "pen_prob_density": 0,
-            "pen_prob_cumu": 0,
-            "edge_attenuation": 0,
-            "edge_prob_remain": 0,
-            "edge_prob_density": 0,
-            "edge_prob_cumu": 0,
-            "inv_pen": 0,
-            "inv_edge": 0,
-            "interpolated_range": 0,
+            "penetration_cm": 0.0,
+            "edge_cm": 0.0,
+            "linear_attenuation_cm-1": 0.0,
+            "energy": 0.0,
+            "pen_attenuation": 0.0,
+            "pen_prob_remain": 0.0,
+            "pen_prob_density": 0.0,
+            "pen_prob_cumu": 0.0,
+            "edge_attenuation": 0.0,
+            "edge_prob_remain": 0.0,
+            "edge_prob_density": 0.0,
+            "edge_prob_cumu": 0.0,
+            "inv_pen": 0.0,
+            "inv_edge": 0.0,
+            "interpolated_range": 0.0,
         }
     linear_attenuation = event.lin_mu_total(
         permutation=permutation, start_point=start_point, start_energy=start_energy
@@ -1580,6 +1732,7 @@ def FOM_features(
     Nmi: int = None,
     eres: float = 1e-3,
     fix_nan: float = 2 * np.pi,
+    columns: Optional[List[str]] = None,
 ) -> Dict:
     """Features for learning a synthetic FOM"""
     if len(permutation) == 1:
@@ -1590,555 +1743,1256 @@ def FOM_features(
         Nmi = len(permutation)
     permutation = tuple(permutation)
 
+    all_columns = False
+    if columns is None:
+        columns = []
+        all_columns = True
+    elif "all" in columns:
+        all_columns = True
+
     features = {}
     # %%
-    r_sum_geo = np.abs(
-        event.res_sum_geo(
-            permutation, start_point=start_point, start_energy=start_energy
+    sum_geo_columns = [
+        "rsg_sum_1",
+        "rsg_sum_1_first",
+        "rsg_mean_1",
+        "rsg_mean_1_first",
+        "rsg_sum_2",
+        "rsg_sum_2_first",
+        "rsg_mean_2",
+        "rsg_mean_2_first",
+        "rsg_norm_2",
+    ]
+    sum_geo_v_columns = [
+        "rsg_wmean_1v",
+        "rsg_wmean_1v_first",
+        "rsg_wmean_2v",
+        "rsg_wmean_2v_first",
+        "rsg_sum_1v",
+        "rsg_sum_1v_first",
+        "rsg_mean_1v",
+        "rsg_mean_1v_first",
+        "rsg_norm_2v",
+        "rsg_sum_2v",
+        "rsg_sum_2v_first",
+        "rsg_mean_2v",
+        "rsg_mean_2v_first",
+    ]
+
+    if all_columns or any(
+        column in sum_geo_columns + sum_geo_v_columns for column in columns
+    ):
+        r_sum_geo = np.abs(
+            event.res_sum_geo(
+                permutation, start_point=start_point, start_energy=start_energy
+            )
         )
-    )
-    r_sum_geo_v = r_sum_geo / np.abs(
-        event.res_sum_geo_sigma(
-            permutation,
-            start_point=start_point,
-            start_energy=start_energy,
-            Nmi=Nmi,
-            eres=eres,
-        )
-    )
+        if all_columns or any(column in sum_geo_v_columns for column in columns):
+            r_sum_geo_v = r_sum_geo / np.abs(
+                event.res_sum_geo_sigma(
+                    permutation,
+                    start_point=start_point,
+                    start_energy=start_energy,
+                    Nmi=Nmi,
+                    eres=eres,
+                )
+            )
 
-    features["rsg_sum_1"] = np.sum(r_sum_geo)
-    features["rsg_sum_1_first"] = r_sum_geo[0]
-    features["rsg_mean_1"] = np.mean(r_sum_geo)
-    features["rsg_mean_1_first"] = r_sum_geo[0] / len(r_sum_geo)
-    features["rsg_wmean_1v"] = np.sum(r_sum_geo_v) / np.sum(r_sum_geo_v / r_sum_geo)
-    features["rsg_wmean_1v_first"] = r_sum_geo_v[0] / (r_sum_geo_v[0] / r_sum_geo[0])
-    features["rsg_norm_2"] = np.sqrt(np.sum(r_sum_geo**2)) / Nmi
+        if all_columns or "rsg_sum_1" in columns:
+            features["rsg_sum_1"] = np.sum(r_sum_geo)
+        if all_columns or "rsg_sum_1_first" in columns:
+            features["rsg_sum_1_first"] = r_sum_geo[0]
+        if all_columns or "rsg_mean_1" in columns:
+            features["rsg_mean_1"] = np.mean(r_sum_geo)
+        if all_columns or "rsg_mean_1_first" in columns:
+            features["rsg_mean_1_first"] = r_sum_geo[0] / len(r_sum_geo)
+        if all_columns or "rsg_wmean_1v" in columns:
+            features["rsg_wmean_1v"] = np.sum(r_sum_geo_v) / np.sum(
+                r_sum_geo_v / r_sum_geo
+            )
+        if all_columns or "rsg_wmean_1v_first" in columns:
+            features["rsg_wmean_1v_first"] = r_sum_geo_v[0] / (
+                r_sum_geo_v[0] / r_sum_geo[0]
+            )
+        if all_columns or "rsg_norm_2" in columns:
+            features["rsg_norm_2"] = np.sqrt(np.sum(r_sum_geo**2)) / Nmi
 
-    features["rsg_sum_2"] = np.sum(r_sum_geo**2)
-    features["rsg_sum_2_first"] = r_sum_geo[0] ** 2
-    features["rsg_mean_2"] = np.mean(r_sum_geo**2)
-    features["rsg_mean_2_first"] = r_sum_geo[0] ** 2 / len(r_sum_geo)
-    features["rsg_wmean_2v"] = np.sum(r_sum_geo_v**2) / np.sum(
-        (r_sum_geo_v / r_sum_geo) ** 2
-    )
-    features["rsg_wmean_2v_first"] = r_sum_geo_v[0] ** 2 / (
-        (r_sum_geo_v[0] / r_sum_geo[0]) ** 2
-    )
+        if all_columns or "rsg_sum_2" in columns:
+            features["rsg_sum_2"] = np.sum(r_sum_geo**2)
+        if all_columns or "rsg_sum_2_first" in columns:
+            features["rsg_sum_2_first"] = r_sum_geo[0] ** 2
+        if all_columns or "rsg_mean_2" in columns:
+            features["rsg_mean_2"] = np.mean(r_sum_geo**2)
+        if all_columns or "rsg_mean_2_first" in columns:
+            features["rsg_mean_2_first"] = r_sum_geo[0] ** 2 / len(r_sum_geo)
+        if all_columns or "rsg_wmean_2v" in columns:
+            features["rsg_wmean_2v"] = np.sum(r_sum_geo_v**2) / np.sum(
+                (r_sum_geo_v / r_sum_geo) ** 2
+            )
+        if all_columns or "rsg_wmean_2v_first" in columns:
+            features["rsg_wmean_2v_first"] = r_sum_geo_v[0] ** 2 / (
+                (r_sum_geo_v[0] / r_sum_geo[0]) ** 2
+            )
 
-    features["rsg_sum_1v"] = np.sum(r_sum_geo_v)
-    features["rsg_sum_1v_first"] = r_sum_geo_v[0]
-    features["rsg_mean_1v"] = np.mean(r_sum_geo_v)
-    features["rsg_mean_1v_first"] = r_sum_geo_v[0] / len(r_sum_geo)
-    features["rsg_norm_2v"] = np.sqrt(np.sum(r_sum_geo_v**2)) / Nmi
+        if all_columns or "rsg_sum_1v" in columns:
+            features["rsg_sum_1v"] = np.sum(r_sum_geo_v)
+        if all_columns or "rsg_sum_1v_first" in columns:
+            features["rsg_sum_1v_first"] = r_sum_geo_v[0]
+        if all_columns or "rsg_mean_1v" in columns:
+            features["rsg_mean_1v"] = np.mean(r_sum_geo_v)
+        if all_columns or "rsg_mean_1v_first" in columns:
+            features["rsg_mean_1v_first"] = r_sum_geo_v[0] / len(r_sum_geo)
+        if all_columns or "rsg_norm_2v" in columns:
+            features["rsg_norm_2v"] = np.sqrt(np.sum(r_sum_geo_v**2)) / Nmi
 
-    features["rsg_sum_2v"] = np.sum(r_sum_geo_v**2)
-    features["rsg_sum_2v_first"] = r_sum_geo_v[0] ** 2
-    features["rsg_mean_2v"] = np.mean(r_sum_geo_v**2)
-    features["rsg_mean_2v_first"] = r_sum_geo_v[0] ** 2 / len(r_sum_geo)
+        if all_columns or "rsg_sum_2v" in columns:
+            features["rsg_sum_2v"] = np.sum(r_sum_geo_v**2)
+        if all_columns or "rsg_sum_2v_first" in columns:
+            features["rsg_sum_2v_first"] = r_sum_geo_v[0] ** 2
+        if all_columns or "rsg_mean_2v" in columns:
+            features["rsg_mean_2v"] = np.mean(r_sum_geo_v**2)
+        if all_columns or "rsg_mean_2v_first" in columns:
+            features["rsg_mean_2v_first"] = r_sum_geo_v[0] ** 2 / len(r_sum_geo)
 
     # %%
-    r_sum_loc = np.abs(
-        event.res_sum_loc(
-            permutation, start_point=start_point, start_energy=start_energy
+    sum_loc_columns = [
+        "rsl_mean_1",
+        "rsl_sum_1",
+        "rsl_norm_2",
+        "rsl_sum_2",
+        "rsl_mean_2",
+    ]
+    sum_loc_v_columns = [
+        "rsl_sum_1v",
+        "rsl_mean_1v",
+        "rsl_norm_2v",
+        "rsl_mean_2v",
+        "rsl_sum_2v",
+        "rsl_wmean_2v",
+        "rsl_wmean_1v",
+    ]
+    if all_columns or any(
+        column in sum_loc_columns + sum_loc_v_columns for column in columns
+    ):
+        r_sum_loc = np.abs(
+            event.res_sum_loc(
+                permutation, start_point=start_point, start_energy=start_energy
+            )
         )
-    )
-    r_sum_loc_v = r_sum_loc / np.abs(
-        event.res_sum_loc_sigma(
-            permutation, start_point=start_point, Nmi=Nmi, eres=eres
-        )
-    )
+        if all_columns or "rsl_mean_1" in columns:
+            features["rsl_mean_1"] = np.mean(r_sum_loc)
+        if all_columns or "rsl_sum_1" in columns:
+            features["rsl_sum_1"] = np.sum(r_sum_loc)
+        if all_columns or "rsl_norm_2" in columns:
+            features["rsl_norm_2"] = np.sqrt(np.sum(r_sum_loc**2)) / Nmi
+        if all_columns or "rsl_sum_2" in columns:
+            features["rsl_sum_2"] = np.sum(r_sum_loc**2)
+        if all_columns or "rsl_mean_2" in columns:
+            features["rsl_mean_2"] = np.mean(r_sum_loc**2)
 
-    features["rsl_sum_1v"] = np.sum(r_sum_loc_v)
-    features["rsl_mean_1v"] = np.mean(r_sum_loc_v)
-    features["rsl_norm_2v"] = np.sqrt(np.mean(r_sum_loc_v**2)) / Nmi
-    features["rsl_mean_2v"] = np.mean(r_sum_loc_v**2)
-    features["rsl_sum_2v"] = np.sum(r_sum_loc_v**2)
-
-    features["rsl_sum_2"] = np.sum(r_sum_loc**2)
-    features["rsl_mean_2"] = np.mean(r_sum_loc**2)
-    features["rsl_wmean_2v"] = np.sum(r_sum_loc_v**2) / np.sum(
-        (r_sum_loc_v / r_sum_loc) ** 2
-    )
-
-    features["rsl_mean_1"] = np.mean(r_sum_loc)
-    features["rsl_sum_1"] = np.sum(r_sum_loc)
-    features["rsl_norm_2"] = np.sqrt(np.sum(r_sum_loc**2)) / Nmi
-    features["rsl_wmean_1v"] = np.sum(r_sum_loc_v) / np.sum(r_sum_loc_v / r_sum_loc)
+        if all_columns or any(column in sum_loc_v_columns for column in columns):
+            r_sum_loc_v = r_sum_loc / np.abs(
+                event.res_sum_loc_sigma(
+                    permutation, start_point=start_point, Nmi=Nmi, eres=eres
+                )
+            )
+            if all_columns or "rsl_sum_1v" in columns:
+                features["rsl_sum_1v"] = np.sum(r_sum_loc_v)
+            if all_columns or "rsl_mean_1v" in columns:
+                features["rsl_mean_1v"] = np.mean(r_sum_loc_v)
+            if all_columns or "rsl_norm_2v" in columns:
+                features["rsl_norm_2v"] = np.sqrt(np.mean(r_sum_loc_v**2)) / Nmi
+            if all_columns or "rsl_mean_2v" in columns:
+                features["rsl_mean_2v"] = np.mean(r_sum_loc_v**2)
+            if all_columns or "rsl_sum_2v" in columns:
+                features["rsl_sum_2v"] = np.sum(r_sum_loc_v**2)
+            if all_columns or "rsl_wmean_2v" in columns:
+                features["rsl_wmean_2v"] = np.sum(r_sum_loc_v**2) / np.sum(
+                    (r_sum_loc_v / r_sum_loc) ** 2
+                )
+            if all_columns or "rsl_wmean_1v" in columns:
+                features["rsl_wmean_1v"] = np.sum(r_sum_loc_v) / np.sum(
+                    r_sum_loc_v / r_sum_loc
+                )
 
     # %%
-    r_loc_geo = np.abs(
-        event.res_loc_geo(
-            permutation, start_point=start_point, start_energy=start_energy
+    local_geo_columns = [
+        "rlg_sum_1",
+        "rlg_mean_1",
+        "rlg_norm_2",
+        "rlg_sum_2",
+        "rlg_mean_2",
+    ]
+    local_geo_v_columns = [
+        "rlg_sum_1v",
+        "rlg_mean_1v",
+        "rlg_norm_2v",
+        "rlg_sum_2v",
+        "rlg_mean_2v",
+        "rlg_wmean_1v",
+        "rlg_wmean_2v",
+    ]
+    if all_columns or any(
+        column in local_geo_columns + local_geo_v_columns for column in columns
+    ):
+        r_loc_geo = np.abs(
+            event.res_loc_geo(
+                permutation, start_point=start_point, start_energy=start_energy
+            )
         )
-    )
-    r_loc_geo_v = r_loc_geo / np.abs(
-        event.res_loc_geo_sigma(
-            permutation,
-            start_point=start_point,
-            start_energy=start_energy,
-            Nmi=Nmi,
-            eres=eres,
-        )
-    )
-
-    features["rlg_sum_1v"] = np.sum(r_loc_geo_v)
-    features["rlg_mean_1v"] = np.mean(r_loc_geo_v)
-    features["rlg_norm_2v"] = np.sqrt(np.mean(r_loc_geo_v**2)) / Nmi
-    features["rlg_sum_2v"] = np.sum(r_loc_geo_v**2)
-    features["rlg_mean_2v"] = np.mean(r_loc_geo_v**2)
-
-    features["rlg_sum_1"] = np.sum(r_loc_geo)
-    features["rlg_mean_1"] = np.mean(r_loc_geo)
-    features["rlg_norm_2"] = np.sqrt(np.sum(r_loc_geo**2)) / Nmi
-    features["rlg_wmean_1v"] = np.sum(r_loc_geo_v) / np.sum(r_loc_geo_v / r_loc_geo)
-
-    features["rlg_sum_2"] = np.sum(r_loc_geo**2)
-    features["rlg_mean_2"] = np.mean(r_loc_geo**2)
-    features["rlg_wmean_2v"] = np.sum(r_loc_geo_v**2) / np.sum(
-        (r_loc_geo_v / r_loc_geo) ** 2
-    )
+        if all_columns or any(column in local_geo_v_columns for column in columns):
+            r_loc_geo_v = r_loc_geo / np.abs(
+                event.res_loc_geo_sigma(
+                    permutation,
+                    start_point=start_point,
+                    start_energy=start_energy,
+                    Nmi=Nmi,
+                    eres=eres,
+                )
+            )
+        if all_columns or "rlg_sum_1v" in columns:
+            features["rlg_sum_1v"] = np.sum(r_loc_geo_v)
+        if all_columns or "rlg_mean_1v" in columns:
+            features["rlg_mean_1v"] = np.mean(r_loc_geo_v)
+        if all_columns or "rlg_norm_2v" in columns:
+            features["rlg_norm_2v"] = np.sqrt(np.mean(r_loc_geo_v**2)) / Nmi
+        if all_columns or "rlg_sum_2v" in columns:
+            features["rlg_sum_2v"] = np.sum(r_loc_geo_v**2)
+        if all_columns or "rlg_mean_2v" in columns:
+            features["rlg_mean_2v"] = np.mean(r_loc_geo_v**2)
+        if all_columns or "rlg_sum_1" in columns:
+            features["rlg_sum_1"] = np.sum(r_loc_geo)
+        if all_columns or "rlg_mean_1" in columns:
+            features["rlg_mean_1"] = np.mean(r_loc_geo)
+        if all_columns or "rlg_norm_2" in columns:
+            features["rlg_norm_2"] = np.sqrt(np.sum(r_loc_geo**2)) / Nmi
+        if all_columns or "rlg_wmean_1v" in columns:
+            features["rlg_wmean_1v"] = np.sum(r_loc_geo_v) / np.sum(
+                r_loc_geo_v / r_loc_geo
+            )
+        if all_columns or "rlg_sum_2" in columns:
+            features["rlg_sum_2"] = np.sum(r_loc_geo**2)
+        if all_columns or "rlg_mean_2" in columns:
+            features["rlg_mean_2"] = np.mean(r_loc_geo**2)
+        if all_columns or "rlg_wmean_2v" in columns:
+            features["rlg_wmean_2v"] = np.sum(r_loc_geo_v**2) / np.sum(
+                (r_loc_geo_v / r_loc_geo) ** 2
+            )
 
     # %% Compton penalty
-    # 1 - 0 indicator of penalty
-    comp_penalty = np.abs(
-        event.compton_penalty(
-            permutation, start_point=start_point, start_energy=start_energy
+    comp_penalty_columns = [
+        "c_penalty_sum_1",
+        "c_penalty_mean_1",
+        "rc_sum_1_penalty_removed",
+        "rc_mean_1_penalty_removed",
+        "rc_sum_2_penalty_removed",
+        "rc_mean_2_penalty_removed",
+        "rc_wmean_1v_penalty_removed",
+        "rc_wmean_2v_penalty_removed",
+        "rc_sum_1v_penalty_removed",
+        "rc_mean_1v_penalty_removed",
+        "rc_sum_2v_penalty_removed",
+        "rc_mean_2v_penalty_removed",
+        "rth_sum_1_penalty_removed",
+        "rth_mean_1_penalty_removed",
+        "rth_sum_2_penalty_removed",
+        "rth_mean_2_penalty_removed",
+        "rth_wmean_1v_penalty_removed",
+        "rth_wmean_2v_penalty_removed",
+        "rth_sum_1v_penalty_removed",
+        "rth_mean_1v_penalty_removed",
+        "rth_sum_2v_penalty_removed",
+        "rth_mean_2v_penalty_removed",
+    ]
+    if all_columns or any(column in comp_penalty_columns for column in columns):
+        # 1 - 0 indicator of penalty
+        comp_penalty = np.abs(
+            event.compton_penalty(
+                permutation, start_point=start_point, start_energy=start_energy
+            )
         )
-    )
+        if all_columns or "c_penalty_sum_1" in columns:
+            features["c_penalty_sum_1"] = np.sum(comp_penalty)
+        if all_columns or "c_penalty_mean_1" in columns:
+            features["c_penalty_mean_1"] = np.mean(comp_penalty)
 
-    # indicator if all of the values require a penalty
-    zeroed = (max(comp_penalty.shape) - np.sum(comp_penalty)) < 1
-
-    # continuous penalty value (max(-1 - cos(theta_theo), 0))
-    comp_penalty_ell = np.abs(
-        event.compton_penalty_ell1(
-            permutation, start_point=start_point, start_energy=start_energy
+    comp_penalty_ell_columns = [
+        "c_penalty_ell_sum_1",
+        "c_penalty_ell_mean_1",
+        "c_penalty_ell_sum_2",
+        "c_penalty_ell_mean_2",
+    ]
+    if all_columns or any(column in comp_penalty_ell_columns for column in columns):
+        # continuous penalty value (max(-1 - cos(theta_theo), 0))
+        comp_penalty_ell = np.abs(
+            event.compton_penalty_ell1(
+                permutation, start_point=start_point, start_energy=start_energy
+            )
         )
-    )
-
-    features["c_penalty_sum_1"] = np.sum(comp_penalty)
-    features["c_penalty_mean_1"] = np.mean(comp_penalty)
-
-    features["c_penalty_ell_sum_1"] = np.sum(comp_penalty_ell)
-    features["c_penalty_ell_mean_1"] = np.mean(comp_penalty_ell)
-
-    features["c_penalty_ell_sum_2"] = np.sum(comp_penalty_ell**2)
-    features["c_penalty_ell_mean_2"] = np.mean(comp_penalty_ell**2)
+        if all_columns or "c_penalty_ell_sum_1" in columns:
+            features["c_penalty_ell_sum_1"] = np.sum(comp_penalty_ell)
+        if all_columns or "c_penalty_ell_mean_1" in columns:
+            features["c_penalty_ell_mean_1"] = np.mean(comp_penalty_ell)
+        if all_columns or "c_penalty_ell_sum_2" in columns:
+            features["c_penalty_ell_sum_2"] = np.sum(comp_penalty_ell**2)
+        if all_columns or "c_penalty_ell_mean_2" in columns:
+            features["c_penalty_ell_mean_2"] = np.mean(comp_penalty_ell**2)
 
     # %%
-    r_cosines = np.abs(
-        event.res_cos(permutation, start_point=start_point, start_energy=start_energy)
-    )
-    r_cosines_v = r_cosines / np.abs(
-        event.res_cos_sigma(
-            permutation,
-            start_point=start_point,
-            start_energy=start_energy,
-            Nmi=Nmi,
-            eres=eres,
+    # columns that use r_cosines
+    cosine_columns = [
+        "rc_sum_1",
+        "rc_mean_1",
+        "rc_norm_2",
+        "rc_sum_2",
+        "rc_mean_2",
+        "rc_sum_1_penalty_removed",
+        "rc_mean_1_penalty_removed",
+        "rc_sum_2_penalty_removed",
+        "rc_mean_2_penalty_removed",
+        "rc_wmean_1v",
+        "rc_wmean_2v",
+        "rc_wmean_1v_penalty_removed",
+        "rc_wmean_2v_penalty_removed",
+    ]
+    # columns that use r_cosines_v
+    cosine_v_columns = [
+        "rc_wmean_1v",
+        "rc_wmean_2v",
+        "rc_sum_1v",
+        "rc_mean_1v",
+        "rc_norm_2v",
+        "rc_sum_2v",
+        "rc_mean_2v",
+        "rc_wmean_1v_penalty_removed",
+        "rc_wmean_2v_penalty_removed",
+        "rc_sum_1v_penalty_removed",
+        "rc_mean_1v_penalty_removed",
+        "rc_sum_2v_penalty_removed",
+        "rc_mean_2v_penalty_removed",
+    ]
+    if all_columns or any(
+        column in cosine_columns + cosine_v_columns for column in columns
+    ):
+        r_cosines = np.abs(
+            event.res_cos(
+                permutation, start_point=start_point, start_energy=start_energy
+            )
         )
-    )
+        if all_columns or "rc_sum_1" in columns:
+            features["rc_sum_1"] = np.sum(r_cosines)
+        if all_columns or "rc_mean_1" in columns:
+            features["rc_mean_1"] = np.mean(r_cosines)
+        if all_columns or "rc_norm_2" in columns:
+            features["rc_norm_2"] = np.sqrt(np.sum(r_cosines**2)) / Nmi
+        if all_columns or "rc_sum_2" in columns:
+            features["rc_sum_2"] = np.sum(r_cosines**2)
+        if all_columns or "rc_mean_2" in columns:
+            features["rc_mean_2"] = np.mean(r_cosines**2)
+        if all_columns or "rc_sum_1_penalty_removed" in columns:
+            features["rc_sum_1_penalty_removed"] = np.sum(
+                r_cosines * (1 - comp_penalty)
+            )
+        if all_columns or "rc_mean_1_penalty_removed" in columns:
+            features["rc_mean_1_penalty_removed"] = np.mean(
+                r_cosines * (1 - comp_penalty)
+            )
+
+    if all_columns or any(column in cosine_v_columns for column in columns):
+        r_cosines_v = r_cosines / np.abs(
+            event.res_cos_sigma(
+                permutation,
+                start_point=start_point,
+                start_energy=start_energy,
+                Nmi=Nmi,
+                eres=eres,
+            )
+        )
+        if all_columns or "rc_wmean_1v" in columns:
+            features["rc_wmean_1v"] = np.sum(r_cosines_v) / np.sum(
+                r_cosines_v / r_cosines
+            )
+        if all_columns or "rc_wmean_2v" in columns:
+            features["rc_wmean_2v"] = np.sum(r_cosines_v**2) / np.sum(
+                (r_cosines_v / r_cosines) ** 2
+            )
+        if all_columns or "rc_sum_1v" in columns:
+            features["rc_sum_1v"] = np.sum(r_cosines_v)
+        if all_columns or "rc_mean_1v" in columns:
+            features["rc_mean_1v"] = np.mean(r_cosines_v)
+        if all_columns or "rc_norm_2v" in columns:
+            features["rc_norm_2v"] = np.sqrt(np.sum(r_cosines_v**2)) / Nmi
+        if all_columns or "rc_sum_2v" in columns:
+            features["rc_sum_2v"] = np.sum(r_cosines_v**2)
+        if all_columns or "rc_mean_2v" in columns:
+            features["rc_mean_2v"] = np.mean(r_cosines_v**2)
+        if all_columns or "rc_wmean_1v_penalty_removed" in columns:
+            if not (max(comp_penalty.shape) - np.sum(comp_penalty)) < 1:  # zeroed:
+                features["rc_wmean_1v_penalty_removed"] = np.sum(
+                    r_cosines_v * (1 - comp_penalty)
+                ) / np.sum(r_cosines_v / r_cosines * (1 - comp_penalty))
+            else:
+                features["rc_wmean_1v_penalty_removed"] = 0.0
+        if all_columns or "rc_wmean_2v_penalty_removed" in columns:
+            if not (max(comp_penalty.shape) - np.sum(comp_penalty)) < 1:  # zeroed:
+                features["rc_wmean_2v_penalty_removed"] = np.sum(
+                    r_cosines_v**2 * (1 - comp_penalty)
+                ) / np.sum((r_cosines_v / r_cosines * (1 - comp_penalty)) ** 2)
+            else:
+                features["rc_wmean_2v_penalty_removed"] = 0.0
+        if all_columns or "rc_sum_1v_penalty_removed" in columns:
+            features["rc_sum_1v_penalty_removed"] = np.sum(
+                r_cosines_v * (1 - comp_penalty)
+            )
+        if all_columns or "rc_mean_1v_penalty_removed" in columns:
+            features["rc_mean_1v_penalty_removed"] = np.mean(
+                r_cosines_v * (1 - comp_penalty)
+            )
+        if all_columns or "rc_sum_2v_penalty_removed" in columns:
+            features["rc_sum_2v_penalty_removed"] = np.sum(
+                r_cosines_v**2 * (1 - comp_penalty)
+            )
+        if all_columns or "rc_mean_2v_penalty_removed" in columns:
+            features["rc_mean_2v_penalty_removed"] = np.mean(
+                r_cosines_v**2 * (1 - comp_penalty)
+            )
 
     # %%
-    r_cosines_cap = np.abs(
-        event.res_cos_cap(
-            permutation, start_point=start_point, start_energy=start_energy
+    cosine_cap_columns = [
+        "rc_cap_sum_1",
+        "rc_cap_mean_1",
+        "rc_cap_norm_2",
+        "rc_cap_sum_2",
+        "rc_cap_mean_2",
+        "rc_cap_wmean_1v",
+        "rc_cap_wmean_2v",
+    ]
+
+    cosine_cap_v_columns = [
+        "rc_cap_wmean_1v",
+        "rc_cap_wmean_2v",
+        "rc_cap_sum_1v",
+        "rc_cap_mean_1v",
+        "rc_cap_norm_2v",
+        "rc_cap_sum_2v",
+        "rc_cap_mean_2v",
+    ]
+    if all_columns or any(
+        column in cosine_cap_columns + cosine_cap_v_columns for column in columns
+    ):
+        r_cosines_cap = np.abs(
+            event.res_cos_cap(
+                permutation, start_point=start_point, start_energy=start_energy
+            )
         )
-    )
-    r_cosines_cap_v = r_cosines_cap / np.abs(
-        event.res_cos_sigma(
-            permutation,
-            start_point=start_point,
-            start_energy=start_energy,
-            Nmi=Nmi,
-            eres=eres,
+        if all_columns or "rc_cap_sum_1" in columns:
+            features["rc_cap_sum_1"] = np.sum(r_cosines_cap)
+        if all_columns or "rc_cap_mean_1" in columns:
+            features["rc_cap_mean_1"] = np.mean(r_cosines_cap)
+        if all_columns or "rc_cap_norm_2" in columns:
+            features["rc_cap_norm_2"] = np.sqrt(np.sum(r_cosines_cap**2)) / Nmi
+        if all_columns or "rc_cap_sum_2" in columns:
+            features["rc_cap_sum_2"] = np.sum(r_cosines_cap**2)
+        if all_columns or "rc_cap_mean_2" in columns:
+            features["rc_cap_mean_2"] = np.mean(r_cosines_cap**2)
+
+    cosine_cap_v_columns = [
+        "rc_cap_wmean_1v",
+        "rc_cap_wmean_2v",
+        "rc_cap_sum_1v",
+        "rc_cap_mean_1v",
+        "rc_cap_norm_2v",
+        "rc_cap_sum_2v",
+        "rc_cap_mean_2v",
+    ]
+    if all_columns or any(column in cosine_cap_v_columns for column in columns):
+        r_cosines_cap_v = r_cosines_cap / np.abs(
+            event.res_cos_sigma(
+                permutation,
+                start_point=start_point,
+                start_energy=start_energy,
+                Nmi=Nmi,
+                eres=eres,
+            )
         )
-    )
+        if all_columns or "rc_cap_wmean_1v" in columns:
+            features["rc_cap_wmean_1v"] = np.sum(r_cosines_cap_v) / np.sum(
+                r_cosines_cap_v / r_cosines_cap
+            )
+        if all_columns or "rc_cap_wmean_2v" in columns:
+            features["rc_cap_wmean_2v"] = np.sum(r_cosines_cap_v**2) / np.sum(
+                (r_cosines_cap_v / r_cosines_cap) ** 2
+            )
+        if all_columns or "rc_cap_sum_1v" in columns:
+            features["rc_cap_sum_1v"] = np.sum(r_cosines_cap_v)
+        if all_columns or "rc_cap_mean_1v" in columns:
+            features["rc_cap_mean_1v"] = np.mean(r_cosines_cap_v)
+        if all_columns or "rc_cap_norm_2v" in columns:
+            features["rc_cap_norm_2v"] = np.sqrt(np.sum(r_cosines_cap_v**2)) / Nmi
+        if all_columns or "rc_cap_sum_2v" in columns:
+            features["rc_cap_sum_2v"] = np.sum(r_cosines_cap_v**2)
+        if all_columns or "rc_cap_mean_2v" in columns:
+            features["rc_cap_mean_2v"] = np.mean(r_cosines_cap_v**2)
 
     # %%
-    r_theta = np.abs(
-        event.res_theta(permutation, start_point=start_point, start_energy=start_energy)
-    )
-    r_theta_v = r_theta / np.abs(
-        event.res_theta_sigma(
-            permutation,
-            start_point=start_point,
-            start_energy=start_energy,
-            Nmi=Nmi,
-            eres=eres,
+    theta_columns = [
+        "rth_sum_1",
+        "rth_mean_1",
+        "rth_norm_2",
+        "rth_sum_2",
+        "rth_mean_2",
+        "rth_wmean_1v",
+        "rth_wmean_2v",
+        "rth_sum_1_penalty_removed",
+        "rth_mean_1_penalty_removed",
+        "rth_sum_2_penalty_removed",
+        "rth_mean_2_penalty_removed",
+    ]
+    theta_v_columns = [
+        "rth_wmean_1v",
+        "rth_wmean_2v",
+        "rth_sum_1v",
+        "rth_mean_1v",
+        "rth_norm_2v",
+        "rth_sum_2v",
+        "rth_mean_2v",
+        "rth_sum_1v_penalty_removed",
+        "rth_mean_1v_penalty_removed",
+        "rth_sum_2v_penalty_removed",
+        "rth_mean_2v_penalty_removed",
+        "rth_wmean_1v_penalty_removed",
+        "rth_wmean_2v_penalty_removed",
+    ]
+    if all_columns or any(
+        column in theta_columns + theta_v_columns for column in columns
+    ):
+        r_theta = np.abs(
+            event.res_theta(
+                permutation, start_point=start_point, start_energy=start_energy
+            )
         )
-    )
+        # Deal with NaN values
+        if fix_nan > 0:
+            r_theta[np.isnan(r_theta)] = fix_nan
 
-    # %% Deal with NaN values
-    if fix_nan > 0:
-        r_theta[np.isnan(r_theta)] = fix_nan
-        r_theta_v[np.isnan(r_theta_v)] = fix_nan
+        if all_columns or "rth_sum_1" in columns:
+            features["rth_sum_1"] = np.sum(r_theta)
+        if all_columns or "rth_mean_1" in columns:
+            features["rth_mean_1"] = np.mean(r_theta)
+        if all_columns or "rth_norm_2" in columns:
+            features["rth_norm_2"] = np.sqrt(np.sum(r_theta**2)) / Nmi
+        if all_columns or "rth_sum_2" in columns:
+            features["rth_sum_2"] = np.sum(r_theta**2)
+        if all_columns or "rth_mean_2" in columns:
+            features["rth_mean_2"] = np.mean(r_theta**2)
+        if all_columns or "rth_sum_1_penalty_removed" in columns:
+            features["rth_sum_1_penalty_removed"] = np.sum(r_theta * (1 - comp_penalty))
+        if all_columns or "rth_mean_1_penalty_removed" in columns:
+            features["rth_mean_1_penalty_removed"] = np.mean(
+                r_theta * (1 - comp_penalty)
+            )
+        if all_columns or "rth_sum_2_penalty_removed" in columns:
+            features["rth_sum_2_penalty_removed"] = np.sum(
+                r_theta**2 * (1 - comp_penalty)
+            )
+        if all_columns or "rth_mean_2_penalty_removed" in columns:
+            features["rth_mean_2_penalty_removed"] = np.mean(
+                r_theta**2 * (1 - comp_penalty)
+            )
+
+    if all_columns or any(column in theta_v_columns for column in columns):
+        r_theta_v = r_theta / np.abs(
+            event.res_theta_sigma(
+                permutation,
+                start_point=start_point,
+                start_energy=start_energy,
+                Nmi=Nmi,
+                eres=eres,
+            )
+        )
+        # Deal with NaN values
+        if fix_nan > 0:
+            r_theta_v[np.isnan(r_theta_v)] = fix_nan
+
+        if all_columns or "rth_wmean_1v" in columns:
+            features["rth_wmean_1v"] = np.sum(r_theta_v) / np.sum(r_theta_v / r_theta)
+        if all_columns or "rth_wmean_2v" in columns:
+            features["rth_wmean_2v"] = np.sum(r_theta_v**2) / np.sum(
+                (r_theta_v / r_theta) ** 2
+            )
+        if all_columns or "rth_sum_1v" in columns:
+            features["rth_sum_1v"] = np.sum(r_theta_v)
+        if all_columns or "rth_mean_1v" in columns:
+            features["rth_mean_1v"] = np.mean(r_theta_v)
+        if all_columns or "rth_norm_2v" in columns:
+            features["rth_norm_2v"] = np.sqrt(np.sum(r_theta_v**2)) / Nmi
+        if all_columns or "rth_sum_2v" in columns:
+            features["rth_sum_2v"] = np.sum(r_theta_v**2)
+        if all_columns or "rth_mean_2v" in columns:
+            features["rth_mean_2v"] = np.mean(r_theta_v**2)
+        if all_columns or "rth_sum_1v_penalty_removed" in columns:
+            features["rth_sum_1v_penalty_removed"] = np.sum(
+                r_theta_v * (1 - comp_penalty)
+            )
+        if all_columns or "rth_mean_1v_penalty_removed" in columns:
+            features["rth_mean_1v_penalty_removed"] = np.mean(
+                r_theta_v * (1 - comp_penalty)
+            )
+        if all_columns or "rth_sum_2v_penalty_removed" in columns:
+            features["rth_sum_2v_penalty_removed"] = np.sum(
+                r_theta_v**2 * (1 - comp_penalty)
+            )
+        if all_columns or "rth_mean_2v_penalty_removed" in columns:
+            features["rth_mean_2v_penalty_removed"] = np.mean(
+                r_theta_v**2 * (1 - comp_penalty)
+            )
+        if all_columns or "rth_wmean_1v_penalty_removed" in columns:
+            if not (max(comp_penalty.shape) - np.sum(comp_penalty)) < 1:  # zeroed:
+                features["rth_wmean_1v_penalty_removed"] = np.sum(
+                    r_theta_v * (1 - comp_penalty)
+                ) / np.sum(r_theta_v / r_theta * (1 - comp_penalty))
+            else:
+                features["rth_wmean_1v_penalty_removed"] = 0.0
+        if all_columns or "rth_wmean_2v_penalty_removed" in columns:
+            if not (max(comp_penalty.shape) - np.sum(comp_penalty)) < 1:  # zeroed:
+                features["rth_wmean_2v_penalty_removed"] = np.sum(
+                    r_theta_v**2 * (1 - comp_penalty)
+                ) / np.sum((r_theta_v / r_theta * (1 - comp_penalty)) ** 2)
+            else:
+                features["rth_wmean_2v_penalty_removed"] = 0.0
 
     # %%
-    r_theta_cap = np.abs(
-        event.res_theta_cap(
-            permutation, start_point=start_point, start_energy=start_energy
+    theta_cap_columns = [
+        "rth_cap_sum_1",
+        "rth_cap_mean_1",
+        "rth_cap_mean_1",
+        "rth_cap_norm_2",
+        "rth_cap_sum_2",
+        "rth_cap_mean_2",
+        "rth_cap_wmean_1v",
+        "rth_cap_wmean_2v",
+    ]
+    theta_cap_v_columns = [
+        "rth_cap_wmean_1v",
+        "rth_cap_wmean_2v",
+        "rth_cap_sum_1v",
+        "rth_cap_mean_1v",
+        "rth_cap_norm_2v",
+        "rth_cap_sum_2v",
+        "rth_cap_mean_2v",
+    ]
+    if all_columns or any(
+        column in theta_cap_columns + theta_cap_v_columns for column in columns
+    ):
+        r_theta_cap = np.abs(
+            event.res_theta_cap(
+                permutation, start_point=start_point, start_energy=start_energy
+            )
         )
-    )
-    r_theta_cap_v = r_theta_cap / np.abs(
-        event.res_theta_sigma(
-            permutation,
-            start_point=start_point,
-            start_energy=start_energy,
-            Nmi=Nmi,
-            eres=eres,
+        if all_columns or "rth_cap_sum_1" in columns:
+            features["rth_cap_sum_1"] = np.sum(r_theta_cap)
+        if all_columns or "rth_cap_mean_1" in columns:
+            features["rth_cap_mean_1"] = np.mean(r_theta_cap)
+        if all_columns or "rth_cap_norm_2" in columns:
+            features["rth_cap_norm_2"] = np.sqrt(np.sum(r_theta_cap**2)) / Nmi
+        if all_columns or "rth_cap_sum_2" in columns:
+            features["rth_cap_sum_2"] = np.sum(r_theta_cap**2)
+        if all_columns or "rth_cap_mean_2" in columns:
+            features["rth_cap_mean_2"] = np.mean(r_theta_cap**2)
+
+    if all_columns or any(column in theta_cap_v_columns for column in columns):
+        r_theta_cap_v = r_theta_cap / np.abs(
+            event.res_theta_sigma(
+                permutation,
+                start_point=start_point,
+                start_energy=start_energy,
+                Nmi=Nmi,
+                eres=eres,
+            )
         )
-    )
-
-    features["rc_sum_1"] = np.sum(r_cosines)
-    features["rc_mean_1"] = np.mean(r_cosines)
-    features["rc_wmean_1v"] = np.sum(r_cosines_v) / np.sum(r_cosines_v / r_cosines)
-    features["rc_norm_2"] = np.sqrt(np.sum(r_cosines**2)) / Nmi
-
-    features["rc_sum_2"] = np.sum(r_cosines**2)
-    features["rc_mean_2"] = np.mean(r_cosines**2)
-    features["rc_wmean_2v"] = np.sum(r_cosines_v**2) / np.sum(
-        (r_cosines_v / r_cosines) ** 2
-    )
-
-    features["rc_sum_1v"] = np.sum(r_cosines_v)
-    features["rc_mean_1v"] = np.mean(r_cosines_v)
-    features["rc_norm_2v"] = np.sqrt(np.sum(r_cosines_v**2)) / Nmi
-
-    features["rc_sum_2v"] = np.sum(r_cosines_v**2)
-    features["rc_mean_2v"] = np.mean(r_cosines_v**2)
-
-    features["rc_cap_sum_1"] = np.sum(r_cosines_cap)
-    features["rc_cap_mean_1"] = np.mean(r_cosines_cap)
-    features["rc_cap_wmean_1v"] = np.sum(r_cosines_cap_v) / np.sum(
-        r_cosines_cap_v / r_cosines_cap
-    )
-    features["rc_cap_norm_2"] = np.sqrt(np.sum(r_cosines_cap**2)) / Nmi
-
-    features["rc_cap_sum_2"] = np.sum(r_cosines_cap**2)
-    features["rc_cap_mean_2"] = np.mean(r_cosines_cap**2)
-    features["rc_cap_wmean_2v"] = np.sum(r_cosines_cap_v**2) / np.sum(
-        (r_cosines_cap_v / r_cosines_cap) ** 2
-    )
-    features["rc_sum_1_penalty_removed"] = np.sum(r_cosines * (1 - comp_penalty))
-    features["rc_mean_1_penalty_removed"] = np.mean(r_cosines * (1 - comp_penalty))
-    features["rc_sum_2_penalty_removed"] = np.sum(r_cosines**2 * (1 - comp_penalty))
-    features["rc_mean_2_penalty_removed"] = np.mean(r_cosines**2 * (1 - comp_penalty))
-    if not zeroed:
-        features["rc_wmean_1v_penalty_removed"] = np.sum(
-            r_cosines_v * (1 - comp_penalty)
-        ) / np.sum(r_cosines_v / r_cosines * (1 - comp_penalty))
-        features["rc_wmean_2v_penalty_removed"] = np.sum(
-            r_cosines_v**2 * (1 - comp_penalty)
-        ) / np.sum((r_cosines_v / r_cosines * (1 - comp_penalty)) ** 2)
-    else:
-        features["rc_wmean_1v_penalty_removed"] = 0.0
-        features["rc_wmean_2v_penalty_removed"] = 0.0
-
-    features["rc_cap_sum_1v"] = np.sum(r_cosines_cap_v)
-    features["rc_cap_mean_1v"] = np.mean(r_cosines_cap_v)
-    features["rc_cap_norm_2v"] = np.sqrt(np.sum(r_cosines_cap_v**2)) / Nmi
-
-    features["rc_cap_sum_2v"] = np.sum(r_cosines_cap_v**2)
-    features["rc_cap_mean_2v"] = np.mean(r_cosines_cap_v**2)
-
-    features["rc_sum_1v_penalty_removed"] = np.sum(r_cosines_v * (1 - comp_penalty))
-    features["rc_mean_1v_penalty_removed"] = np.mean(r_cosines_v * (1 - comp_penalty))
-    features["rc_sum_2v_penalty_removed"] = np.sum(
-        r_cosines_v**2 * (1 - comp_penalty)
-    )
-    features["rc_mean_2v_penalty_removed"] = np.mean(
-        r_cosines_v**2 * (1 - comp_penalty)
-    )
-
-    features["rth_sum_1"] = np.sum(r_theta)
-    features["rth_mean_1"] = np.mean(r_theta)
-    features["rth_wmean_1v"] = np.sum(r_theta_v) / np.sum(r_theta_v / r_theta)
-    features["rth_norm_2"] = np.sqrt(np.sum(r_theta**2)) / Nmi
-
-    features["rth_sum_2"] = np.sum(r_theta**2)
-    features["rth_mean_2"] = np.mean(r_theta**2)
-    features["rth_wmean_2v"] = np.sum(r_theta_v**2) / np.sum(
-        (r_theta_v / r_theta) ** 2
-    )
-
-    features["rth_sum_1v"] = np.sum(r_theta_v)
-    features["rth_mean_1v"] = np.mean(r_theta_v)
-    features["rth_norm_2v"] = np.sqrt(np.sum(r_theta_v**2)) / Nmi
-
-    features["rth_sum_2v"] = np.sum(r_theta_v**2)
-    features["rth_mean_2v"] = np.mean(r_theta_v**2)
-
-    features["rth_cap_sum_1"] = np.sum(r_theta_cap)
-    features["rth_cap_mean_1"] = np.mean(r_theta_cap)
-    features["rth_cap_wmean_1v"] = np.sum(r_theta_cap_v) / np.sum(
-        r_theta_cap_v / r_theta_cap
-    )
-    features["rth_cap_norm_2"] = np.sqrt(np.sum(r_theta_cap**2)) / Nmi
-
-    features["rth_cap_sum_2"] = np.sum(r_theta_cap**2)
-    features["rth_cap_mean_2"] = np.mean(r_theta_cap**2)
-    features["rth_cap_wmean_2v"] = np.sum(r_theta_cap_v**2) / np.sum(
-        (r_theta_cap_v / r_theta_cap) ** 2
-    )
-
-    features["rth_sum_1_penalty_removed"] = np.sum(r_theta * (1 - comp_penalty))
-    features["rth_mean_1_penalty_removed"] = np.mean(r_theta * (1 - comp_penalty))
-    features["rth_sum_2_penalty_removed"] = np.sum(r_theta**2 * (1 - comp_penalty))
-    features["rth_mean_2_penalty_removed"] = np.mean(r_theta**2 * (1 - comp_penalty))
-    if not zeroed:
-        features["rth_wmean_1v_penalty_removed"] = np.sum(
-            r_theta_v * (1 - comp_penalty)
-        ) / np.sum(r_theta_v / r_theta * (1 - comp_penalty))
-        features["rth_wmean_2v_penalty_removed"] = np.sum(
-            r_theta_v**2 * (1 - comp_penalty)
-        ) / np.sum((r_theta_v / r_theta * (1 - comp_penalty)) ** 2)
-    else:
-        features["rth_wmean_1v_penalty_removed"] = 0.0
-        features["rth_wmean_2v_penalty_removed"] = 0.0
-
-    features["rth_cap_sum_1v"] = np.sum(r_theta_cap_v)
-    features["rth_cap_mean_1v"] = np.mean(r_theta_cap_v)
-    features["rth_cap_norm_2v"] = np.sqrt(np.sum(r_theta_cap_v**2)) / Nmi
-
-    features["rth_cap_sum_2v"] = np.sum(r_theta_cap_v**2)
-    features["rth_cap_mean_2v"] = np.mean(r_theta_cap_v**2)
-
-    features["rth_sum_1v_penalty_removed"] = np.sum(r_theta_v * (1 - comp_penalty))
-    features["rth_mean_1v_penalty_removed"] = np.mean(r_theta_v * (1 - comp_penalty))
-    features["rth_sum_2v_penalty_removed"] = np.sum(r_theta_v**2 * (1 - comp_penalty))
-    features["rth_mean_2v_penalty_removed"] = np.mean(
-        r_theta_v**2 * (1 - comp_penalty)
-    )
+        if all_columns or "rth_cap_wmean_1v" in columns:
+            features["rth_cap_wmean_1v"] = np.sum(r_theta_cap_v) / np.sum(
+                r_theta_cap_v / r_theta_cap
+            )
+        if all_columns or "rth_cap_wmean_2v" in columns:
+            features["rth_cap_wmean_2v"] = np.sum(r_theta_cap_v**2) / np.sum(
+                (r_theta_cap_v / r_theta_cap) ** 2
+            )
+        if all_columns or "rth_cap_sum_1v" in columns:
+            features["rth_cap_sum_1v"] = np.sum(r_theta_cap_v)
+        if all_columns or "rth_cap_mean_1v" in columns:
+            features["rth_cap_mean_1v"] = np.mean(r_theta_cap_v)
+        if all_columns or "rth_cap_norm_2v" in columns:
+            features["rth_cap_norm_2v"] = np.sqrt(np.sum(r_theta_cap_v**2)) / Nmi
+        if all_columns or "rth_cap_sum_2v" in columns:
+            features["rth_cap_sum_2v"] = np.sum(r_theta_cap_v**2)
+        if all_columns or "rth_cap_mean_2v" in columns:
+            features["rth_cap_mean_2v"] = np.mean(r_theta_cap_v**2)
 
     # %% Distances (Euclidean and Germanium)
-    distances = event.distance_perm(permutation, start_point=start_point)
-    ge_distances = event.ge_distance_perm(permutation, start_point=start_point)
+    distance_columns = [
+        "distances_sum",
+        "distances_mean",
+        "cross_abs_dist_sum",
+        "cross_abs_dist_final",
+        "cross_abs_dist_mean",
+        "cross_abs_dist_max",
+        "cross_abs_dist_min",
+        "cross_compt_dist_sum",
+        "cross_compt_dist_mean",
+        "cross_compt_dist_max",
+        "cross_compt_dist_min",
+        "cross_compt_dist_sum_nonfinal",
+        "cross_compt_dist_mean_nonfinal",
+        "cross_compt_dist_min_nonfinal",
+        "cross_total_dist_sum",
+        "cross_total_dist_mean",
+        "cross_total_dist_max",
+        "cross_total_dist_min",
+        # "cross_pair_dist_sum",  # not computed
+        # "cross_pair_dist_mean",  # not computed
+        # "cross_pair_dist_max",  # not computed
+        # "cross_pair_dist_min",  # not computed
+    ]
+    if all_columns or any(column in distance_columns for column in columns):
+        distances = event.distance_perm(permutation, start_point=start_point)
+        if all_columns or "distances_sum" in columns:
+            features["distances_sum"] = np.sum(distances)
+        if all_columns or "distances_mean" in columns:
+            features["distances_mean"] = np.mean(distances)
 
-    features["distances_sum"] = np.sum(distances)
-    features["distances_mean"] = np.mean(distances)
-    features["ge_distances_sum"] = np.sum(ge_distances)
-    features["ge_distances_mean"] = np.mean(ge_distances)
+    ge_distance_columns = [
+        "ge_distances_sum",
+        "ge_distances_mean",
+        "cross_abs_ge_dist_sum",
+        "cross_abs_ge_dist_final",
+        "cross_abs_ge_dist_mean",
+        "cross_abs_ge_dist_max",
+        "cross_abs_ge_dist_min",
+        "cross_compt_ge_dist_sum",
+        "cross_compt_ge_dist_mean",
+        "cross_compt_ge_dist_max",
+        "cross_compt_ge_dist_min",
+        "cross_compt_ge_dist_sum_nonfinal",
+        "cross_compt_ge_dist_mean_nonfinal",
+        "cross_compt_ge_dist_min_nonfinal",
+        "cross_total_ge_dist_sum",
+        "cross_total_ge_dist_mean",
+        "cross_total_ge_dist_max",
+        "cross_total_ge_dist_min",
+        # "cross_pair_ge_dist_sum",  # not computed
+        # "cross_pair_ge_dist_mean",  # not computed
+        # "cross_pair_ge_dist_max",  # not computed
+        # "cross_pair_ge_dist_min",  # not computed
+    ]
+    if all_columns or any(column in ge_distance_columns for column in columns):
+        ge_distances = event.ge_distance_perm(permutation, start_point=start_point)
+        if all_columns or "ge_distances_sum" in columns:
+            features["ge_distances_sum"] = np.sum(ge_distances)
+        if all_columns or "ge_distances_mean" in columns:
+            features["ge_distances_mean"] = np.mean(ge_distances)
 
     # %% Attenuation coefficients and cross-sections
-    cross_abs = event.linear_attenuation_abs(
-        permutation, start_point=start_point, start_energy=start_energy
-    )
-    cross_compt = event.linear_attenuation_compt(
-        permutation, start_point=start_point, start_energy=start_energy
-    )
-    cross_pair = event.linear_attenuation_pair(
-        permutation, start_point=start_point, start_energy=start_energy
-    )
+    cross_total_columns = [
+        "p_abs_sum",
+        "p_abs_final",
+        "p_abs_mean",
+        "p_abs_max",
+        "p_abs_min",
+        "-log_p_abs_sum",
+        "-log_p_abs_final",
+        "-log_p_abs_mean",
+        "-log_p_abs_max",
+        "-log_p_abs_min",
+        "p_compt_sum",
+        "p_compt_mean",
+        "p_compt_max",
+        "p_compt_min",
+        "p_compt_sum_nonfinal",
+        "p_compt_mean_nonfinal",
+        "p_compt_min_nonfinal",
+        "-log_p_compt_sum",
+        "-log_p_compt_mean",
+        "-log_p_compt_max",
+        "-log_p_compt_min",
+        "-log_p_compt_sum_nonfinal",
+        "-log_p_compt_mean_nonfinal",
+        "-log_p_compt_mean_nonfinal",
+        "-log_p_compt_min_nonfinal",
+        # "p_pair_sum",
+        # "p_pair_mean",
+        # "p_pair_max",
+        # "p_pair_min",
+        # "-log_p_pair_sum",
+        # "-log_p_pair_mean",
+        # "-log_p_pair_max",
+        # "-log_p_pair_min",
+        "cross_total_sum",
+        "cross_total_mean",
+        "cross_total_max",
+        "cross_total_ge_dist_sum",
+        "cross_total_ge_dist_mean",
+        "cross_total_ge_dist_max",
+        "cross_total_dist_sum",
+        "cross_total_dist_mean",
+        "cross_total_dist_max",
+        "cross_total_min",
+        "cross_total_ge_dist_min",
+        "cross_total_dist_min",
+    ]
 
-    cross_total = cross_abs + cross_compt + cross_pair
+    cross_abs_columns = [
+        "cross_abs_sum",
+        "cross_abs_final",
+        "cross_abs_mean",
+        "cross_abs_max",
+        "cross_abs_ge_dist_sum",
+        "cross_abs_ge_dist_final",
+        "cross_abs_ge_dist_mean",
+        "cross_abs_ge_dist_max",
+        "cross_abs_dist_sum",
+        "cross_abs_dist_final",
+        "cross_abs_dist_mean",
+        "cross_abs_dist_max",
+        "cross_abs_min",
+        "cross_abs_ge_dist_min",
+        "cross_abs_dist_min",
+    ]
+    if all_columns or any(
+        (column in cross_abs_columns) or (column in cross_total_columns)
+        for column in columns
+    ):
+        cross_abs = event.linear_attenuation_abs(
+            permutation, start_point=start_point, start_energy=start_energy
+        )
+        if all_columns or "cross_abs_sum" in columns:
+            features["cross_abs_sum"] = np.sum(cross_abs)
+        if all_columns or "cross_abs_final" in columns:
+            features["cross_abs_final"] = cross_abs[-1]
+        if all_columns or "cross_abs_mean" in columns:
+            features["cross_abs_mean"] = np.mean(cross_abs)
+        if all_columns or "cross_abs_max" in columns:
+            features["cross_abs_max"] = np.max(cross_abs)
+        if all_columns or "cross_abs_ge_dist_sum" in columns:
+            features["cross_abs_ge_dist_sum"] = np.sum(cross_abs * ge_distances)
+        if all_columns or "cross_abs_ge_dist_final" in columns:
+            features["cross_abs_ge_dist_final"] = cross_abs[-1] * ge_distances[-1]
+        if all_columns or "cross_abs_ge_dist_mean" in columns:
+            features["cross_abs_ge_dist_mean"] = np.mean(cross_abs * ge_distances)
+        if all_columns or "cross_abs_ge_dist_max" in columns:
+            features["cross_abs_ge_dist_max"] = np.max(cross_abs * ge_distances)
+        if all_columns or "cross_abs_dist_sum" in columns:
+            features["cross_abs_dist_sum"] = np.sum(cross_abs * distances)
+        if all_columns or "cross_abs_dist_final" in columns:
+            features["cross_abs_dist_final"] = cross_abs[-1] * distances[-1]
+        if all_columns or "cross_abs_dist_mean" in columns:
+            features["cross_abs_dist_mean"] = np.mean(cross_abs * distances)
+        if all_columns or "cross_abs_dist_max" in columns:
+            features["cross_abs_dist_max"] = np.max(cross_abs * distances)
+        if all_columns or "cross_abs_min" in columns:
+            features["cross_abs_min"] = np.min(cross_abs)
+        if all_columns or "cross_abs_ge_dist_min" in columns:
+            features["cross_abs_ge_dist_min"] = np.min(cross_abs * ge_distances)
+        if all_columns or "cross_abs_dist_min" in columns:
+            features["cross_abs_dist_min"] = np.min(cross_abs * distances)
 
-    features["cross_abs_sum"] = np.sum(cross_abs)
-    features["cross_abs_final"] = cross_abs[-1]
-    features["cross_abs_mean"] = np.mean(cross_abs)
-    features["cross_abs_max"] = np.max(cross_abs)
+    cross_compt_columns = [
+        "cross_compt_sum",
+        "cross_compt_mean",
+        "cross_compt_max",
+        "cross_compt_ge_dist_sum",
+        "cross_compt_ge_dist_mean",
+        "cross_compt_ge_dist_max",
+        "cross_compt_dist_sum",
+        "cross_compt_dist_mean",
+        "cross_compt_dist_max",
+        "cross_compt_min",
+        "cross_compt_ge_dist_min",
+        "cross_compt_dist_min",
+        "cross_compt_sum_nonfinal",
+        "cross_compt_mean_nonfinal",
+        "cross_compt_min_nonfinal",
+        "cross_compt_dist_sum_nonfinal",
+        "cross_compt_dist_mean_nonfinal",
+        "cross_compt_dist_min_nonfinal",
+        "cross_compt_ge_dist_sum_nonfinal",
+        "cross_compt_ge_dist_mean_nonfinal",
+        "cross_compt_ge_dist_min_nonfinal",
+    ]
+    if all_columns or any(
+        (column in cross_compt_columns) or (column in cross_total_columns)
+        for column in columns
+    ):
+        cross_compt = event.linear_attenuation_compt(
+            permutation, start_point=start_point, start_energy=start_energy
+        )
+        if all_columns or "cross_compt_sum" in columns:
+            features["cross_compt_sum"] = np.sum(cross_compt)
+        if all_columns or "cross_compt_mean" in columns:
+            features["cross_compt_mean"] = np.mean(cross_compt)
+        if all_columns or "cross_compt_max" in columns:
+            features["cross_compt_max"] = np.max(cross_compt)
+        if all_columns or "cross_compt_ge_dist_sum" in columns:
+            features["cross_compt_ge_dist_sum"] = np.sum(cross_compt * ge_distances)
+        if all_columns or "cross_compt_ge_dist_mean" in columns:
+            features["cross_compt_ge_dist_mean"] = np.mean(cross_compt * ge_distances)
+        if all_columns or "cross_compt_ge_dist_max" in columns:
+            features["cross_compt_ge_dist_max"] = np.max(cross_compt * ge_distances)
+        if all_columns or "cross_compt_dist_sum" in columns:
+            features["cross_compt_dist_sum"] = np.sum(cross_compt * distances)
+        if all_columns or "cross_compt_dist_mean" in columns:
+            features["cross_compt_dist_mean"] = np.mean(cross_compt * distances)
+        if all_columns or "cross_compt_dist_max" in columns:
+            features["cross_compt_dist_max"] = np.max(cross_compt * distances)
+        if all_columns or "cross_compt_min" in columns:
+            features["cross_compt_min"] = np.min(cross_compt)
+        if all_columns or "cross_compt_ge_dist_min" in columns:
+            features["cross_compt_ge_dist_min"] = np.min(cross_compt * ge_distances)
+        if all_columns or "cross_compt_dist_min" in columns:
+            features["cross_compt_dist_min"] = np.min(cross_compt * distances)
+        if all_columns or "cross_compt_sum_nonfinal" in columns:
+            features["cross_compt_sum_nonfinal"] = np.sum(cross_compt[:-1])
+        if all_columns or "cross_compt_mean_nonfinal" in columns:
+            features["cross_compt_mean_nonfinal"] = np.mean(cross_compt[:-1])
+        if all_columns or "cross_compt_min_nonfinal" in columns:
+            features["cross_compt_min_nonfinal"] = np.min(cross_compt[:-1])
+        if all_columns or "cross_compt_dist_sum_nonfinal" in columns:
+            features["cross_compt_dist_sum_nonfinal"] = np.sum(
+                cross_compt[:-1] * distances[:-1]
+            )
+        if all_columns or "cross_compt_dist_mean_nonfinal" in columns:
+            features["cross_compt_dist_mean_nonfinal"] = np.mean(
+                cross_compt[:-1] * distances[:-1]
+            )
+        if all_columns or "cross_compt_dist_min_nonfinal" in columns:
+            features["cross_compt_dist_min_nonfinal"] = np.min(
+                cross_compt[:-1] * distances[:-1]
+            )
+        if all_columns or "cross_compt_ge_dist_sum_nonfinal" in columns:
+            features["cross_compt_ge_dist_sum_nonfinal"] = np.sum(
+                cross_compt[:-1] * ge_distances[:-1]
+            )
+        if all_columns or "cross_compt_ge_dist_mean_nonfinal" in columns:
+            features["cross_compt_ge_dist_mean_nonfinal"] = np.mean(
+                cross_compt[:-1] * ge_distances[:-1]
+            )
+        if all_columns or "cross_compt_ge_dist_min_nonfinal" in columns:
+            features["cross_compt_ge_dist_min_nonfinal"] = np.min(
+                cross_compt[:-1] * ge_distances[:-1]
+            )
 
-    features["cross_abs_ge_dist_sum"] = np.sum(cross_abs * ge_distances)
-    features["cross_abs_ge_dist_final"] = cross_abs[-1] * ge_distances[-1]
-    features["cross_abs_ge_dist_mean"] = np.mean(cross_abs * ge_distances)
-    features["cross_abs_ge_dist_max"] = np.max(cross_abs * ge_distances)
+    cross_pair_columns = [
+        # "cross_pair_sum",
+        # "cross_pair_mean",
+        # "cross_pair_max",
+        # "cross_pair_min",
+        # "cross_pair_dist_sum",
+        # "cross_pair_dist_mean",
+        # "cross_pair_dist_max",
+        # "cross_pair_dist_min",
+        # "cross_pair_ge_dist_sum",
+        # "cross_pair_ge_dist_mean",
+        # "cross_pair_ge_dist_max",
+        # "cross_pair_ge_dist_min",
+    ]
+    if all_columns or any(
+        (column in cross_pair_columns) or (column in cross_total_columns)
+        for column in columns
+    ):
+        cross_pair = event.linear_attenuation_pair(
+            permutation, start_point=start_point, start_energy=start_energy
+        )
+        # # Features for pair production are not as important as other features and
+        # # may be misleading to include
+        # if all_columns or "cross_pair_sum" in columns:
+        #     features["cross_pair_sum"] = np.sum(cross_pair)
+        # if all_columns or "cross_pair_mean" in columns:
+        #     features["cross_pair_mean"] = np.mean(cross_pair)
+        # if all_columns or "cross_pair_max" in columns:
+        #     features["cross_pair_max"] = np.max(cross_pair)
+        # if all_columns or "cross_pair_min" in columns:
+        #     features["cross_pair_min"] = np.min(cross_pair)
+        # if all_columns or "cross_pair_dist_sum" in columns:
+        #     features["cross_pair_dist_sum"] = np.sum(cross_pair*distances)
+        # if all_columns or "cross_pair_dist_mean" in columns:
+        #     features["cross_pair_dist_mean"] = np.mean(cross_pair*distances)
+        # if all_columns or "cross_pair_dist_max" in columns:
+        #     features["cross_pair_dist_max"] = np.max(cross_pair*distances)
+        # if all_columns or "cross_pair_dist_min" in columns:
+        #     features["cross_pair_dist_min"] = np.min(cross_pair*distances)
+        # if all_columns or "cross_pair_ge_dist_sum" in columns:
+        #     features["cross_pair_ge_dist_sum"] = np.sum(cross_pair*ge_distances)
+        # if all_columns or "cross_pair_ge_dist_mean" in columns:
+        #     features["cross_pair_ge_dist_mean"] = np.mean(cross_pair*ge_distances)
+        # if all_columns or "cross_pair_ge_dist_max" in columns:
+        #     features["cross_pair_ge_dist_max"] = np.max(cross_pair*ge_distances)
+        # if all_columns or "cross_pair_ge_dist_min" in columns:
+        #     features["cross_pair_ge_dist_min"] = np.min(cross_pair*ge_distances)
 
-    features["cross_abs_dist_sum"] = np.sum(cross_abs * distances)
-    features["cross_abs_dist_final"] = cross_abs[-1] * distances[-1]
-    features["cross_abs_dist_mean"] = np.mean(cross_abs * distances)
-    features["cross_abs_dist_max"] = np.max(cross_abs * distances)
-
-    features["cross_abs_min"] = np.min(cross_abs)
-    features["cross_abs_ge_dist_min"] = np.min(cross_abs * ge_distances)
-    features["cross_abs_dist_min"] = np.min(cross_abs * distances)
-
-    features["p_abs_sum"] = np.sum(cross_abs / cross_total)
-    features["p_abs_final"] = cross_abs[-1] / cross_total[-1]
-    features["p_abs_mean"] = np.mean(cross_abs / cross_total)
-    features["p_abs_max"] = np.max(cross_abs / cross_total)
-    features["-log_p_abs_sum"] = np.sum(-np.log(cross_abs / cross_total))
-    features["-log_p_abs_final"] = -np.log(cross_abs[-1] / cross_total[-1])
-    features["-log_p_abs_mean"] = np.mean(-np.log(cross_abs / cross_total))
-    features["-log_p_abs_max"] = np.max(-np.log(cross_abs / cross_total))
-
-    features["p_abs_min"] = np.min(cross_abs / cross_total)
-    features["-log_p_abs_min"] = np.min(-np.log(cross_abs / cross_total))
-
-    features["cross_compt_sum"] = np.sum(cross_compt)
-    features["cross_compt_mean"] = np.mean(cross_compt)
-    features["cross_compt_max"] = np.max(cross_compt)
-
-    features["cross_compt_ge_dist_sum"] = np.sum(cross_compt * ge_distances)
-    features["cross_compt_ge_dist_mean"] = np.mean(cross_compt * ge_distances)
-    features["cross_compt_ge_dist_max"] = np.max(cross_compt * ge_distances)
-
-    features["cross_compt_dist_sum"] = np.sum(cross_compt * distances)
-    features["cross_compt_dist_mean"] = np.mean(cross_compt * distances)
-    features["cross_compt_dist_max"] = np.max(cross_compt * distances)
-
-    features["cross_compt_min"] = np.min(cross_compt)
-    features["cross_compt_ge_dist_min"] = np.min(cross_compt * ge_distances)
-    features["cross_compt_dist_min"] = np.min(cross_compt * distances)
-
-    features["cross_compt_sum_nonfinal"] = np.sum(cross_compt[:-1])
-    features["cross_compt_mean_nonfinal"] = np.mean(cross_compt[:-1])
-    features["cross_compt_min_nonfinal"] = np.min(cross_compt[:-1])
-
-    features["cross_compt_dist_sum_nonfinal"] = np.sum(
-        cross_compt[:-1] * distances[:-1]
-    )
-    features["cross_compt_dist_mean_nonfinal"] = np.mean(
-        cross_compt[:-1] * distances[:-1]
-    )
-    features["cross_compt_dist_min_nonfinal"] = np.min(
-        cross_compt[:-1] * distances[:-1]
-    )
-
-    features["cross_compt_ge_dist_sum_nonfinal"] = np.sum(
-        cross_compt[:-1] * ge_distances[:-1]
-    )
-    features["cross_compt_ge_dist_mean_nonfinal"] = np.mean(
-        cross_compt[:-1] * ge_distances[:-1]
-    )
-    features["cross_compt_ge_dist_min_nonfinal"] = np.min(
-        cross_compt[:-1] * ge_distances[:-1]
-    )
-
-    features["p_compt_sum"] = np.sum(cross_compt / cross_total)
-    features["p_compt_mean"] = np.mean(cross_compt / cross_total)
-    features["p_compt_max"] = np.max(cross_compt / cross_total)
-    features["p_compt_sum_nonfinal"] = np.sum(cross_compt[:-1] / cross_total[:-1])
-    features["p_compt_mean_nonfinal"] = np.mean(cross_compt[:-1] / cross_total[:-1])
-
-    features["-log_p_compt_sum"] = np.sum(-np.log(cross_compt / cross_total))
-    features["-log_p_compt_mean"] = np.mean(-np.log(cross_compt / cross_total))
-    features["-log_p_compt_max"] = np.max(-np.log(cross_compt / cross_total))
-    features["-log_p_compt_sum_nonfinal"] = np.sum(
-        -np.log(cross_compt[:-1] / cross_total[:-1])
-    )
-    features["-log_p_compt_mean_nonfinal"] = np.mean(
-        -np.log(cross_compt[:-1] / cross_total[:-1])
-    )
-
-    features["p_compt_min"] = np.min(cross_compt / cross_total)
-    features["p_compt_min_nonfinal"] = np.min(cross_compt[:-1] / cross_total[:-1])
-
-    features["-log_p_compt_min"] = np.min(-np.log(cross_compt / cross_total))
-    features["-log_p_compt_min_nonfinal"] = np.min(
-        -np.log(cross_compt[:-1] / cross_total[:-1])
-    )
-
-    # # Features for pair production are not as important as other features and
-    # # may be misleading to include
-    # features["cross_pair_sum"] = np.sum(cross_pair)
-    # features["cross_pair_mean"] = np.mean(cross_pair)
-    # features["cross_pair_max"] = np.max(cross_pair)
-    # features["cross_pair_min"] = np.min(cross_pair)
-    # features["cross_pair_dist_sum"] = np.sum(cross_pair*distances)
-    # features["cross_pair_dist_mean"] = np.mean(cross_pair*distances)
-    # features["cross_pair_dist_max"] = np.max(cross_pair*distances)
-    # features["cross_pair_dist_min"] = np.min(cross_pair*distances)
-    # features["cross_pair_ge_dist_sum"] = np.sum(cross_pair*ge_distances)
-    # features["cross_pair_ge_dist_mean"] = np.mean(cross_pair*ge_distances)
-    # features["cross_pair_ge_dist_max"] = np.max(cross_pair*ge_distances)
-    # features["cross_pair_ge_dist_min"] = np.min(cross_pair*ge_distances)
-    # features["p_pair_sum"] = np.sum(cross_pair/cross_total)
-    # features["p_pair_mean"] = np.mean(cross_pair/cross_total)
-    # features["p_pair_max"] = np.max(cross_pair/cross_total)
-    # features["p_pair_min"] = np.min(cross_pair/cross_total)
-    # features["-log_p_pair_sum"] = np.sum(-np.log(cross_pair/cross_total))
-    # features["-log_p_pair_mean"] = np.mean(-np.log(cross_pair/cross_total))
-    # features["-log_p_pair_max"] = np.max(-np.log(cross_pair/cross_total))
-    # features["-log_p_pair_min"] = np.min(-np.log(cross_pair/cross_total))
-
-    features["cross_total_sum"] = np.sum(cross_total)
-    features["cross_total_mean"] = np.mean(cross_total)
-    features["cross_total_max"] = np.max(cross_total)
-
-    features["cross_total_ge_dist_sum"] = np.sum(cross_total * ge_distances)
-    features["cross_total_ge_dist_mean"] = np.mean(cross_total * ge_distances)
-    features["cross_total_ge_dist_max"] = np.max(cross_total * ge_distances)
-
-    features["cross_total_dist_sum"] = np.sum(cross_total * distances)
-    features["cross_total_dist_mean"] = np.mean(cross_total * distances)
-    features["cross_total_dist_max"] = np.max(cross_total * distances)
-
-    features["cross_total_min"] = np.min(cross_total)
-    features["cross_total_ge_dist_min"] = np.min(cross_total * ge_distances)
-    features["cross_total_dist_min"] = np.min(cross_total * distances)
+    if all_columns or any(column in cross_total_columns for column in columns):
+        cross_total = cross_abs + cross_compt + cross_pair
+        if all_columns or "p_abs_sum" in columns:
+            features["p_abs_sum"] = np.sum(cross_abs / cross_total)
+        if all_columns or "p_abs_final" in columns:
+            features["p_abs_final"] = cross_abs[-1] / cross_total[-1]
+        if all_columns or "p_abs_mean" in columns:
+            features["p_abs_mean"] = np.mean(cross_abs / cross_total)
+        if all_columns or "p_abs_max" in columns:
+            features["p_abs_max"] = np.max(cross_abs / cross_total)
+        if all_columns or "p_abs_min" in columns:
+            features["p_abs_min"] = np.min(cross_abs / cross_total)
+        if all_columns or "-log_p_abs_sum" in columns:
+            features["-log_p_abs_sum"] = np.sum(-np.log(cross_abs / cross_total))
+        if all_columns or "-log_p_abs_final" in columns:
+            features["-log_p_abs_final"] = -np.log(cross_abs[-1] / cross_total[-1])
+        if all_columns or "-log_p_abs_mean" in columns:
+            features["-log_p_abs_mean"] = np.mean(-np.log(cross_abs / cross_total))
+        if all_columns or "-log_p_abs_max" in columns:
+            features["-log_p_abs_max"] = np.max(-np.log(cross_abs / cross_total))
+        if all_columns or "-log_p_abs_min" in columns:
+            features["-log_p_abs_min"] = np.min(-np.log(cross_abs / cross_total))
+        if all_columns or "p_compt_sum" in columns:
+            features["p_compt_sum"] = np.sum(cross_compt / cross_total)
+        if all_columns or "p_compt_mean" in columns:
+            features["p_compt_mean"] = np.mean(cross_compt / cross_total)
+        if all_columns or "p_compt_max" in columns:
+            features["p_compt_max"] = np.max(cross_compt / cross_total)
+        if all_columns or "p_compt_min" in columns:
+            features["p_compt_min"] = np.min(cross_compt / cross_total)
+        if all_columns or "p_compt_sum_nonfinal" in columns:
+            features["p_compt_sum_nonfinal"] = np.sum(
+                cross_compt[:-1] / cross_total[:-1]
+            )
+        if all_columns or "p_compt_mean_nonfinal" in columns:
+            features["p_compt_mean_nonfinal"] = np.mean(
+                cross_compt[:-1] / cross_total[:-1]
+            )
+        if all_columns or "p_compt_min_nonfinal" in columns:
+            features["p_compt_min_nonfinal"] = np.min(
+                cross_compt[:-1] / cross_total[:-1]
+            )
+        if all_columns or "-log_p_compt_sum" in columns:
+            features["-log_p_compt_sum"] = np.sum(-np.log(cross_compt / cross_total))
+        if all_columns or "-log_p_compt_mean" in columns:
+            features["-log_p_compt_mean"] = np.mean(-np.log(cross_compt / cross_total))
+        if all_columns or "-log_p_compt_max" in columns:
+            features["-log_p_compt_max"] = np.max(-np.log(cross_compt / cross_total))
+        if all_columns or "-log_p_compt_min" in columns:
+            features["-log_p_compt_min"] = np.min(-np.log(cross_compt / cross_total))
+        if all_columns or "-log_p_compt_sum_nonfinal" in columns:
+            features["-log_p_compt_sum_nonfinal"] = np.sum(
+                -np.log(cross_compt[:-1] / cross_total[:-1])
+            )
+        if all_columns or "-log_p_compt_mean_nonfinal" in columns:
+            features["-log_p_compt_mean_nonfinal"] = np.mean(
+                -np.log(cross_compt[:-1] / cross_total[:-1])
+            )
+        if all_columns or "-log_p_compt_min_nonfinal" in columns:
+            features["-log_p_compt_min_nonfinal"] = np.min(
+                -np.log(cross_compt[:-1] / cross_total[:-1])
+            )
+        # if all_columns or "p_pair_sum" in columns:
+        #     features["p_pair_sum"] = np.sum(cross_pair/cross_total)
+        # if all_columns or "p_pair_mean" in columns:
+        #     features["p_pair_mean"] = np.mean(cross_pair/cross_total)
+        # if all_columns or "p_pair_max" in columns:
+        #     features["p_pair_max"] = np.max(cross_pair/cross_total)
+        # if all_columns or "p_pair_min" in columns:
+        #     features["p_pair_min"] = np.min(cross_pair/cross_total)
+        # if all_columns or "-log_p_pair_sum" in columns:
+        #     features["-log_p_pair_sum"] = np.sum(-np.log(cross_pair/cross_total))
+        # if all_columns or "-log_p_pair_mean" in columns:
+        #     features["-log_p_pair_mean"] = np.mean(-np.log(cross_pair/cross_total))
+        # if all_columns or "-log_p_pair_max" in columns:
+        #     features["-log_p_pair_max"] = np.max(-np.log(cross_pair/cross_total))
+        # if all_columns or "-log_p_pair_min" in columns:
+        #     features["-log_p_pair_min"] = np.min(-np.log(cross_pair/cross_total))
+        if all_columns or "cross_total_sum" in columns:
+            features["cross_total_sum"] = np.sum(cross_total)
+        if all_columns or "cross_total_mean" in columns:
+            features["cross_total_mean"] = np.mean(cross_total)
+        if all_columns or "cross_total_max" in columns:
+            features["cross_total_max"] = np.max(cross_total)
+        if all_columns or "cross_total_ge_dist_sum" in columns:
+            features["cross_total_ge_dist_sum"] = np.sum(cross_total * ge_distances)
+        if all_columns or "cross_total_ge_dist_mean" in columns:
+            features["cross_total_ge_dist_mean"] = np.mean(cross_total * ge_distances)
+        if all_columns or "cross_total_ge_dist_max" in columns:
+            features["cross_total_ge_dist_max"] = np.max(cross_total * ge_distances)
+        if all_columns or "cross_total_dist_sum" in columns:
+            features["cross_total_dist_sum"] = np.sum(cross_total * distances)
+        if all_columns or "cross_total_dist_mean" in columns:
+            features["cross_total_dist_mean"] = np.mean(cross_total * distances)
+        if all_columns or "cross_total_dist_max" in columns:
+            features["cross_total_dist_max"] = np.max(cross_total * distances)
+        if all_columns or "cross_total_min" in columns:
+            features["cross_total_min"] = np.min(cross_total)
+        if all_columns or "cross_total_ge_dist_min" in columns:
+            features["cross_total_ge_dist_min"] = np.min(cross_total * ge_distances)
+        if all_columns or "cross_total_dist_min" in columns:
+            features["cross_total_dist_min"] = np.min(cross_total * distances)
 
     # %% Klein Nishina features
-    klein_nishina_rel_sum = event.klein_nishina(
-        permutation, start_point=start_point, start_energy=start_energy, use_ei=True
-    )
-    klein_nishina_rel_geo = event.klein_nishina(
-        permutation, start_point=start_point, start_energy=start_energy, use_ei=False
-    )
-    klein_nishina_sum = (
-        event.klein_nishina(
-            permutation,
-            start_point=start_point,
-            start_energy=start_energy,
-            use_ei=True,
-            relative=False,
+    kn_rel_sum_columns = [
+        "klein-nishina_rel_sum_sum",
+        "klein-nishina_rel_sum_mean",
+        "klein-nishina_rel_sum_max",
+        "klein-nishina_rel_sum_min",
+        "-log_klein-nishina_rel_sum_sum",
+        "-log_klein-nishina_rel_sum_mean",
+        "-log_klein-nishina_rel_sum_max",
+        "-log_klein-nishina_rel_sum_min",
+    ]
+    if all_columns or any(column in kn_rel_sum_columns for column in columns):
+        klein_nishina_rel_sum = event.klein_nishina(
+            permutation, start_point=start_point, start_energy=start_energy, use_ei=True
         )
-        * RANGE_PROCESS
-    )
-    klein_nishina_geo = (
-        event.klein_nishina(
+        if all_columns or "klein-nishina_rel_sum_sum" in columns:
+            features["klein-nishina_rel_sum_sum"] = np.sum(klein_nishina_rel_sum)
+        if all_columns or "klein-nishina_rel_sum_mean" in columns:
+            features["klein-nishina_rel_sum_mean"] = np.mean(klein_nishina_rel_sum)
+        if all_columns or "klein-nishina_rel_sum_max" in columns:
+            features["klein-nishina_rel_sum_max"] = np.max(klein_nishina_rel_sum)
+        if all_columns or "klein-nishina_rel_sum_min" in columns:
+            features["klein-nishina_rel_sum_min"] = np.min(klein_nishina_rel_sum)
+        if all_columns or "-log_klein-nishina_rel_sum_sum" in columns:
+            features["-log_klein-nishina_rel_sum_sum"] = np.sum(
+                -np.log(klein_nishina_rel_sum)
+            )
+        if all_columns or "-log_klein-nishina_rel_sum_mean" in columns:
+            features["-log_klein-nishina_rel_sum_mean"] = np.mean(
+                -np.log(klein_nishina_rel_sum)
+            )
+        if all_columns or "-log_klein-nishina_rel_sum_max" in columns:
+            features["-log_klein-nishina_rel_sum_max"] = np.max(
+                -np.log(klein_nishina_rel_sum)
+            )
+        if all_columns or "-log_klein-nishina_rel_sum_min" in columns:
+            features["-log_klein-nishina_rel_sum_min"] = np.min(
+                -np.log(klein_nishina_rel_sum)
+            )
+
+    kn_rel_geo_columns = [
+        "klein-nishina_rel_geo_sum",
+        "klein-nishina_rel_geo_mean",
+        "klein-nishina_rel_geo_max",
+        "klein-nishina_rel_geo_min",
+        "-log_klein-nishina_rel_geo_sum",
+        "-log_klein-nishina_rel_geo_mean",
+        "-log_klein-nishina_rel_geo_max",
+        "-log_klein-nishina_rel_geo_min",
+    ]
+    if all_columns or any(column in kn_rel_geo_columns for column in columns):
+        klein_nishina_rel_geo = event.klein_nishina(
             permutation,
             start_point=start_point,
             start_energy=start_energy,
             use_ei=False,
-            relative=False,
         )
-        * RANGE_PROCESS
-    )
+        if all_columns or "klein-nishina_rel_geo_sum" in columns:
+            features["klein-nishina_rel_geo_sum"] = np.sum(klein_nishina_rel_geo)
+        if all_columns or "klein-nishina_rel_geo_mean" in columns:
+            features["klein-nishina_rel_geo_mean"] = np.mean(klein_nishina_rel_geo)
+        if all_columns or "klein-nishina_rel_geo_max" in columns:
+            features["klein-nishina_rel_geo_max"] = np.max(klein_nishina_rel_geo)
+        if all_columns or "klein-nishina_rel_geo_min" in columns:
+            features["klein-nishina_rel_geo_min"] = np.min(klein_nishina_rel_geo)
+        if all_columns or "-log_klein-nishina_rel_geo_sum" in columns:
+            features["-log_klein-nishina_rel_geo_sum"] = np.sum(
+                -np.log(klein_nishina_rel_geo)
+            )
+        if all_columns or "-log_klein-nishina_rel_geo_mean" in columns:
+            features["-log_klein-nishina_rel_geo_mean"] = np.mean(
+                -np.log(klein_nishina_rel_geo)
+            )
+        if all_columns or "-log_klein-nishina_rel_geo_max" in columns:
+            features["-log_klein-nishina_rel_geo_max"] = np.max(
+                -np.log(klein_nishina_rel_geo)
+            )
+        if all_columns or "-log_klein-nishina_rel_geo_min" in columns:
+            features["-log_klein-nishina_rel_geo_min"] = np.min(
+                -np.log(klein_nishina_rel_geo)
+            )
 
-    features["klein-nishina_rel_sum_sum"] = np.sum(klein_nishina_rel_sum)
-    features["klein-nishina_rel_sum_mean"] = np.mean(klein_nishina_rel_sum)
-    features["klein-nishina_rel_sum_max"] = np.max(klein_nishina_rel_sum)
-    features["klein-nishina_rel_sum_min"] = np.min(klein_nishina_rel_sum)
+    kn_sum_columns = [
+        "klein-nishina_sum_sum",
+        "klein-nishina_sum_mean",
+        "klein-nishina_sum_max",
+        "klein-nishina_sum_min",
+        "-log_klein-nishina_sum_sum",
+        "-log_klein-nishina_sum_mean",
+        "-log_klein-nishina_sum_max",
+        "-log_klein-nishina_sum_min",
+    ]
+    if all_columns or any(column in kn_sum_columns for column in columns):
+        klein_nishina_sum = (
+            event.klein_nishina(
+                permutation,
+                start_point=start_point,
+                start_energy=start_energy,
+                use_ei=True,
+                relative=False,
+            )
+            * RANGE_PROCESS
+        )
+        if all_columns or "klein-nishina_sum_sum" in columns:
+            features["klein-nishina_sum_sum"] = np.sum(klein_nishina_sum)
+        if all_columns or "klein-nishina_sum_mean" in columns:
+            features["klein-nishina_sum_mean"] = np.mean(klein_nishina_sum)
+        if all_columns or "klein-nishina_sum_max" in columns:
+            features["klein-nishina_sum_max"] = np.max(klein_nishina_sum)
+        if all_columns or "klein-nishina_sum_min" in columns:
+            features["klein-nishina_sum_min"] = np.min(klein_nishina_sum)
+        if all_columns or "-log_klein-nishina_sum_sum" in columns:
+            features["-log_klein-nishina_sum_sum"] = np.sum(-np.log(klein_nishina_sum))
+        if all_columns or "-log_klein-nishina_sum_mean" in columns:
+            features["-log_klein-nishina_sum_mean"] = np.mean(
+                -np.log(klein_nishina_sum)
+            )
+        if all_columns or "-log_klein-nishina_sum_max" in columns:
+            features["-log_klein-nishina_sum_max"] = np.max(-np.log(klein_nishina_sum))
+        if all_columns or "-log_klein-nishina_sum_min" in columns:
+            features["-log_klein-nishina_sum_min"] = np.min(-np.log(klein_nishina_sum))
 
-    features["klein-nishina_sum_sum"] = np.sum(klein_nishina_sum)
-    features["klein-nishina_sum_mean"] = np.mean(klein_nishina_sum)
-    features["klein-nishina_sum_max"] = np.max(klein_nishina_sum)
-    features["klein-nishina_sum_min"] = np.min(klein_nishina_sum)
-
-    features["-log_klein-nishina_rel_sum_sum"] = np.sum(-np.log(klein_nishina_rel_sum))
-    features["-log_klein-nishina_rel_sum_mean"] = np.mean(
-        -np.log(klein_nishina_rel_sum)
-    )
-    features["-log_klein-nishina_rel_sum_max"] = np.max(-np.log(klein_nishina_rel_sum))
-    features["-log_klein-nishina_rel_sum_min"] = np.min(-np.log(klein_nishina_rel_sum))
-
-    features["-log_klein-nishina_sum_sum"] = np.sum(-np.log(klein_nishina_sum))
-    features["-log_klein-nishina_sum_mean"] = np.mean(-np.log(klein_nishina_sum))
-    features["-log_klein-nishina_sum_max"] = np.max(-np.log(klein_nishina_sum))
-    features["-log_klein-nishina_sum_min"] = np.min(-np.log(klein_nishina_sum))
-
-    features["klein-nishina_rel_geo_sum"] = np.sum(klein_nishina_rel_geo)
-    features["klein-nishina_rel_geo_mean"] = np.mean(klein_nishina_rel_geo)
-    features["klein-nishina_rel_geo_max"] = np.max(klein_nishina_rel_geo)
-    features["klein-nishina_rel_geo_min"] = np.min(klein_nishina_rel_geo)
-
-    features["klein-nishina_geo_sum"] = np.sum(klein_nishina_geo)
-    features["klein-nishina_geo_mean"] = np.mean(klein_nishina_geo)
-    features["klein-nishina_geo_max"] = np.max(klein_nishina_geo)
-    features["klein-nishina_geo_min"] = np.min(klein_nishina_geo)
-
-    features["-log_klein-nishina_rel_geo_sum"] = np.sum(-np.log(klein_nishina_rel_geo))
-    features["-log_klein-nishina_rel_geo_mean"] = np.mean(
-        -np.log(klein_nishina_rel_geo)
-    )
-    features["-log_klein-nishina_rel_geo_max"] = np.max(-np.log(klein_nishina_rel_geo))
-    features["-log_klein-nishina_rel_geo_min"] = np.min(-np.log(klein_nishina_rel_geo))
-
-    features["-log_klein-nishina_geo_sum"] = np.sum(-np.log(klein_nishina_geo))
-    features["-log_klein-nishina_geo_mean"] = np.mean(-np.log(klein_nishina_geo))
-    features["-log_klein-nishina_geo_max"] = np.max(-np.log(klein_nishina_geo))
-    features["-log_klein-nishina_geo_min"] = np.min(-np.log(klein_nishina_geo))
+    kn_geo_columns = [
+        "klein-nishina_geo_sum",
+        "klein-nishina_geo_mean",
+        "klein-nishina_geo_max",
+        "klein-nishina_geo_min",
+        "-log_klein-nishina_geo_sum",
+        "-log_klein-nishina_geo_mean",
+        "-log_klein-nishina_geo_max",
+        "-log_klein-nishina_geo_min",
+    ]
+    if all_columns or any(column in kn_geo_columns for column in columns):
+        klein_nishina_geo = (
+            event.klein_nishina(
+                permutation,
+                start_point=start_point,
+                start_energy=start_energy,
+                use_ei=False,
+                relative=False,
+            )
+            * RANGE_PROCESS
+        )
+        if all_columns or "klein-nishina_geo_sum" in columns:
+            features["klein-nishina_geo_sum"] = np.sum(klein_nishina_geo)
+        if all_columns or "klein-nishina_geo_mean" in columns:
+            features["klein-nishina_geo_mean"] = np.mean(klein_nishina_geo)
+        if all_columns or "klein-nishina_geo_max" in columns:
+            features["klein-nishina_geo_max"] = np.max(klein_nishina_geo)
+        if all_columns or "klein-nishina_geo_min" in columns:
+            features["klein-nishina_geo_min"] = np.min(klein_nishina_geo)
+        if all_columns or "-log_klein-nishina_geo_sum" in columns:
+            features["-log_klein-nishina_geo_sum"] = np.sum(-np.log(klein_nishina_geo))
+        if all_columns or "-log_klein-nishina_geo_mean" in columns:
+            features["-log_klein-nishina_geo_mean"] = np.mean(
+                -np.log(klein_nishina_geo)
+            )
+        if all_columns or "-log_klein-nishina_geo_max" in columns:
+            features["-log_klein-nishina_geo_max"] = np.max(-np.log(klein_nishina_geo))
+        if all_columns or "-log_klein-nishina_geo_min" in columns:
+            features["-log_klein-nishina_geo_min"] = np.min(-np.log(klein_nishina_geo))
 
     return features
 
@@ -2546,6 +3400,8 @@ def cluster_FOM_features(
     Nmi: int = None,
     eres: float = 1e-3,
     detector: DetectorConfig = default_config,
+    columns: Optional[List[str]] = None,
+    populate_empty_features: bool = False,
 ) -> Dict:
     """Return all of the features for an individual cluster
 
@@ -2556,70 +3412,149 @@ def cluster_FOM_features(
 
     Want the same output structure regardless if it is single or a full cluster
     """
-    from gamma_ray_tracking.cluster_tools import cluster_properties
+    from gamma_ray_tracking.cluster_tools import cluster_properties_features
+
+    all_columns = False
+    if columns is None:
+        columns = ["all"]
+        all_columns = True
+    elif "all" in columns:
+        all_columns = True
+        columns = ["all"]
 
     features = {}
 
     if start_energy is None:
         start_energy = np.sum(event.energy_matrix[list(permutation)])
 
-    props = cluster_properties(event, permutation)
-    property_features = props.features
+    prop_columns = [
+        "n",
+        "centroid_r",
+        "average_r",
+        "first_r",
+        "final_r",
+        "length",
+        "width",
+        "aspect_ratio",
+        "first_energy_ratio",
+        "final_energy_ratio",
+        "first_is_not_largest",
+        "first_is_not_closest",
+        "tango_variance",
+        "tango_v_variance",
+        "tango_sigma",
+        "tango_v_sigma",
+    ]
+    if all_columns or any(column in prop_columns for column in columns):
+        property_features = cluster_properties_features(
+            event, permutation, start_point=start_point, columns=columns
+        )
+        features = features | property_features
 
-    features = features | property_features
-
-    singles_features = single_FOM_features(
-        event,
-        permutation,
-        start_point=start_point,
-        start_energy=start_energy,
-        detector=detector,
-    )
-
-    features = singles_features | features
-
-    if len(permutation) == 1:
-        return features
-
-    energy_sum_features = FOM_features(
-        event,
-        permutation,
-        start_point=start_point,
-        start_energy=start_energy,
-        Nmi=Nmi,
-        eres=eres,
-    )
-    tango_energy = max(
-        event.estimate_start_energy_sigma_weighted_perm(
-            permutation, start_point=start_point, eres=eres
-        ),
-        start_energy,
-    )
-
-    if tango_energy > start_energy:
-        tango_energy_features = FOM_features(
+    singles_columns = [
+        "penetration_cm",
+        "edge_cm",
+        "linear_attenuation_cm-1",
+        "energy",
+        "pen_attenuation",
+        "pen_prob_remain",
+        "pen_prob_density",
+        "pen_prob_cumu",
+        "edge_attenuation",
+        "edge_prob_remain",
+        "edge_prob_density",
+        "edge_prob_cumu",
+        "inv_pen",
+        "inv_edge",
+        "interpolated_range",
+    ]
+    if all_columns or any(column in singles_columns for column in columns):
+        singles_features = single_FOM_features(
             event,
             permutation,
             start_point=start_point,
-            start_energy=tango_energy,
+            start_energy=start_energy,
+            detector=detector,
+        )
+        if not all_columns:
+            features = {
+                column: singles_features[column]
+                for column in singles_columns
+                if column in columns
+            } | features
+        else:
+            features = singles_features | features
+
+    # if len(permutation) == 1:
+    #     return features
+    if len(permutation) > 1:
+        energy_sum_features = FOM_features(
+            event,
+            permutation,
+            start_point=start_point,
+            start_energy=start_energy,
             Nmi=Nmi,
             eres=eres,
+            columns=columns,
         )
-    else:
-        tango_energy_features = deepcopy(energy_sum_features)
 
-    new_tango_features = {
-        key + "_tango": value for key, value in tango_energy_features.items()
-    }
+        # TODO - tango energy would not necessarily be the max of the two, but
+        # depends on the Compton edge
+        tango_energy = max(
+            event.estimate_start_energy_sigma_weighted_perm(
+                permutation, start_point=start_point, eres=eres
+            ),
+            start_energy,
+        )
 
-    new_tango_features["escape_probability_tango"] = escape_prob_cluster(
-        event, permutation, tango_energy, detector=detector
-    )
-    new_tango_features["-log_escape_probability_tango"] = -np.log(
-        new_tango_features["escape_probability_tango"]
-    )
-    features = energy_sum_features | new_tango_features | features
-    # features = {**default_features, **features}
+        if not all_columns:
+            tango_columns = [
+                column[:-6] for column in columns if column[-6:] == "_tango"
+            ]
+        else:
+            tango_columns = ["all"]
+
+        if len(tango_columns) > 0:
+            if tango_energy > start_energy:
+                tango_energy_features = FOM_features(
+                    event,
+                    permutation,
+                    start_point=start_point,
+                    start_energy=tango_energy,
+                    Nmi=Nmi,
+                    eres=eres,
+                    columns=tango_columns,
+                )
+            else:
+                tango_energy_features = deepcopy(energy_sum_features)
+
+            new_tango_features = {
+                key + "_tango": value for key, value in tango_energy_features.items()
+            }
+
+            if (
+                all_columns
+                or "escape_probability_tango" in columns
+                or "-log_escape_probability_tango" in columns
+            ):
+                escape_prob_tango = escape_prob_cluster(
+                    event, permutation, tango_energy, detector=detector
+                )
+                if all_columns or "escape_probability_tango" in columns:
+                    new_tango_features["escape_probability_tango"] = escape_prob_tango
+
+            if all_columns or "-log_escape_probability_tango" in columns:
+                new_tango_features["-log_escape_probability_tango"] = -np.log(
+                    escape_prob_tango
+                )
+        else:
+            new_tango_features = {}
+
+        features = energy_sum_features | new_tango_features | features
+
+    if not all_columns and populate_empty_features:
+        zeros = {column: 0.0 for column in columns}
+        features = {**zeros, **features}
     return features
 
 
