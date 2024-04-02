@@ -4,11 +4,12 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 
 Cluster tools
 """
+
 from __future__ import annotations
 
 from copy import deepcopy
 from itertools import product
-from typing import Dict, Hashable, List, Tuple, Union
+from typing import Dict, Hashable, List, Optional, Tuple, Union
 
 import numpy as np
 from scipy.cluster.hierarchy import fcluster, fclusterdata
@@ -72,11 +73,66 @@ def remove_zero_energy_interactions(
     return remove_interactions(event, removal_indices)
 
 
+def invert_clusters(clusters: dict):
+    """Invert the cluster from {cluster index: items} to {items: cluster index}"""
+    point_index_to_cluster_index = {}
+    for cluster_index, point_indices in clusters.items():
+        for point_index in point_indices:
+            point_index_to_cluster_index[point_index] = cluster_index
+    return point_index_to_cluster_index
+
+
+def rank_with_ties(values):
+    """
+    Given values, convert them to a rank with ties.
+
+    Inverse of np.unique indicates which indices correspond to each unique
+    sorted value
+    """
+    _, inverse_indices = np.unique(values, return_inverse=True)
+    return inverse_indices
+
+
+def get_packing_clusters(
+    event: Event,
+    packing_distance: float = 0.6,
+    clusters: Optional[dict] = None,  # {cluster index: point index}
+    respect_clusters: bool = False,
+) -> Dict:
+    """
+    Args:
+        event: event to pack
+        packing_distance: max distance to pack interactions
+        clusters: existing clusters
+        respect_clusters: if True, don't pack between clusters
+    """
+    packing_clusters = fclusterdata(
+        [p.x for p in event.hit_points], packing_distance, criterion="distance"
+    )
+    # If two values in packing_clusters are the same
+    # packing_clusters[i]==packing_clusters[j], the points with indices i and j
+    # belong to the same packed clusters. However, we do not want to combine
+    # points i and j into the same packed cluster if they do not already belong
+    # to the same cluster. Cluster indices are stored as {cluster index: list of
+    # point indices}.
+    if clusters is not None and respect_clusters:
+        start_index = 0
+        for cluster in clusters.values():
+            packing_cluster_indices = [packing_clusters[i - 1] for i in cluster]
+            ranks = rank_with_ties(packing_cluster_indices) + start_index
+            start_index = max(ranks) + 1
+            for i, point_index in enumerate(cluster):
+                packing_clusters[point_index - 1] = ranks[i]
+    return packing_clusters
+
+
 def pack_interactions(
     event: Event,
     packing_distance: float = 0.6,
     clusters: dict = None,
     keep_duplicates: bool = False,
+    packing_clusters: Optional[np.ndarray] = None,
+    respect_clusters: bool = False,
 ) -> Union[Event, Tuple[Event, Dict]]:
     """
     Combine interactions that are too close (would be indistinguishable to the
@@ -89,22 +145,29 @@ def pack_interactions(
     interaction is in multiple clusters, this will keep both.
 
     Args:
+        event: event to pack
         packing_distance (float): distance to pack (default is in cm)
         clusters (dict): clusters for the event (optional, used to maintain
         clusters after packing)
         keep_duplicates (bool): keep the interaction order in each cluster even
-        if this allows for repeated positions If this is False, any duplicates
-        are discarded (order is kept otherwise)
+        if this allows for repeated positions. If this is False, any duplicates
+        are discarded (order is kept otherwise), i.e., 1->2->3->4->5 could be
+        packed as 1->2->3->2 if 2, 4, and 5 are packed together, but we could
+        also just return as 1->2->3 and discard the return to 2
     """
     if len(event.hit_points) <= 1:
         if clusters is not None:
             return deepcopy(event), deepcopy(clusters)
         return deepcopy(event)
-    # Find the points that would join together; given a point, indicates
-    # the cluster it should be in
-    packing_clusters = fclusterdata(
-        [p.x for p in event.hit_points], packing_distance, criterion="distance"
-    )
+    if packing_clusters is None:
+        # Find the points that would join together; given a point, indicates
+        # the cluster it should be in
+        packing_clusters = get_packing_clusters(
+            event,
+            packing_distance=packing_distance,
+            clusters=clusters,
+            respect_clusters=respect_clusters,
+        )
     fixed_order = {}
     order = 1
     for ii, index in enumerate(packing_clusters):
@@ -480,6 +543,127 @@ def cluster_pdist(
 # assume that relative features are not important for the ordering step without
 # much loss since the ordering is mostly independent of other clusters (it is
 # completely independent when the cluster contains the correct interactions).
+
+
+def cluster_properties_features(
+    event: Event,
+    cluster: Tuple,
+    start_point: int = 0,
+    columns: Optional[List[str]] = None,
+):
+    """
+    Some "property" features of clusters
+    """
+    all_columns = False
+    if columns is None:
+        columns = []
+        all_columns = True
+    elif "all" in columns:
+        all_columns = True
+
+    features = {}
+
+    if all_columns or "n" in columns:
+        features["n"] = len(cluster)
+    centroid_columns = [
+        "centroid_r",
+        "length",
+        "width",
+        "aspect_ratio",
+    ]
+    if all_columns or any(column in centroid_columns for column in columns):
+        centroid = cluster_centroid(event, cluster)
+        if all_columns or "centroid_r" in columns:
+            features["centroid_r"] = np.linalg.norm(centroid)
+    if all_columns or "average_r" in columns:
+        features["average_r"] = np.mean(event.distance[0, list(cluster)])
+    if all_columns or "first_r" in columns:
+        features["first_r"] = event.distance[0, cluster[0]]
+    if all_columns or "final_r" in columns:
+        features["final_r"] = event.distance[0, cluster[-1]]
+
+    if len(cluster) > 1:
+        if (
+            all_columns
+            or "length" in columns
+            or "width" in columns
+            or "aspect_ratio" in columns
+        ):
+            points_x = event.point_matrix[[start_point] + list(cluster)]
+            vectors = points_x[1:] - points_x[:-1]
+            length_vector = np.sum(vectors, axis=0)
+            length_dir = length_vector / np.linalg.norm(length_vector)
+            centroid_vectors = points_x[1:] - centroid
+            lengths = np.abs(np.dot(centroid_vectors, length_dir))
+            if all_columns or "length" in columns or "aspect_ratio" in columns:
+                length = np.mean(lengths)
+                if all_columns or "length" in columns:
+                    features["length"] = length
+            if all_columns or "width" in columns or "aspect_ratio" in columns:
+                length_vectors = lengths[:, None] * length_dir[None, :]
+                width_vectors = centroid_vectors - length_vectors
+                widths = np.linalg.norm(width_vectors, axis=-1)
+                width = np.mean(widths)
+                if all_columns or "width" in columns:
+                    features["width"] = width
+            if all_columns or "aspect_ratio" in columns:
+                features["aspect_ratio"] = length / width
+        if all_columns or "first_energy_ratio" in columns:
+            esum = event.energy_sum(cluster)
+            features["first_energy_ratio"] = event.energy_matrix[cluster[0]] / esum
+        if all_columns or "final_energy_ratio" in columns:
+            features["final_energy_ratio"] = event.energy_matrix[cluster[-2]] / (
+                event.energy_matrix[cluster[-2]] + event.energy_matrix[cluster[-1]]
+            )
+        if all_columns or "first_is_not_largest" in columns:
+            features["first_is_not_largest"] = np.all(
+                event.energy_matrix[list(cluster)][0]
+                < event.energy_matrix[list(cluster)][1:]
+            )
+        if all_columns or "first_is_not_closest" in columns:
+            features["first_is_not_closest"] = np.all(
+                event.spherical_point_matrix[list(cluster)][:, 0][0]
+                > event.spherical_point_matrix[list(cluster)][:, 0][1:]
+            )
+        if all_columns or "tango_variance" in columns or "tango_sigma" in columns:
+            tangos = event.tango_estimates_perm(cluster, start_point=start_point)
+            if all_columns or "tango_variance" in columns:
+                features["tango_variance"] = np.var(tangos)
+            if all_columns or "tango_sigma" in columns:
+                features["tango_sigma"] = np.sqrt(np.var(tangos))
+        if all_columns or "tango_v_variance" in columns or "tango_v_sigma" in columns:
+            tangos_sigma = event.tango_estimates_sigma_perm(
+                cluster, start_point=start_point
+            )
+            if all_columns or "tango_v_variance" in columns:
+                features["tango_v_variance"] = 1 / np.sum(1 / tangos_sigma**2)
+            if all_columns or "tango_v_sigma" in columns:
+                features["tango_v_sigma"] = np.sqrt(1 / np.sum(1 / tangos_sigma**2))
+    else:
+        if all_columns or "length" in columns:
+            features["length"] = event.position_uncertainty[cluster[0]]
+        if all_columns or "width" in columns:
+            features["width"] = event.position_uncertainty[cluster[0]]
+        if all_columns or "aspect_ratio" in columns:
+            features["aspect_ratio"] = 1.0
+        if all_columns or "first_energy_ratio" in columns:
+            features["first_energy_ratio"] = 1.0
+        if all_columns or "final_energy_ratio" in columns:
+            features["final_energy_ratio"] = 1.0
+        if all_columns or "first_is_not_largest" in columns:
+            features["first_is_not_largest"] = False
+        if all_columns or "first_is_not_closest" in columns:
+            features["first_is_not_closest"] = False
+        if all_columns or "tango_variance" in columns:
+            features["tango_variance"] = 0.0
+        if all_columns or "tango_sigma" in columns:
+            features["tango_sigma"] = 0.0
+        if all_columns or "tango_v_variance" in columns:
+            features["tango_v_variance"] = 0.0
+        if all_columns or "tango_v_sigma" in columns:
+            features["tango_v_sigma"] = 0.0
+
+    return features
 
 
 class cluster_properties:
