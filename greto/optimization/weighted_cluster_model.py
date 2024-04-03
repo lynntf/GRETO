@@ -11,7 +11,7 @@ from typing import Dict
 
 import pyomo.environ as pyenv
 
-from gamma_ray_tracking.event_class import Event
+from greto.event_class import Event
 
 
 def create_weighted_cluster_problem(

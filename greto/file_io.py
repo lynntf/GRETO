@@ -15,11 +15,11 @@ import numpy as np
 import yaml
 from scipy.spatial.distance import pdist, squareform
 
-from gamma_ray_tracking import default_config
-from gamma_ray_tracking.detector_config_class import DetectorConfig
-from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.fom_tools import cluster_FOM
-from gamma_ray_tracking.interaction_class import Interaction
+from greto import default_config
+from greto.detector_config_class import DetectorConfig
+from greto.event_class import Event
+from greto.fom_tools import cluster_FOM
+from greto.interaction_class import Interaction
 
 
 class GEBdata_file:

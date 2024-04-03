@@ -12,24 +12,24 @@ from typing import BinaryIO, ByteString, Dict, List, Tuple
 import multiprocess as mp
 from tqdm import tqdm
 
-from gamma_ray_tracking.cluster_tools import (
+from greto.cluster_tools import (
     cluster_linkage,
     join_events,
     remove_zero_energy_interactions,
     split_event,
 )
-from gamma_ray_tracking.detector_config_class import default_config
-from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.file_io import load_options  # write_event_cluster,
-from gamma_ray_tracking.file_io import (
+from greto.detector_config_class import default_config
+from greto.event_class import Event
+from greto.file_io import load_options  # write_event_cluster,
+from greto.file_io import (
     mode1_data,
     mode1_extended_data,
     mode2_loader,
     read_agata_simulated_data,
     tracked_generator,
 )
-from gamma_ray_tracking.fom_tools import cluster_FOM, semi_greedy, semi_greedy_clusters
-from gamma_ray_tracking.utils import get_file_size
+from greto.fom_tools import cluster_FOM, semi_greedy, semi_greedy_clusters
+from greto.utils import get_file_size
 
 
 def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):

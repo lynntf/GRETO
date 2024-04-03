@@ -12,7 +12,7 @@ import struct
 
 import numpy as np
 
-from gamma_ray_tracking.interaction_class import Interaction
+from greto.interaction_class import Interaction
 
 
 def read_greta_crmat(filename):

@@ -6,8 +6,8 @@ Forward estimate of tracking using geometry to pre-screen interactions
 """
 from typing import List
 
-from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.physics import theta_theor
+from greto.event_class import Event
+from greto.physics import theta_theor
 
 
 def interactions_in_cone(

@@ -14,12 +14,12 @@ from typing import Callable, Dict, Hashable, Iterable, List, Optional, Tuple
 import numpy as np
 from scipy import integrate
 
-from gamma_ray_tracking import default_config
-from gamma_ray_tracking.detector_config_class import DetectorConfig
-from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.geometry import cone
-from gamma_ray_tracking.interaction_class import Interaction
-from gamma_ray_tracking.physics import (
+from greto import default_config
+from greto.detector_config_class import DetectorConfig
+from greto.event_class import Event
+from greto.geometry import cone
+from greto.interaction_class import Interaction
+from greto.physics import (
     MEC2,
     RANGE_PROCESS,
     cos_theor,
@@ -3558,7 +3558,7 @@ def cluster_FOM_features(
 
     Want the same output structure regardless if it is single or a full cluster
     """
-    from gamma_ray_tracking.cluster_tools import cluster_properties_features
+    from greto.cluster_tools import cluster_properties_features
 
     all_columns = False
     if columns is None:
@@ -3721,7 +3721,7 @@ def clusters_relative_FOM_features(
     relative features will not charge (only if we look at the shape of the
     cluster will it change since different orders have different shapes).
     """
-    from gamma_ray_tracking.cluster_tools import cluster_pdist
+    from greto.cluster_tools import cluster_pdist
 
     cluster_distances_ge = cluster_pdist(
         event, clusters, method="single", metric="germanium"

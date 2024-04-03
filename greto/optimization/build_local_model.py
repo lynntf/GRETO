@@ -18,7 +18,7 @@ O(n!/(n-k)!) or direct enumeration in general O(n!).
 """
 import pyomo.environ as pyenv
 
-from gamma_ray_tracking.event_class import Event
+from greto.event_class import Event
 
 
 def build_local_model(event: Event, cluster_indices, error="l2"):

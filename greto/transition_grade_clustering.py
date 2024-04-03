@@ -10,10 +10,10 @@ import numpy as np
 
 # from gamma_ray_tracking import default_config
 # from gamma_ray_tracking.detector_config_class import DetectorConfig
-from gamma_ray_tracking.event_class import Event
+from greto.event_class import Event
 
 # from gamma_ray_tracking.interaction_class import Interaction
-from gamma_ray_tracking.physics import (
+from greto.physics import (
     MEC2,
     RANGE_PROCESS,
     KN_vec,

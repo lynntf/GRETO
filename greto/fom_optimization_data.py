@@ -13,9 +13,9 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.event_tools import split_event_clusters
-from gamma_ray_tracking.fom_tools import (
+from greto.event_class import Event
+from greto.event_tools import split_event_clusters
+from greto.fom_tools import (
     get_all_features_cluster,
     individual_FOM_feature_names,
 )

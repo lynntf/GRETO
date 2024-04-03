@@ -13,10 +13,10 @@ import numpy as np
 from scipy.spatial.distance import squareform
 from scipy.spatial.transform import Rotation
 
-from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.geometry import ge_distance, germanium_extension
-from gamma_ray_tracking.interaction_class import Interaction
-from gamma_ray_tracking.utils import perm_to_transition
+from greto.event_class import Event
+from greto.geometry import ge_distance, germanium_extension
+from greto.interaction_class import Interaction
+from greto.utils import perm_to_transition
 
 
 def merge_events(

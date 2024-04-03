@@ -14,8 +14,8 @@ import numpy as np
 from scipy.spatial.distance import pdist, squareform
 from scipy.spatial.transform import Rotation
 
-from gamma_ray_tracking import default_config
-from gamma_ray_tracking.detector_config_class import DetectorConfig
+from greto import default_config
+from greto.detector_config_class import DetectorConfig
 
 
 def cos_act(

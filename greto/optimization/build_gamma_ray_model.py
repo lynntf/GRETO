@@ -13,8 +13,8 @@ from typing import Dict, Iterable, List
 import numpy as np
 import pyomo.environ as pyenv
 
-from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.interaction_class import Interaction
+from greto.event_class import Event
+from greto.interaction_class import Interaction
 
 
 def get_breaks(x0: float, x_max: float, e: float) -> List[float]:

@@ -12,8 +12,8 @@ from typing import List
 import numpy as np
 import pyomo.environ as pyenv
 
-from gamma_ray_tracking.cluster_utils import get_all_clusters, in_peak
-from gamma_ray_tracking.event_class import Event
+from greto.cluster_utils import get_all_clusters, in_peak
+from greto.event_class import Event
 
 
 def create_hierarchical_cluster_problem(

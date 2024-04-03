@@ -13,15 +13,15 @@ import numpy as np
 from scipy.cluster.hierarchy import linkage  # fcluster,
 from scipy.spatial.distance import pdist, squareform
 
-from gamma_ray_tracking import default_config
-from gamma_ray_tracking.asym_heir_clustering import asym_hier_linkage
-from gamma_ray_tracking.coincidence_class import Coincidence
-from gamma_ray_tracking.detector_config_class import DetectorConfig
-import gamma_ray_tracking.geometry as geo
-from gamma_ray_tracking.interaction_class import Interaction
-import gamma_ray_tracking.physics as phys
+from greto import default_config
+from greto.asym_heir_clustering import asym_hier_linkage
+from greto.coincidence_class import Coincidence
+from greto.detector_config_class import DetectorConfig
+import greto.geometry as geo
+from greto.interaction_class import Interaction
+import greto.physics as phys
 
-from gamma_ray_tracking.utils import perm_to_transition
+from greto.utils import perm_to_transition
 
 # TODO - change from eres constant to energy uncertainty
 
@@ -244,7 +244,7 @@ class Event:
         **linkage_kwargs: Any,
     ) -> Dict[int, int]:
         """Cluster using a linkage"""
-        from gamma_ray_tracking.cluster_tools import cluster_linkage
+        from greto.cluster_tools import cluster_linkage
 
         return cluster_linkage(
             self,
@@ -261,7 +261,7 @@ class Event:
         keep_duplicates: bool = False,
     ):
         """Pack interactions"""
-        from gamma_ray_tracking.cluster_tools import pack_interactions
+        from greto.cluster_tools import pack_interactions
 
         return pack_interactions(
             self,
@@ -1006,7 +1006,7 @@ class Event:
         """
         Get transition quality tensor.
         """
-        from gamma_ray_tracking.transition_grade_clustering import (  # pylint: disable=import-outside-toplevel
+        from greto.transition_grade_clustering import (  # pylint: disable=import-outside-toplevel
             get_grade_features,
         )
 

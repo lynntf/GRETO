@@ -17,10 +17,10 @@ import plotly.graph_objects as go
 import seaborn as sns
 from scipy.stats import percentileofscore
 
-from gamma_ray_tracking import cluster_utils, default_config
-from gamma_ray_tracking.detector_config_class import DetectorConfig
-from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.event_tools import flatten_event
+from greto import cluster_utils, default_config
+from greto.detector_config_class import DetectorConfig
+from greto.event_class import Event
+from greto.event_tools import flatten_event
 
 # from matplotlib import cm
 # colors = cm.Set1.colors

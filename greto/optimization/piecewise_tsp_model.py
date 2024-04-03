@@ -9,7 +9,7 @@ Written by Dominic Yang
 
 import pyomo.environ as pyenv
 
-from gamma_ray_tracking.event_class import Event
+from greto.event_class import Event
 
 
 def create_piecewise_tsp_tracking_problem(

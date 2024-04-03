@@ -15,9 +15,9 @@ import numpy as np
 from scipy.cluster.hierarchy import fcluster, fclusterdata
 from scipy.spatial.distance import pdist, squareform
 
-from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.geometry import ge_distance
-from gamma_ray_tracking.interaction_class import Interaction
+from greto.event_class import Event
+from greto.geometry import ge_distance
+from greto.interaction_class import Interaction
 
 
 def remove_interactions(
@@ -325,7 +325,7 @@ def cluster_summary(event: Event, clusters: Dict[Hashable, int], **FOM_kwargs):
         FOM of clusters
         Points included in clusters
     """
-    from gamma_ray_tracking.fom_tools import cluster_FOM
+    from greto.fom_tools import cluster_FOM
 
     FOMs = cluster_FOM(event, clusters, **FOM_kwargs)
     summary = f"Event {event.id}\n"
@@ -1125,7 +1125,7 @@ def cluster_using_classifier(
     Uses numpy arrays to store scores. Uses the entire event assuming that
     points have indices 1..n
     """
-    from gamma_ray_tracking import cluster_utils
+    from greto import cluster_utils
 
     overwrite_index = None
 

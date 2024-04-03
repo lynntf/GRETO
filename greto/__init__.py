@@ -10,10 +10,10 @@ __version__ = "1.0.0"
 
 from scipy.constants import physical_constants
 
-from gamma_ray_tracking.detector_config_class import default_config
-from gamma_ray_tracking.event_class import Event
-from gamma_ray_tracking.interaction_class import Interaction
-import gamma_ray_tracking.file_io as file_io
+from greto.detector_config_class import default_config
+from greto.event_class import Event
+from greto.interaction_class import Interaction
+import greto.file_io as file_io
 
 # %% Define constants
 RHO_GE = 5.323  # Density of Germanium [g/cm3] (NIST)

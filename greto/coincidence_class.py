@@ -7,8 +7,8 @@ Class for storing just the basics for a gamma-ray coincidence of interactions
 from dataclasses import dataclass
 from typing import List
 
-from gamma_ray_tracking.detector_config_class import DetectorConfig
-from gamma_ray_tracking.interaction_class import Interaction
+from greto.detector_config_class import DetectorConfig
+from greto.interaction_class import Interaction
 
 
 @dataclass
@@ -36,7 +36,7 @@ class Coincidence:
         Returns
         - Event: the full gamma-ray event for calculating FOMs, etc.
         """
-        from gamma_ray_tracking.event_class import Event
+        from greto.event_class import Event
 
         if detector_configuration is not None:
             return Event(self.event_id, self.points, detector=detector_configuration)
