@@ -1177,6 +1177,10 @@ def semi_greedy_batch(
             # Compute the width of the permutations
             r = min(width, len(remaining_points))
 
+            if width == -1:  # Do a complete enumeration
+                r = len(remaining_points)
+                stride = len(remaining_points)
+
             # Compute the number of permutations of the given width
             n_perms = num_perms(remaining_points, r)
 
@@ -1340,6 +1344,9 @@ def semi_greedy(
             # reduced number of evaluations, just removes last point from computation
             if len(remaining_points) == width + 1:
                 width += 1
+            if width == -1:  # Complete enumeration
+                width = len(remaining_points)
+                stride = len(remaining_points)
             for perm in permutations(
                 remaining_points, r=min(width, len(remaining_points))
             ):
