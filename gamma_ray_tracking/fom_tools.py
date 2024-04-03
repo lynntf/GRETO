@@ -1087,8 +1087,46 @@ def semi_greedy_batch(
     **FOM_kwargs,
 ) -> List:
     """
-    Batched version of semi_greedy. Computes a feature array that is passed to
+    Batched version of `semi_greedy`. Computes a feature array that is passed to
     the FOM_model as a batch and then find the min of that batch.
+
+    For the forward direction, we assume that the cluster contains a complete
+    &gamma;-ray, and we attempt to find chunks of permutations that optimize
+    that part of the total permutation. The `width` parameter controls how many
+    points are evaluated for comparison (given n interactions, permutations of
+    length `width` are created, evaluated, and the optimal w.r.t. FOM is
+    selected). The `stride` parameter controls how many interactions from the
+    chosen optimal permutation of size `width` are frozen for the next step of
+    the algorithm. The method will then search for the best permutation of the
+    next `width` interactions.
+
+    If `width` is greater than the length of the cluster, the method performs a
+    complete enumeration. The most greedy possible value for `width` is `2`
+    (this is the minimum required for all FOMs that use the Compton Scattering
+    Formula).
+
+    Backward tracking involves ordering and clustering such that there is no
+    assumption about complete &gamma;-rays. Backward tracking is described in
+    more detail in the corresponding function `semi_greedy_backward`.
+
+    Args:
+        - `event`: the &gamma;-ray Event object
+        - `cluster` : the indices of the cluster to be ordered
+        - `width` : the width of the combinatorial window
+        - `stride` : the number of accepted points from each window
+        - `direction` : the direction of the greedy approach; Currently only forward is implemented
+        - `return_score` : include the FOM value in the output
+        - `max_cluster_size` : do not sort clusters with more interactions than this
+        - `early_stopping` : stop after the first stride, only the first
+          interactions are important; returns only a partial order
+        - `debug`: print debug output
+        - `model`: FOM model used for prediction using `model.predict`
+        - `model_columns`: feature/column names that the model is expecting
+        - `minimize`: minimize (True) or maximize (False) the value; default is minimize
+        - `batch_size`: number of permutations to compute features for each
+          batch; default is all of the permutations `-1`
+        - `**FOM_kwargs` : specifications for the type of FOM to use
+
     """
     # raise NotImplemented("Still some TODO here")
     # TODO - finish
@@ -1162,6 +1200,7 @@ def semi_greedy_batch(
                 features = np.empty((len(perms), len(model_columns)))
 
                 # Loop over permutations and generate features for each
+                # TODO - potential problem with the order of the features
                 for i, perm in enumerate(perms):
                     features[i, :] = np.fromiter(
                         cluster_FOM_features(
@@ -1263,7 +1302,8 @@ def semi_greedy(
         - `direction` : the direction of the greedy approach
         - `return_score` : include the FOM value in the output
         - `max_cluster_size` : do not sort clusters with more interactions than this
-        - `early_stopping` : stop after the first stride, only the first interactions are important; returns only a partial order
+        - `early_stopping` : stop after the first stride, only the first
+          interactions are important; returns only a partial order
         - `debug`: print debug output
         - `**FOM_kwargs` : specifications for the type of FOM to use
     """
@@ -3502,6 +3542,7 @@ def cluster_FOM_features(
     detector: DetectorConfig = default_config,
     columns: Optional[List[str]] = None,
     populate_empty_features: bool = False,
+    # fix_feature_order: bool = True,  # ensure that the order of the values matches the order of the requested features
 ) -> Dict:
     """Return all of the features for an individual cluster
 
@@ -3522,7 +3563,11 @@ def cluster_FOM_features(
         all_columns = True
         columns = ["all"]
 
-    features = {}
+    # Initialize the features dict (should also fix dict order to match )
+    if not all_columns:
+        features = {column : None for column in columns}
+    else:
+        features = {}
 
     if start_energy is None:
         start_energy = np.sum(event.energy_matrix[list(permutation)])
@@ -3577,13 +3622,13 @@ def cluster_FOM_features(
             detector=detector,
         )
         if not all_columns:
-            features = {
+            features = features | {
                 column: singles_features[column]
                 for column in singles_columns
                 if column in columns
-            } | features
+            }
         else:
-            features = singles_features | features
+            features = features | singles_features
 
     # if len(permutation) == 1:
     #     return features
@@ -3650,11 +3695,13 @@ def cluster_FOM_features(
         else:
             new_tango_features = {}
 
-        features = energy_sum_features | new_tango_features | features
+        features = features | energy_sum_features
+        features = features | new_tango_features
 
+    # For instance, add zero values for singles features when not a single
     if not all_columns and populate_empty_features:
         zeros = {column: 0.0 for column in columns}
-        features = {**zeros, **features}
+        features = {**features, **zeros}
     return features
 
 
