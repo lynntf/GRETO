@@ -28,14 +28,26 @@ from gamma_ray_tracking.physics import (
 )
 
 
-# TODO - finish this up?
-# class FOM_model:
-#     """Container for a FOM computing model"""
+class FOM_model:
+    """Container for a FOM computing model"""
 
-#     def __init__(self, model_evaluation: Callable, columns: Optional[List[str]] = None):
-#         self.predict = model_evaluation
-#         if columns is not None:
-#             self.columns = columns
+    def __init__(
+        self,
+        model_evaluation: Callable,
+        columns: Optional[List[str]] = None,
+        model: Optional[object] = None,
+    ):
+        """
+        Args:
+        model_evaluation: how the model transforms input features to outputs
+        columns: the names of the input features used by the model
+        model: the model object itself
+        """
+        self.predict = model_evaluation
+        if columns is not None:
+            self.columns = columns
+        if model is not None:
+            self.model = model
 
 
 # %% Clustered FOM
@@ -1046,39 +1058,67 @@ def semi_greedy_clusters(
     return best_ordered_clusters
 
 
+def num_perms(iterable: Iterable, r: int) -> int:
+    """Compute the number of permutations of length r from the iterable"""
+    k = len(iterable)
+    out = k
+    for _ in range(1, r):
+        k -= 1
+        if k < 2:  # Case where k == 1 does nothing
+            break
+        out *= k
+    return out
+
+
 def semi_greedy_batch(
     event: Event,
-    cluster: Iterable = None,
+    cluster: Optional[Iterable] = None,
     width: int = 3,
     stride: int = 1,
     direction: str = "forward",
     return_score: bool = False,
     max_cluster_size: int = 8,
-    short_stop: bool = False,
+    early_stopping: bool = False,
     debug: bool = False,
     model: FOM_model = None,
     model_columns: Optional[List[str]] = None,
+    minimize: bool = True,
+    batch_size: int = -1,  # batch over all possible permutations
     **FOM_kwargs,
 ) -> List:
     """
     Batched version of semi_greedy. Computes a feature array that is passed to
     the FOM_model as a batch and then find the min of that batch.
     """
-    raise NotImplemented("Still some TODO here")
+    # raise NotImplemented("Still some TODO here")
     # TODO - finish
-    # FOM_kwargs['filter_singles'] = False
+
+    # If no cluster provided, assume the entire event is one cluster
     if cluster is None:
         cluster = list(range(0, len(event.hit_points) + 1))
-    if FOM_kwargs.get("fom_method") == "agata":
-        FOM_kwargs["negative"] = True
+
+    # For AFT, final FOM value is maximized when using exponential form
+    if (
+        FOM_kwargs.get("fom_method") in ["agata", "aft"]
+        and FOM_kwargs.get("exponential") is True
+    ):
+        minimize = False
+
+    # For clusters that are too large, do not attempt to order, just return a value
     if len(cluster) > max_cluster_size:
         if return_score:
             return (tuple(cluster), FOM(event, cluster, **FOM_kwargs))
         return cluster
+
+    # Get the feature column names from the model object
+    # TODO - this implementation passes features as an array to the model. This
+    # restricts the models that can be used to only those that accept arrays of
+    # features. Expanding this code to handle other cases may be beneficial.
     if model_columns is None:
         model_columns = model.columns
+
     if direction == "forward":
-        curr_e = sum(event.points[i].e for i in cluster)
+        curr_e = sum(event.points[i].e for i in cluster)  # Current energy
         # excess_e = 0
         start_point = 0
         order = []
@@ -1087,32 +1127,74 @@ def semi_greedy_batch(
         while len(order) < len(cluster):
             # start_point_index = best_perm[stride - 1]
             best_perm = remaining_points[:width]
-            best_score = np.inf
+            if minimize:
+                best_score = np.inf
+            else:
+                best_score = -np.inf
             # Special case where excluding the last point does not result in a
             # reduced number of evaluations, just removes last point from computation
             if len(remaining_points) == width + 1:
                 width += 1
-            features = []
-            perms = list(
-                permutations(remaining_points, r=min(width, len(remaining_points)))
-            )
-            for i, perm in enumerate(
-                permutations(remaining_points, r=min(width, len(remaining_points)))
-            ):
-                features[i] = FOM_features_from_columns(
-                    event=event,
-                    permutation=order + list(perm),
-                    start_point=start_point,
-                    start_energy=curr_e,
-                    columns=model_columns,
-                )  # TODO: other keywords?
-                scores = model.predict(features)
-            best_perm = perms[np.argmin(scores)]
-            best_score = np.min(scores)
+
+            # Compute the width of the permutations
+            r = min(width, len(remaining_points))
+
+            # Compute the number of permutations of the given width
+            n_perms = num_perms(remaining_points, r)
+
+            # Create a generator for the permutations
+            perms_generator = permutations(remaining_points, r=r)
+
+            # Cycle over permutation batches
+            while n_perms > 0:
+                # Get the number of permutations in the current batch
+                count = min(batch_size, n_perms)
+                perms = np.fromiter(
+                    perms_generator,
+                    count=count,
+                    dtype=tuple,
+                )
+
+                # Decrease the number of remaining permutations in the generator
+                n_perms -= batch_size
+
+                # Allocate the features array
+                features = np.empty((len(perms), len(model_columns)))
+
+                # Loop over permutations and generate features for each
+                for i, perm in enumerate(perms):
+                    features[i, :] = np.fromiter(
+                        cluster_FOM_features(
+                            event=event,
+                            permutation=tuple(order + list(perm)),
+                            start_point=start_point,
+                            start_energy=curr_e,
+                            Nmi=len(cluster),
+                            columns=model_columns,
+                        ).values(),
+                        dtype=float,
+                    )
+
+                    # Get the FOM values for each set of features
+                    scores = model.predict(features)
+
+                # Select the best score from the batch and update the best
+                # permutation (if found a new best score)
+                if minimize:
+                    new_min = np.min(scores)
+                    if new_min < best_score:
+                        best_perm = perms[np.argmin(scores)]
+                        best_score = new_min
+                else:
+                    new_max = np.max(scores)
+                    if new_max > best_score:
+                        best_perm = perms[np.argmax(scores)]
+                        best_score = new_max
             if debug:
                 print(f"***{order + list(best_perm), best_score}")
-            # print('**************')
-            # Can accept all remaining points if they are all included in the combinatorial window
+
+            # Can accept all remaining points if they
+            # are all included in the combinatorial window
             if width >= len(remaining_points):
                 order.extend(best_perm)
             else:
@@ -1122,7 +1204,8 @@ def semi_greedy_batch(
                     # excess_e += self.points[point].e
                     remaining_points.remove(point)
                     # curr_e -= self.points[point].e
-            if short_stop:  # stop after sorting the first interaction
+            # Stop after sorting the first interaction
+            if early_stopping:
                 return order
         if return_score:
             # print(FOM_kwargs)
@@ -1130,11 +1213,11 @@ def semi_greedy_batch(
             return (tuple(order), FOM(event, order, **FOM_kwargs))
         return order
     if direction == "backward":
-        return semi_greedy_backward(
-            event, cluster, width=width, stride=stride, debug=debug, **FOM_kwargs
-        )
-    if direction == "hybrid":
-        raise NotImplementedError
+        raise NotImplementedError("Batched backward tracking is not implemented")
+    if (
+        direction == "hybrid"
+    ):  # Theoretical combination of backward and forward tracking
+        raise NotImplementedError("Hybrid tracking is not implemented")
 
 
 def semi_greedy(
@@ -1145,8 +1228,9 @@ def semi_greedy(
     direction: str = "forward",
     return_score: bool = False,
     max_cluster_size: int = 8,
-    short_stop: bool = False,
+    early_stopping: bool = False,
     debug: bool = False,
+    minimize: bool = True,
     **FOM_kwargs,
 ) -> List:
     """
@@ -1179,15 +1263,21 @@ def semi_greedy(
         - `direction` : the direction of the greedy approach
         - `return_score` : include the FOM value in the output
         - `max_cluster_size` : do not sort clusters with more interactions than this
-        - `short_stop` : stop after the first stride, only the first interactions are important
+        - `early_stopping` : stop after the first stride, only the first interactions are important; returns only a partial order
         - `debug`: print debug output
         - `**FOM_kwargs` : specifications for the type of FOM to use
     """
     # FOM_kwargs['filter_singles'] = False
     if cluster is None:
         cluster = list(range(0, len(event.hit_points) + 1))
-    if FOM_kwargs.get("fom_method") == "agata":
-        FOM_kwargs["negative"] = True
+
+    # For AFT, final FOM value is maximized when using exponential form
+    if (
+        FOM_kwargs.get("fom_method") in ["agata", "aft"]
+        and FOM_kwargs.get("exponential") is True
+    ):
+        minimize = False
+
     if len(cluster) > max_cluster_size:
         if return_score:
             return (tuple(cluster), FOM(event, cluster, **FOM_kwargs))
@@ -1202,7 +1292,10 @@ def semi_greedy(
         while len(order) < len(cluster):
             # start_point_index = best_perm[stride - 1]
             best_perm = remaining_points[:width]
-            best_score = np.inf
+            if minimize:
+                best_score = np.inf
+            else:
+                best_score = -np.inf
             # Special case where excluding the last point does not result in a
             # reduced number of evaluations, just removes last point from computation
             if len(remaining_points) == width + 1:
@@ -1219,11 +1312,18 @@ def semi_greedy(
                     **FOM_kwargs,
                 )
                 # print(f'  {order + list(perm), score}')
-                if score < best_score:
-                    if debug:
-                        print(f"***{order + list(perm), score}")
-                    best_perm = perm
-                    best_score = score
+                if minimize:
+                    if score < best_score:
+                        if debug:
+                            print(f"***{order + list(perm), score}")
+                        best_perm = perm
+                        best_score = score
+                else:
+                    if score > best_score:
+                        if debug:
+                            print(f"***{order + list(perm), score}")
+                        best_perm = perm
+                        best_score = score
             # print('**************')
             # Can accept all remaining points if they are all included in the combinatorial window
             if width >= len(remaining_points):
@@ -1235,7 +1335,7 @@ def semi_greedy(
                     # excess_e += self.points[point].e
                     remaining_points.remove(point)
                     # curr_e -= self.points[point].e
-            if short_stop:  # stop after sorting the first interaction
+            if early_stopping:  # stop after sorting the first interaction
                 return order
         if return_score:
             # print(FOM_kwargs)
