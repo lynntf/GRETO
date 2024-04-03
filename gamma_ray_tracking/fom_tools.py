@@ -1128,8 +1128,6 @@ def semi_greedy_batch(
         - `**FOM_kwargs` : specifications for the type of FOM to use
 
     """
-    # raise NotImplemented("Still some TODO here")
-    # TODO - finish
 
     # If no cluster provided, assume the entire event is one cluster
     if cluster is None:
@@ -3572,7 +3570,7 @@ def cluster_FOM_features(
 
     # Initialize the features dict (should also fix dict order to match )
     if not all_columns:
-        features = {column : None for column in columns}
+        features = {column: None for column in columns}
     else:
         features = {}
 
