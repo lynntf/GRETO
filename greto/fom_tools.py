@@ -19,17 +19,11 @@ from greto.detector_config_class import DetectorConfig
 from greto.event_class import Event
 from greto.geometry import cone
 from greto.interaction_class import Interaction
-from greto.physics import (
-    MEC2,
-    RANGE_PROCESS,
-    cos_theor,
-    lin_att_total,
-    theta_theor,
-)
+from greto.physics import MEC2, RANGE_PROCESS, cos_theor, lin_att_total, theta_theor
 
 
 class FOM_model:
-    """Container for a FOM computing model"""
+    """Container class for a FOM computing model"""
 
     def __init__(
         self,
@@ -39,9 +33,9 @@ class FOM_model:
     ):
         """
         Args:
-        model_evaluation: how the model transforms input features to outputs
-        columns: the names of the input features used by the model
-        model: the model object itself
+            - model_evaluation: how the model transforms input features to outputs
+            - columns: the names of the input features used by the model
+            - model: the model object itself
         """
         self.predict = model_evaluation
         if columns is not None:
