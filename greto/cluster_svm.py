@@ -972,7 +972,8 @@ def MILP_method(
     prob.solve(verbose=verbose, solver=solver_name)
     if debug:
         print(
-            f"  Found solution with epsilon (margin half-width) {epsilon.value}; Objective {loss.value}"
+            "  Found solution with epsilon (margin half-width)"
+            + f" {epsilon.value}; Objective {loss.value}"
         )
     if verbose:
         print(f"    {'i':4s} {'wtx':10s} {'y_i':6s} {'ind':4s} {'z_k':6s}")
