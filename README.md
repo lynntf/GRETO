@@ -89,7 +89,7 @@ conda create -n gamma -c conda-forge python>3.10 scipy numpy matplotlib seaborn 
 
 ## Usage
 
-All of the following examples require that the `gamma_ray_tracking` folder is in the working directory.
+All of the following examples require that the `greto` folder is in the working directory.
 
 ### Tracking experimental data example
 
@@ -143,7 +143,7 @@ cluster_kwargs:                 # How should clustering of interaction points be
 For interactive uses of experimental data, we need to load the data into the `Event` objects used by the package:
 
 ```python
-import gamma_ray_tracking as gr
+import greto as gr
 mode2_filename = 'path/to/mode2/file.gtd'
 detector_name = 'gretina'
 events = []
@@ -157,7 +157,7 @@ These created events can be manipulated as below in the simulated data example (
 Reading in raw mode1/mode2 data is done using the `GEBdata_file` class:
 
 ```python
-import gamma_ray_tracking as gr
+import greto as gr
 mode2_1_filename = 'path/to/mode2/file.gtd'
 detector_name = 'gretina'
 events = []
@@ -175,7 +175,7 @@ We will start with the AGATA multiplicity-30 simulated data that we use for trai
 > The AGATA multiplicity-30 simulated data is a dataset comprised of 30 gamma-ray energies (0.08 MeV to 2.6 MeV in 0.09 MeV increments) simulated using GEANT4 (separately and then joined together; there are often gamma-rays that so undetected so the combined multiplicity is less than 30).
 
 ```python
-import gamma_ray_tracking as gr  # import the package
+import greto as gr  # import the package
 m30_events, m30_clusters = gr.file_io.load_m30()  # load multiplicity-30 simulated events and clusters (GEANT4; for training)
 ```
 
@@ -267,7 +267,7 @@ FOM features are created using methods in the `fom_tools` and `fom_optimization_
 
 ```python
 import pandas as pd
-import gamma_ray_tracking as gr
+import greto as gr
 m30_events, m30_clusters, m30_true_energies = gr.file_io.load_m30(include_energies=True)  # load multiplicity-30 simulated events and clusters (GEANT4; for training); true energies are given by cluster ID
 ps_events, ps_clusters = gr.cluster_tools.pack_and_smear_list(m30_events, m30_clusters)  # pack and smear the simulated data
 (features, ordered, complete,
@@ -295,7 +295,7 @@ ranker.fit(X, y, qid=qid)  # Fit the ranking model
 Linear ranking models are also useful for their simple implementation and sparsity. In this case, we will be applying the ranking model to get values for an optimization problem, which means we are only interested in the optimal result (the ranking of other values is not important, only relative to the top result). We can then create a linear classification model for clusters of ordering features relative to the true ordering features:
 
 ```python
-from gamma_ray_tracking.cluster_svm import column_generation
+from greto.cluster_svm import column_generation
 mask = other_index ~= opt_index  # we can safely mask away relative features that are zero (where the data indices do not match)
 relative_features = features[other_index] - features[opt_index]
 w = column_generation(relative_features[mask], cluster_ids[mask])
