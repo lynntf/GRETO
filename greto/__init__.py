@@ -14,6 +14,7 @@ from greto.detector_config_class import default_config
 from greto.event_class import Event
 from greto.interaction_class import Interaction
 import greto.file_io as file_io
+import greto.fom_tools as fom_tools
 
 # %% Define constants
 RHO_GE = 5.323  # Density of Germanium [g/cm3] (NIST)
