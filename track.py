@@ -3,7 +3,7 @@ Script for streamlined tracking.
 """
 import argparse
 
-from gamma_ray_tracking.tracking import load_and_track_files
+from greto.tracking import load_and_track_files
 
 
 def track_with_args():
