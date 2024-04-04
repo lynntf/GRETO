@@ -12,6 +12,7 @@ weights, weighted and unweighted SVM methods using scikit-learn, weighted
 unweighted logistic regression methods using scikit-learn, SVM methods using
 cvxpy, and linear relaxations of the binary variable problem using cvxpy.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -970,10 +971,14 @@ def MILP_method(
         solver_name = None
     prob.solve(verbose=verbose, solver=solver_name)
     if debug:
-        print(f"  Found solution with epsilon (margin half-width) {epsilon.value}; Objective {loss.value}")
+        print(
+            f"  Found solution with epsilon (margin half-width) {epsilon.value}; Objective {loss.value}"
+        )
     if verbose:
         print(f"    {'i':4s} {'wtx':10s} {'y_i':6s} {'ind':4s} {'z_k':6s}")
-        for i, (wtx, y, index) in enumerate(zip(selected_X @ w.value, y_i.value, updated_I)):
+        for i, (wtx, y, index) in enumerate(
+            zip(selected_X @ w.value, y_i.value, updated_I)
+        ):
             print(f"    {i:4d} {wtx:10.5f} {y:6.3f} {index:4d} {z_k.value[index]:6.3f}")
     return w.value
 
