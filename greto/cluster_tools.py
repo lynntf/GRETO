@@ -258,13 +258,14 @@ def apply_agata_error_model(event: Event, seed: int = None) -> Event:
 
 def apply_error_model(event: Event, seed: int = None) -> Event:
     """
-    Applies the AGATA error model to the positions and energies.
+    Applies error model to the positions and energies.
     This applies a gaussian error which is dependent on the energy
     deposited to both position and error.
 
     Here the error in position is given by precomputed position uncertainty
-
-    TODO - add support for subsets?
+    Args:
+        event: g-ray event
+        seed: random seed
     """
     rng = np.random.RandomState(seed=seed)  # pylint: disable=no-member
     hit_points = deepcopy(event.hit_points)
@@ -1278,15 +1279,33 @@ def cluster_using_classifier(
 
 def pack_and_smear(
     event: Event,
-    clusters: Dict = None,
+    clusters: Optional[Dict] = None,
     packing_distance: float = 0.6,
     energy_threshold: float = 0.0,
     use_agata_model: bool = True,
     seed: int = None,
+    respect_clusters: bool = False,
 ) -> Union[Event, Tuple[Event, Dict]]:
     """
     Apply the packing and smearing methods to the event and clusters. Any
     interactions with energy less than the threshold value are deleted.
+
+    Args:
+        - event: g-ray event
+        - clusters: dictionary of point index clusters; provide if you would
+          like the corresponding clusters after packing
+        - packing_distance: distance between interactions for which packing is
+          applied [cm]; default is 6 mm
+        - energy_threshold: delete interactions with energy less than or equal
+          to this value (after smearing)
+        - use_agata_model: apply a different energy smearing
+        - seed: random seed for smearing
+        - respect_clusters: if clusters are provided, don't allow packing
+          between clusters
+
+    Returns:
+        - packed event
+        - packed event, packed clusters (if clusters provided)
     """
     if clusters is None:
         packed_event = pack_interactions(event, packing_distance=packing_distance)
@@ -1294,6 +1313,8 @@ def pack_and_smear(
             packed_and_smeared_event = apply_agata_error_model(packed_event)
         else:
             packed_and_smeared_event = apply_error_model(packed_event)
+
+        # Remove zero energy smeared interactions
         threshold_event = remove_zero_energy_interactions(
             packed_and_smeared_event, energy_threshold=energy_threshold
         )
@@ -1301,7 +1322,10 @@ def pack_and_smear(
         # return packed_and_smeared_event
 
     packed_event, packed_clusters = pack_interactions(
-        event, clusters=clusters, packing_distance=packing_distance
+        event,
+        clusters=clusters,
+        packing_distance=packing_distance,
+        respect_clusters=respect_clusters,
     )
     if use_agata_model:
         packed_and_smeared_event = apply_agata_error_model(packed_event, seed=seed)
@@ -1321,9 +1345,26 @@ def pack_and_smear_list(
     energy_threshold=0.005,
     use_agata_model: bool = True,
     seed: int = None,
-):
+    respect_clusters: bool = False,
+) -> List[Event] | Tuple[List[Event], List[Dict]]:
     """
     Apply the packing and smearing methods to a list of events and clusters
+
+    Args:
+        - list_of_events: list of g-ray events
+        - list of clusters: list of cluster dictionaries
+        - packing_distance: distance between interactions for which they will be
+          combined [cm]; default is 6 mm
+        - energy_threshold: delete interactions with energy below the threshold
+          after smearing
+        - use_agata_model: use a different energy smearing
+        - seed: random seed for smearing
+        - respect_clusters: don't allow packing between different clusters (only
+          within clusters)
+
+    Returns:
+        - List of packed and smeared events
+        - List of packed and smeared events, list of packed clusters
     """
     if list_of_clusters is None:
         ps_events = []
@@ -1335,6 +1376,7 @@ def pack_and_smear_list(
                     energy_threshold=energy_threshold,
                     use_agata_model=use_agata_model,
                     seed=seed,
+                    respect_clusters=respect_clusters,
                 )
             )
         return ps_events
