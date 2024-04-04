@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 
-from gamma_ray_tracking import geometry as geo
+from greto import geometry as geo
 
 
 class test_cos_act(unittest.TestCase):
