@@ -8,11 +8,11 @@ from typing import Dict, Iterable, List
 
 import numpy as np
 
-# from gamma_ray_tracking import default_config
-# from gamma_ray_tracking.detector_config_class import DetectorConfig
+# from greto import default_config
+# from greto.detector_config_class import DetectorConfig
 from greto.event_class import Event
 
-# from gamma_ray_tracking.interaction_class import Interaction
+# from greto.interaction_class import Interaction
 from greto.physics import (
     MEC2,
     RANGE_PROCESS,

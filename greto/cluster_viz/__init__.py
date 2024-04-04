@@ -192,8 +192,8 @@ def plot_flat_event(
     None
 
     ## Examples
-    >>> from gamma_ray_tracking import default_event, default_clusters
-    >>> from gamma_ray_tracking.cluster_viz import plot_flat_event
+    >>> from greto import default_event, default_clusters
+    >>> from greto.cluster_viz import plot_flat_event
     >>> import matplotlib.pyplot as plt
     >>> plot_flat_event(default_event, default_clusters)
     >>> plt.show()
@@ -305,8 +305,8 @@ def plot_flat_event_px(
     None
 
     ## Examples
-    >>> from gamma_ray_tracking import default_event, default_clusters
-    >>> from gamma_ray_tracking.cluster_viz import plot_flat_event_px
+    >>> from greto import default_event, default_clusters
+    >>> from greto.cluster_viz import plot_flat_event_px
     >>> plot_flat_event_px(default_event, default_clusters)
     # This will plot a flat event with clusters of interactions, with origin
     # and outer radius included.

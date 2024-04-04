@@ -1546,7 +1546,7 @@ def read_simulated_ascii(filename):
 
 
 def load_m30(
-    filename: str = "gamma_ray_tracking/data/GammaEvents.Mul30",
+    filename: str = "greto/data/GammaEvents.Mul30",
     include_energies: bool = False,
 ) -> Tuple[List, List] | Tuple[List, List, List]:
     """
@@ -1578,8 +1578,8 @@ def load_m30(
     clusters_list = []
     true_energies_list = []
     with open(filename, "r", encoding="utf-8") as file:
-        # data_file_path = pathlib.Path(importlib.resources('gamma_ray_tracking', 'data')) / 'GammaEvents.Mul30'
-        # with importlib.resources.open_text("gamma_ray_tracking", filename) as file:
+        # data_file_path = pathlib.Path(importlib.resources('greto', 'data')) / 'GammaEvents.Mul30'
+        # with importlib.resources.open_text("greto", filename) as file:
         # with open(data_file_path, 'r', encoding="utf-8") as file:
         line = " ".join(file.readline().split()).split()
         while line[0] != "$":

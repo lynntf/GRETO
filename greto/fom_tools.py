@@ -1759,7 +1759,7 @@ def individual_FOM_feature_names():
     """
     Generate an empty FOM feature dictionary for a single cluster
     """
-    # from gamma_ray_tracking.cluster_tools import cluster_properties
+    # from greto.cluster_tools import cluster_properties
     # feature_names = list(FOM_features(default_event, default_clusters[1]).keys())
     # feature_names.extend([name + '_tango' for name in feature_names])
 
