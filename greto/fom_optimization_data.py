@@ -343,6 +343,7 @@ def make_data(
     test_train_split: float = 0.33,
     debug: bool = False,
     semi_greedy_width: int = None,
+    remove_pair_production: bool = True,
     **kwargs,
 ) -> Tuple[np.ndarray]:
     """
@@ -392,7 +393,7 @@ def make_data(
             true_energies=true_energies,
             max_cluster_size=max_cluster_size,
             width=semi_greedy_width,
-            **kwargs,
+            remove_pair_production=remove_pair_production**kwargs,
         )
         if len(x) > 0:
             opt_index.extend([len(features) + i for i in i1])
@@ -1255,6 +1256,7 @@ column_sets["all"] = list(
 
 # %%
 
+
 def create_data(
     list_of_events: List[Event],
     list_of_clusters: List[Dict],
@@ -1265,6 +1267,7 @@ def create_data(
     seed: int = 42,
     packing_distance: float = 0.6,
     energy_threshold: float = 0.005,
+    remove_pair_production: bool = True,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Args:
@@ -1274,10 +1277,12 @@ def create_data(
           deposit
         - true_energies: dictionary of the true energies corresponding to each
           cluster_id
-        - max_cluster_size: maximum cluster size; larger clusters not processed
+        - max_clusters_size: maximum cluster size; larger clusters not processed
         - semi_greedy_width: width of permutation used to generate data
           (complete enumeration for all shorter clusters)
         - seed: random number generator seed
+        - packing_distance: interactions closer than this distance [cm] are combined
+        - energy_threshold: interactions with energies below this value are deleted
 
     Returns:
         - df_X: pandas dataframe with features
@@ -1345,6 +1350,7 @@ def create_data(
         true_energies,
         max_clusters_size,
         semi_greedy_width=semi_greedy_width,
+        remove_pair_production=remove_pair_production,
     )
 
     df_X = pd.DataFrame(
