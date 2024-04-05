@@ -10,6 +10,7 @@ import os
 import pickle as pkl
 import struct
 from typing import BinaryIO, Dict, Generator, List, Tuple
+import pkg_resources
 
 import numpy as np
 import yaml
@@ -1544,9 +1545,11 @@ def read_simulated_ascii(filename):
                 break
         return events, rays
 
+# Get the file path from the package data
+m30_path = pkg_resources.resource_filename(__name__, "greto/data/GammaEvents.Mul30")
 
 def load_m30(
-    filename: str = "greto/data/GammaEvents.Mul30",
+    filename: str = m30_path,
     include_energies: bool = False,
 ) -> Tuple[List, List] | Tuple[List, List, List]:
     """
