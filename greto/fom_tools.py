@@ -1077,7 +1077,7 @@ def semi_greedy_batch(
     model: FOM_model = None,
     model_columns: Optional[List[str]] = None,
     minimize: bool = True,
-    batch_size: int = -1,  # batch over all possible permutations
+    batch_size: int = 1,
     **FOM_kwargs,
 ) -> List:
     """
@@ -1190,7 +1190,10 @@ def semi_greedy_batch(
                 )
 
                 # Decrease the number of remaining permutations in the generator
-                n_perms -= batch_size
+                if batch_size == -1:
+                    n_perms = 0
+                else:
+                    n_perms -= batch_size
 
                 # Allocate the features array
                 features = np.empty((len(perms), len(model_columns)))
@@ -1220,14 +1223,17 @@ def semi_greedy_batch(
                     if new_min < best_score:
                         best_perm = perms[np.argmin(scores)]
                         best_score = new_min
+                        if debug:
+                            print(f"*** ***{order + list(best_perm), best_score}")
                 else:
                     new_max = np.max(scores)
                     if new_max > best_score:
                         best_perm = perms[np.argmax(scores)]
                         best_score = new_max
+                        if debug:
+                            print(f"*** ***{order + list(best_perm), best_score}")
             if debug:
                 print(f"***{order + list(best_perm), best_score}")
-
             # Can accept all remaining points if they
             # are all included in the combinatorial window
             if width >= len(remaining_points):
@@ -2236,6 +2242,10 @@ def FOM_features(
             features["rc_mean_1_penalty_removed"] = np.mean(
                 r_cosines * (1 - comp_penalty)
             )
+        if all_columns or "rc_sum_2_penalty_removed" in columns:
+            features["rc_sum_2_penalty_removed"] = np.sum(r_cosines**2 * (1 - comp_penalty))
+        if all_columns or "rc_mean_2_penalty_removed" in columns:
+            features["rc_mean_2_penalty_removed"] = np.mean(r_cosines**2 * (1 - comp_penalty))
 
     if all_columns or any(column in cosine_v_columns for column in columns):
         r_cosines_v = r_cosines / np.abs(

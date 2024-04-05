@@ -393,7 +393,8 @@ def make_data(
             true_energies=true_energies,
             max_cluster_size=max_cluster_size,
             width=semi_greedy_width,
-            remove_pair_production=remove_pair_production**kwargs,
+            remove_pair_production=remove_pair_production,
+            **kwargs,
         )
         if len(x) > 0:
             opt_index.extend([len(features) + i for i in i1])
@@ -680,19 +681,30 @@ fastest_columns = [
     "first_is_not_largest",
     "first_is_not_closest",
 ]
-fast_columns = fastest_columns + [
+rsl_columns_1 = [
+    "rsl_sum_1",
+    "rsl_mean_1",
+]
+rsl_columns_1v = [
     "rsl_sum_1v",
     "rsl_mean_1v",
-    "rsl_norm_2v",
-    "rsl_mean_2v",
-    "rsl_sum_2v",
+    "rsl_wmean_1v",
+]
+rsl_columns_2 = [
     "rsl_sum_2",
     "rsl_mean_2",
-    "rsl_wmean_2v",
-    "rsl_mean_1",
-    "rsl_sum_1",
     "rsl_norm_2",
-    "rsl_wmean_1v",
+]
+rsl_columns_2v = [
+    "rsl_sum_2v",
+    "rsl_mean_2v",
+    "rsl_norm_2v",
+    "rsl_wmean_2v",
+]
+
+rsl_columns = rsl_columns_1 + rsl_columns_2 + rsl_columns_1v + rsl_columns_2v
+
+fast_columns = fastest_columns + rsl_columns + [
     "c_penalty_sum_1",
     "c_penalty_mean_1",
     "c_penalty_ell_sum_1",
