@@ -1546,7 +1546,7 @@ def read_simulated_ascii(filename):
         return events, rays
 
 # Get the file path from the package data
-m30_path = pkg_resources.resource_filename(__name__, "greto/data/GammaEvents.Mul30")
+m30_path = pkg_resources.resource_filename(__name__, "data/GammaEvents.Mul30")
 
 def load_m30(
     filename: str = m30_path,
