@@ -11,6 +11,7 @@ import pickle as pkl
 import struct
 from typing import BinaryIO, Dict, Generator, List, Tuple
 import pkg_resources
+import zipfile
 
 import numpy as np
 import yaml
@@ -1547,6 +1548,12 @@ def read_simulated_ascii(filename):
 
 # Get the file path from the package data
 m30_path = pkg_resources.resource_filename(__name__, "data/GammaEvents.Mul30")
+
+m30_zipped_path = pkg_resources.resource_filename(__name__, "data/GammaEvents.Mul30.zip")
+
+if not os.path.exists(m30_path):
+    with zipfile.ZipFile(m30_zipped_path, 'r') as zip_ref:
+        zip_ref.extractall(m30_path)
 
 def load_m30(
     filename: str = m30_path,
