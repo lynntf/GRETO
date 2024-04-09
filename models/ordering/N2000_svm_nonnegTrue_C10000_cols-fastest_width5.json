@@ -1,0 +1,1 @@
+{"model": "linear", "weights": [0.2162703095177915, 0.0010601145945733962, 0.3955990981799448, 1.6412594449746238, 0.4600550568768026], "bias": null, "columns": ["tango_variance", "tango_v_variance", "distances_mean", "ge_distances_mean", "first_is_not_largest"]}

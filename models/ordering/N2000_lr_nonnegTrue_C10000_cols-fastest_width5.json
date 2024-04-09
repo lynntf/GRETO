@@ -1,0 +1,1 @@
+{"model": "linear", "weights": [0.47902118444753206, 4.197343288750101, 0.9972497139067273], "bias": null, "columns": ["distances_mean", "ge_distances_mean", "first_is_not_largest"]}
