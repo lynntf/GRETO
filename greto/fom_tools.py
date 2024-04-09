@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from itertools import permutations
-from typing import Callable, Dict, Hashable, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Hashable, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 from scipy import integrate
@@ -976,15 +976,16 @@ def singles_depth(
     indicates energy [MeV] and depth [cm].
 
     ## Args:
-    - `event` : An Event object that represents the event to be evaluated
-    - `permutation` : An iterable of integers that represents a permutation of
+    - event: An Event object that represents the event to be evaluated
+    - permutation: An iterable of integers that represents a permutation of
       the interactions in the event. For a single interaction event, this should
       be an iterable with one element.
-    - `singles_penalty_min` (optional) : A float that indicates the minimum
+    - singles_penalty_min: A float that indicates the minimum
       value of the FOM. The default value is 0.0.
-    - `singles_penalty_max` (optional) : A float that indicates the scale factor
+    - singles_penalty_max: A float that indicates the scale factor
       for the FOM, or the maximum value for indicator FOMs. The default value is
       1.85.
+    - detector: configuration of the detector
 
     ## Returns:
     - A float that represents the FOM value for the single interaction
@@ -1032,11 +1033,23 @@ def semi_greedy_clusters(
     clusters: Dict[Hashable, Iterable],
     width: int = 3,
     stride: int = 1,
-    direction: str = "forward",
+    direction: Union["forward", "backward", "hybrid"] = "forward",
     **FOM_kwargs,
-):
+) -> Dict[Hashable, Iterable]:
     """
     Apply a semi-greedy clustering to all of the clusters.
+
+    Args:
+        - event: &gamma;-ray event
+        - clusters: interaction id clusters
+        - width: width of combinatorial search
+        - stride: number of interactions accepted from combinatorial search
+        - direction: search direction; forward is from target; backward is from
+          "absorption"; hybrid is not implemented
+        - FOM_kwargs: keyword args for the FOM used
+
+    Returns:
+        - copy of input clusters with new order
     """
     best_ordered_clusters = {
         s: semi_greedy(
@@ -1052,9 +1065,61 @@ def semi_greedy_clusters(
     return best_ordered_clusters
 
 
-def num_perms(iterable: Iterable, r: int) -> int:
-    """Compute the number of permutations of length r from the iterable"""
-    k = len(iterable)
+def semi_greedy_batch_clusters(
+    event: Event,
+    clusters: Dict[Hashable, Iterable],
+    model: FOM_model,
+    width: int = 3,
+    stride: int = 1,
+    direction: str = "forward",
+    **FOM_kwargs,
+):
+    """
+    Apply a batched semi-greedy clustering to all of the clusters.
+
+    Args:
+        - event: &gamma;-ray event
+        - clusters: interaction id clusters
+        - model: FOM_model for computing the FOM
+        - width: width of combinatorial search
+        - stride: number of interactions accepted from combinatorial search
+        - direction: search direction; forward is from target; backward is from
+          "absorption"; hybrid is not implemented
+        - FOM_kwargs: keyword args for the FOM used
+
+    Returns:
+        - copy of input clusters with new order
+    """
+    best_ordered_clusters = {
+        s: semi_greedy_batch(
+            event,
+            cluster,
+            model=model,
+            width=width,
+            stride=stride,
+            direction=direction,
+            **FOM_kwargs,
+        )
+        for (s, cluster) in clusters.items()
+    }
+    return best_ordered_clusters
+
+
+def num_perms(iterable: Iterable | int, r: int) -> int:
+    """
+    Compute the number of permutations of length r from the iterable
+
+    Args:
+        - iterable: iterable to permute or length of iterable to permute
+        - r: permutation length
+
+    Returns:
+        - number of permutations of length r
+    """
+    if isinstance(iterable, int):
+        k = iterable
+    else:
+        k = len(iterable)
     out = k
     for _ in range(1, r):
         k -= 1
@@ -1104,23 +1169,25 @@ def semi_greedy_batch(
     more detail in the corresponding function `semi_greedy_backward`.
 
     Args:
-        - `event`: the &gamma;-ray Event object
-        - `cluster` : the indices of the cluster to be ordered
-        - `width` : the width of the combinatorial window
-        - `stride` : the number of accepted points from each window
-        - `direction` : the direction of the greedy approach; Currently only forward is implemented
-        - `return_score` : include the FOM value in the output
-        - `max_cluster_size` : do not sort clusters with more interactions than this
-        - `early_stopping` : stop after the first stride, only the first
+        - event: the &gamma;-ray Event object
+        - cluster: the indices of the cluster to be ordered
+        - width: the width of the combinatorial window
+        - stride: the number of accepted points from each window
+        - direction: the direction of the greedy approach; Currently only forward is implemented
+        - return_score: include the FOM value in the output
+        - max_cluster_size: do not sort clusters with more interactions than this
+        - early_stopping: stop after the first stride, only the first
           interactions are important; returns only a partial order
-        - `debug`: print debug output
-        - `model`: FOM model used for prediction using `model.predict`
-        - `model_columns`: feature/column names that the model is expecting
-        - `minimize`: minimize (True) or maximize (False) the value; default is minimize
-        - `batch_size`: number of permutations to compute features for each
+        - debug: print debug output
+        - model: FOM model used for prediction using `model.predict`
+        - model_columns: feature/column names that the model is expecting
+        - minimize: minimize (True) or maximize (False) the value; default is minimize
+        - batch_size: number of permutations to compute features for each
           batch; default is all of the permutations `-1`
-        - `**FOM_kwargs` : specifications for the type of FOM to use
+        - FOM_kwargs: specifications for the type of FOM to use
 
+    Returns:
+        - Sorted interaction ids according to the FOM model
     """
 
     # If no cluster provided, assume the entire event is one cluster
@@ -1297,17 +1364,17 @@ def semi_greedy(
     more detail in the corresponding function `semi_greedy_backward`.
 
     Args:
-        - `event`: the &gamma;-ray Event object
-        - `cluster` : the indices of the cluster to be ordered
-        - `width` : the width of the combinatorial window
-        - `stride` : the number of accepted points from each window
-        - `direction` : the direction of the greedy approach
-        - `return_score` : include the FOM value in the output
-        - `max_cluster_size` : do not sort clusters with more interactions than this
-        - `early_stopping` : stop after the first stride, only the first
+        - event: the &gamma;-ray Event object
+        - cluster: the indices of the cluster to be ordered
+        - width: the width of the combinatorial window
+        - stride: the number of accepted points from each window
+        - direction: the direction of the greedy approach
+        - return_score: include the FOM value in the output
+        - max_cluster_size: do not sort clusters with more interactions than this
+        - early_stopping: stop after the first stride, only the first
           interactions are important; returns only a partial order
-        - `debug`: print debug output
-        - `**FOM_kwargs` : specifications for the type of FOM to use
+        - debug: print debug output
+        - FOM_kwargs: specifications for the type of FOM to use
     """
     # FOM_kwargs['filter_singles'] = False
     if cluster is None:
@@ -2243,9 +2310,13 @@ def FOM_features(
                 r_cosines * (1 - comp_penalty)
             )
         if all_columns or "rc_sum_2_penalty_removed" in columns:
-            features["rc_sum_2_penalty_removed"] = np.sum(r_cosines**2 * (1 - comp_penalty))
+            features["rc_sum_2_penalty_removed"] = np.sum(
+                r_cosines**2 * (1 - comp_penalty)
+            )
         if all_columns or "rc_mean_2_penalty_removed" in columns:
-            features["rc_mean_2_penalty_removed"] = np.mean(r_cosines**2 * (1 - comp_penalty))
+            features["rc_mean_2_penalty_removed"] = np.mean(
+                r_cosines**2 * (1 - comp_penalty)
+            )
 
     if all_columns or any(column in cosine_v_columns for column in columns):
         r_cosines_v = r_cosines / np.abs(
