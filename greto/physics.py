@@ -4,6 +4,7 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 
 Physics calculations for photon-matter interactions in germanium
 """
+
 from __future__ import annotations
 
 import warnings
@@ -14,6 +15,7 @@ from scipy.constants import physical_constants
 from scipy.interpolate import PchipInterpolator, interp1d  # CubicSpline,
 
 # from numba import njit
+# from functools import partial
 
 # from greto.utils import log_interp
 
@@ -23,30 +25,25 @@ Z_GE = 32  # Atomic Number of Germanium [p+/atom]
 A_GE = 74  # Atomic Mass of Germanium [g/mol]
 Z_A_GE = 0.44071  # Ratio of Z/A of Germanium [p+/(p+ + n)] (NIST)
 I_GE = 350.0  # Mean excitation energy of Germanium [eV] (NIST)
-N_AV = physical_constants["Avogadro constant"][
-    0
-]  # Avogadro's number 6.02214076e+23 [atoms/mol]
-R_0 = (
-    physical_constants["classical electron radius"][0] * 100
-)  # Classical electron Radius 2.8179403262e-13 [cm]
-MEC2 = physical_constants["electron mass energy equivalent in MeV"][
-    0
-]  # electron mass 0.51099895 [MeV]
-ALPHA = physical_constants["fine-structure constant"][
-    0
-]  # fine structure constant 1/137 ~ 0.0072973525693
-THRESHOLD_PAIR_ATOM = (
-    1.022007e06  # Threshold for pair production on an atomic nucleus [eV] (NIST)
-)
-THRESHOLD_PAIR_ELECTRON = (
-    2.044014e06  # Threshold for pair production on an electron [eV] (NIST)
-)
-BARNS_PER_SQCM = 1e24  # barns per square cm [barns/cm^2]
-K_GE = 11103.1  # K edge in Germanium [eV] (NIST)
-RANGE_PROCESS = (
-    N_AV * RHO_GE
-) / A_GE  # 4.331872333172973e+22 [(atoms/mol)*(g/cm^3)*(mol/g) = atoms/cm^3]
+# Avogadro's number 6.02214076e+23 [atoms/mol]
+N_AV = physical_constants["Avogadro constant"][0]
+# Classical electron Radius 2.8179403262e-13 [cm]
+R_0 = physical_constants["classical electron radius"][0] * 100
+# electron mass 0.51099895 [MeV]
+MEC2 = physical_constants["electron mass energy equivalent in MeV"][0]
+# fine structure constant 1/137 ~ 0.0072973525693
+ALPHA = physical_constants["fine-structure constant"][0]
+# Threshold for pair production on an atomic nucleus [eV] (NIST)
+THRESHOLD_PAIR_ATOM = 1.022007e06
+# Threshold for pair production on an electron [eV] (NIST)
+THRESHOLD_PAIR_ELECTRON = 2.044014e06
+# barns per square cm [barns/cm^2]
+BARNS_PER_SQCM = 1e24
+# K edge in Germanium [eV] (NIST)
+K_GE = 11103.1
+# 4.331872333172973e+22 [(atoms/mol)*(g/cm^3)*(mol/g) = atoms/cm^3]
 # conversion from cross section (cm^2/atom) to linear attenuation (1/cm)
+RANGE_PROCESS = (N_AV * RHO_GE) / A_GE
 
 # %% Compton Scattering Formula: Compton Edge
 """
@@ -237,8 +234,7 @@ def cos_theor_err(
         * eres
         * np.sqrt(
             1 / E_imo**4
-            + np.arange(Nmi, Nmi - len(E_imo), -1)
-            * (1 / E_i**2 - 1 / E_imo**2) ** 2
+            + np.arange(Nmi, Nmi - len(E_imo), -1) * (1 / E_i**2 - 1 / E_imo**2) ** 2
         ),
         1,
     )
@@ -629,7 +625,7 @@ __sig_pair = make_pair_interpolator(
 
 
 def sig_abs(energies: np.ndarray[float]) -> np.ndarray[float]:
-    """Interpolated absorption cross-sections"""
+    """Interpolated absorption cross-sections for Germanium"""
     return __sig_abs(energies)
 
 
@@ -704,48 +700,26 @@ def proba(
 
 
 # %% Klein-Nishina formula
-def KN_vec(
-    E_imo: np.ndarray[float],
-    one_minus_cos_theta: np.ndarray[float],
-    sigma_compt: np.ndarray[float] = None,
-    Ei: np.ndarray[float] = None,
-    relative: bool = True,
-) -> np.ndarray[float]:
-    """
-    Vectorized relative Klein-Nishina integrated around incoming photon axis
-    """
-    if sigma_compt is None and relative:
-        sigma_compt = sig_compt(E_imo)
-    if isinstance(E_imo, (float, int)):
-        E_imo = np.array(E_imo)
-        one_minus_cos_theta = np.array(one_minus_cos_theta)
-        if relative:
-            sigma_compt = np.array(sigma_compt)
-    ind = E_imo > 0
-    out = np.zeros(E_imo.shape)
-    if Ei is not None:
-        ll = Ei[ind] / E_imo[ind]
-    else:
-        if isinstance(Ei, (float, int)):
-            Ei = np.array(Ei)
-        ll = 1 / (1 + E_imo[ind] / MEC2 * (one_minus_cos_theta[ind]))
-    sin_sq = 1 - (1 - one_minus_cos_theta[ind]) ** 2
-    out[ind] = 0.5 * (R_0**2) * (ll**2) * (ll + 1 / ll - sin_sq)
-    out[ind] *= 2 * np.pi * np.sqrt(sin_sq)  # Integrate with respect to phi
-    if relative:
-        out[ind] /= sigma_compt[ind]
-    return out
-
-
 def KN_differential_cross(
     E_imo: np.ndarray[float],
     one_minus_cos_theta: np.ndarray[float],
     sigma_compt: np.ndarray[float] = None,
     Ei: np.ndarray[float] = None,
     relative: bool = True,
+    integrate: bool = False,
 ) -> np.ndarray[float]:
     """
-    Vectorized relative Klein-Nishina
+    Vectorized (relative) Klein-Nishina differential cross-section
+
+    Args:
+        - E_imo: incoming gamma-ray energy
+        - one_minus_cos_theta: 1 - cos(theta) of the scattering angle theta
+        - sigma_compt: Compton scattering cross-section at energy E_imo
+        - Ei: outgoing energy
+        - relative: divide by the total Compton scattering cross-section value
+
+    Returns:
+        - Klein-Nishina differential cross-section value
     """
     if sigma_compt is None and relative:
         sigma_compt = sig_compt(E_imo)
@@ -759,11 +733,11 @@ def KN_differential_cross(
     if Ei is not None:
         ll = Ei[ind] / E_imo[ind]
     else:
-        if isinstance(Ei, (float, int)):
-            Ei = np.array(Ei)
         ll = 1 / (1 + E_imo[ind] / MEC2 * (one_minus_cos_theta[ind]))
     sin_sq = 1 - (1 - one_minus_cos_theta[ind]) ** 2
     out[ind] = 0.5 * (R_0**2) * (ll**2) * (ll + 1 / ll - sin_sq)
+    if integrate:
+        out[ind] *= 2 * np.pi * np.sqrt(sin_sq)  # Integrate with respect to phi
     if relative:
         out[ind] /= sigma_compt[ind]
     return out
