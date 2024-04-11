@@ -4,6 +4,7 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 
 Methods for generating features for transition grade clustering
 """
+
 from typing import Dict, Iterable, List
 
 import numpy as np
@@ -16,7 +17,7 @@ from greto.event_class import Event
 from greto.physics import (
     MEC2,
     RANGE_PROCESS,
-    KN_vec,
+    KN_differential_cross,
     lin_att_abs,
     lin_att_compt,
 )
@@ -185,11 +186,12 @@ def get_grade_features(
     P_angle = np.zeros(E_ijk.shape)
     ind = log_P_ij > 0
     P_angle[ind] = -np.log(
-        KN_vec(
+        KN_differential_cross(
             E_imo=E_ijk[ind],
             one_minus_cos_theta=one_minus_cosine_ijk[ind],
             sigma_compt=mu_compt_ijk[ind] / RANGE_PROCESS,
             Ei=E_ijk_mj[ind],
+            integrate=True,
         )
     )
 

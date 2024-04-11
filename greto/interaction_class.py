@@ -16,24 +16,24 @@ import numpy as np
 @dataclass
 class Interaction:
     """
-    # A class representing a single &gamma;-ray interaction
+    A class representing a single &gamma;-ray interaction
 
-    ## Args:
-    - `x` : A point in R3 where the interaction occurred
-    - `e` : The energy deposited
-    - `ts` : The time the interaction occurred
-    - `crystal_no` : The crystal id number
-    - `seg_no` : The segment id number
-    - `event_no` : The event id number
-    - `interaction_id` : An identifier for the interaction
-    - `interaction_type` (`type`) : The type of interaction:
-        - `0` - source
-        - `1` - Compton scattering
-        - `2` - absorption
-        - `3` - pair production
-        - `99` - interaction after a pair production or possibly other interaction
-    - `energy_factor` : The correction factor used to adjust energy to match
-        the central contact (exponential); (central contact energy) / (energy sum)
+    Args:
+        - x: A point in R3 where the interaction occurred
+        - e: The energy deposited
+        - ts: The time the interaction occurred
+        - crystal_no: The crystal id number
+        - seg_no: The segment id number
+        - event_no: The event id number
+        - interaction_id: An identifier for the interaction
+        - interaction_type: The type of interaction:
+            - `0` - source
+            - `1` - Compton scattering
+            - `2` - absorption
+            - `3` - pair production
+            - `99` - interaction after a pair production or possibly other interaction
+        - energy_factor: The correction factor used to adjust energy to match
+            the central contact (exponential); (central contact energy) / (energy sum)
     """
 
     x: Iterable[float]
