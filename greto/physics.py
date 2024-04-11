@@ -8,7 +8,7 @@ Physics calculations for photon-matter interactions in germanium
 from __future__ import annotations
 
 import warnings
-from typing import Callable
+from typing import Callable, Optional
 
 import numpy as np
 from scipy.constants import physical_constants
@@ -56,24 +56,30 @@ def compton_edge_incoming(
     E_out: np.ndarray[float] | float,
 ) -> np.ndarray[float] | float:
     """
-    E_out minimal, deposit maximal. Find E_in (maximal).
-    Assume that E_out is minimum energy coming out of a scatter (deposited the
-    maximum; complete back-scatter) and compute the incoming energy that deposited it
+    Incoming energy assuming a back-scatter given outgoing energy
 
-    Returns the maximum incoming energy given the outgoing energy (MeV) (larger
+    Args:
+        - E_out: energy leaving a Compton Scattering interaction
+
+    Returns:
+        - Incoming energy was at least...
+
+    Outbound energy E_out is minimal and the energy deposit maximal.
+
+    Find the energy in, E_in, assuming a maximal energy deposit.
+    Assume that E_out is minimum energy coming out of a scatter (deposited the
+    maximum; complete back-scatter) and compute the incoming energy that deposited it.
+
+    Returns the minimum incoming energy given the outgoing energy (MeV) (smaller
     incoming energy implies larger than physical deposit)
 
     E_out = E_in / (1 + (E_in / MEC2) (1 - cos theta) )
 
-    Maximum deposit is a back-scatter where cos theta = -1
-
     Solve for E_in:
-    E_out = E_in / (1 + 2 (E_in / MEC2))
-    E_out + 2 E_out/MEC2 (E_in) = E_in
-    E_out = (1 - 2 E_out/MEC2) E_in
-    E_out / (1 - 2 E_out/MEC2) = E_in
-
-    Incoming energy was at most...
+        * E_out = E_in / (1 + (1 - cos theta) (E_in / MEC2))
+        * E_out + (1 - cos theta) E_out/MEC2 (E_in) = E_in
+        * E_out = (1 - (1 - cos theta) E_out/MEC2) E_in
+        * E_out / (1 - (1 - cos theta) E_out/MEC2) = E_in
     """
     return E_out / (1 - 2 * E_out / MEC2)
 
@@ -82,7 +88,12 @@ def compton_edge_incoming_diff(
     E_out: np.ndarray[float] | float,
 ) -> np.ndarray[float] | float:
     """
-    What is the largest energy deposit that still allows for E_out?
+    Deposited energy assuming a back-scatter given outgoing energy
+
+    What is the energy deposit that still allows for E_out assuming a
+    back-scatter?
+
+    Find the energy deposited (E_in - E_out), assuming a maximal energy deposit.
     """
     return compton_edge_outgoing(E_out) - E_out
     # return E_out * (-1 + 1/(1 - 2*E_out/MEC2) )
@@ -90,16 +101,22 @@ def compton_edge_incoming_diff(
 
 def compton_edge_outgoing(E_in: np.ndarray[float] | float) -> np.ndarray[float] | float:
     """
+    Outgoing energy assuming a back-scatter given incoming energy
+
+    Args:
+        - E_in: energy entering a Compton Scattering interaction
+
+    Returns:
+        - Outgoing energy was at least...
+
     What is the smallest energy that could come out of a scatter with incoming
-    energy E_in?
+    energy E_in (maximal energy deposit)?
 
     Returns the minimum un-deposited energy given the incoming energy (MeV)
 
     E_out = E_in / (1 + (E_in / MEC2) (1 - cos theta) )
 
     Maximum deposit is a back-scatter where cos theta = -1
-
-    Outgoing energy was at least...
     """
     return E_in / (1 + 2 * E_in / MEC2)
 
@@ -108,6 +125,14 @@ def compton_edge_outgoing_diff(
     E_in: np.ndarray[float] | float,
 ) -> np.ndarray[float] | float:
     """
+    Deposited energy assuming a back-scatter given incoming energy
+
+    Args:
+        - E_in: energy entering a Compton Scattering interaction
+
+    Returns:
+        - Deposited energy was at most...
+
     What is the largest energy deposit that could happen with incoming energy
     E_in?
     """
@@ -117,22 +142,24 @@ def compton_edge_outgoing_diff(
 
 # %% Compton Scattering Formula: Cosine
 def cos_theor(
-    E_imo: np.ndarray[float],
-    E_i: np.ndarray[float],
-    penalty: float = None,
+    E_imo: float | np.ndarray[float],
+    E_i: float | np.ndarray[float],
+    penalty: Optional[float] = None,
     penalty_slack: float = 0.1,
     compton_relief: float = 1.0e-10,
 ) -> np.ndarray[float]:
     """
-    Compton scattering formula. Compute cosine of angle based on starting
-    and ending energy after an interaction.
+    Compton scattering formula. Compute cosine of angle based on starting and
+    ending energy after an interaction.
 
     Args:
-        E_imo: The energy prior to the interaction
-        E_i: The energy after the interaction
-        penalty: The penalty for having an unrealistic
+        - E_imo: The energy prior to the interaction
+        - E_i: The energy after the interaction
+        - penalty: The penalty for having an unrealistic
             energy drop (cosine is < -1) violating the Compton edge
-        penalty_slack: Slack in the cosine value
+        - penalty_slack: Slack in the cosine value (if within slack of -1, add
+          in compton_relief)
+        - compton_relief: added if within the slack value of -1
     """
     if isinstance(E_imo, float) and penalty is not None:
         E_imo = np.array(E_imo)
@@ -148,22 +175,35 @@ def cos_theor(
 
 def compton_penalty_ell1(cosines: np.ndarray[float]):
     """
-    Return violation amounts
+    Return how much more negative the theoretical cosine is compared to -1
+
+    Args:
+        - cosines: theoretical cosine values
+
+    Returns:
+        - -1.0 - cosine if cosine < -1, 0.0 otherwise
     """
+    # return np.clip(-cosines - 1, 0.0, np.inf) # slightly slower but identical behavior
     return np.where(cosines < -1, -1 - cosines, 0.0)
 
 
 def compton_penalty(cosines: np.ndarray[float]):
     """
-    Return violation indicator
+    Return if the theoretical cosine is less than -1
+
+    Args:
+        - cosines: theoretical cosine values
+
+    Returns:
+        - 1.0 if cosine < -1, 0.0 otherwise
     """
     return np.where(cosines < -1, 1.0, 0.0)
 
 
 def cos_theor_sigma(
-    E_imo: np.ndarray[float],
-    E_i: np.ndarray[float],
-    Nmi: int = None,
+    E_imo: float | np.ndarray[float],
+    E_i: float | np.ndarray[float],
+    Nmi: Optional[int] = None,
     eres: float = 1e-3,
 ) -> np.ndarray[float]:
     """
@@ -171,9 +211,9 @@ def cos_theor_sigma(
     and ending energy after an interaction.
 
     Args:
-        E_imo: The energy prior to the interaction
-        E_i: The energy after the interaction
-        Nmi: The number of interactions in the cluster
+        - E_imo: The energy prior to the interaction
+        - E_i: The energy after the interaction
+        - Nmi: The number of interactions in the cluster
     """
     if isinstance(E_imo, float):
         E_imo = np.array(E_imo)
@@ -186,9 +226,19 @@ def cos_theor_sigma(
     return MEC2 * eres * np.sqrt(sigma_squared)
 
 
-def theta_theor(E_imo: float, E_i: float, penalty: float = None, **kwargs) -> float:
+def theta_theor(
+    E_imo: float | np.ndarray[float],
+    E_i: float | np.ndarray[float],
+    penalty: Optional[float] = None,
+    **kwargs,
+) -> float:
     """
     The arccosine of cos_theor.
+
+    Args:
+        - E_imo: The energy prior to the interaction
+        - E_i: The energy after the interaction
+        - penalty: Compton Edge violation penalty value
     """
     if isinstance(E_imo, float):
         E_imo = np.array(E_imo)
@@ -205,9 +255,9 @@ def theta_theor(E_imo: float, E_i: float, penalty: float = None, **kwargs) -> fl
 
 
 def cos_theor_err(
-    E_imo: np.ndarray[float],
-    E_i: np.ndarray[float],
-    Nmi: int = None,
+    E_imo: float | np.ndarray[float],
+    E_i: float | np.ndarray[float],
+    Nmi: Optional[int] = None,
     eres: float = 1e-3,
 ) -> np.ndarray[float]:
     """
@@ -242,9 +292,15 @@ def cos_theor_err(
 
 # %% Compton Scattering Formula: Outbound energy
 def outgoing_energy_csf(
-    E_imo: np.ndarray[float], one_minus_cosines: np.ndarray[float]
-) -> np.ndarray[float]:
-    """Compton scattering formula for outgoing energy"""
+    E_imo: float | np.ndarray[float], one_minus_cosines: float | np.ndarray[float]
+) -> float | np.ndarray[float]:
+    """
+    Compton scattering formula for outgoing energy
+
+    Args:
+        - E_imo: The energy prior to the interaction
+        - one_minus_cosines: 1 - cosine of scattering angle
+    """
     return E_imo / (1 + (E_imo / MEC2) * one_minus_cosines)
 
 
@@ -254,7 +310,16 @@ def outgoing_energy_csf_sigma(
     cosine_error: np.ndarray[float],
     cumulative_energy_error: np.ndarray[float],
 ) -> np.ndarray[float]:
-    """Standard error for Compton scattering formula for outgoing energy"""
+    """
+    Standard error for Compton scattering formula for outgoing energy
+
+    Args:
+        - E_imo: The energy prior to the interaction
+        - one_minus_cosines: 1 - cosine of scattering angle
+        - cosine_error: Error due to computing the cosines
+        - cumulative_energy_error: Error due to accumulating energies
+          (cumulative sum of interaction energies)
+    """
     E_geo = outgoing_energy_csf(E_imo, one_minus_cosines)
     return np.sqrt(
         (cosine_error * E_geo**2 / MEC2) ** 2
@@ -468,14 +533,66 @@ def interpolateAbsorptionEdge(
     linear: bool = True,
 ) -> Callable[[np.ndarray], np.ndarray]:
     """
-    Adapted version from nist-calculators by Mikhail Zelenyi, an adaptation of XCOM by NIST
+    Create an interpolator function for photo-absorption including edge
+    information.
+
+    If the absorption data has multiple edges, only the largest edge is needed
+    here. At that largest edge, the interpolator will switch over to a linear
+    interpolation of the data and other edges will be handled using values of x
+    and y
+
+    Args:
+        - x: x values to interpolate between
+        - y: y values to interpolate between
+        - edge: largest photo-absorption edge energy for the material
+        - warn: print warnings
+        - linear: if True, only use linear interpolation
+
+    Adapted version from nist-calculators by Mikhail Zelenyi, an adaptation of
+    XCOM by NIST
     """
+    linear_interp = interp1d(
+        np.log(x), np.log(y), kind="linear", fill_value="extrapolate"
+    )
+
+    if linear:
+
+        def linear_interpolator(x_sample: np.ndarray) -> np.ndarray:
+            """
+            Linear log-log interpolator
+
+            Args:
+                - x_sample: sample points for interpolation
+
+            Returns:
+                - photo-absorption cross-section
+            """
+            if (
+                np.min(x_sample) < np.min(sig_energies)
+                or np.max(x_sample) > np.max(sig_energies)
+            ) and warn:
+                warnings.warn(
+                    "Energy requested is outside of tabulated data, "
+                    + "using linear extrapolation",
+                    UserWarning,
+                )
+            return np.exp(linear_interp(np.log(x_sample)))
+
+        return linear_interpolator
+
     idx = x > edge
-    if not linear:
-        cs = PchipInterpolator(np.log(x[idx]), np.log(y[idx]))
-    linear = interp1d(np.log(x), np.log(y), kind="linear", fill_value="extrapolate")
+    cubic_spline_interp = PchipInterpolator(np.log(x[idx]), np.log(y[idx]))
 
     def interpolator(x_sample: np.ndarray) -> np.ndarray:
+        """
+        Cubic spline log-log interpolator
+
+        Args:
+            - x_sample: sample points for interpolation
+
+        Returns:
+            - photo-absorption cross-section
+        """
         if (
             np.min(x_sample) < np.min(sig_energies)
             or np.max(x_sample) > np.max(sig_energies)
@@ -487,24 +604,10 @@ def interpolateAbsorptionEdge(
             )
         return np.where(
             np.logical_and(x_sample > edge, x_sample < np.max(x)),
-            np.exp(cs(np.log(x_sample))),
-            np.exp(linear(np.log(x_sample))),
+            np.exp(cubic_spline_interp(np.log(x_sample))),
+            np.exp(linear_interp(np.log(x_sample))),
         )
 
-    def linear_interpolator(x_sample: np.ndarray) -> np.ndarray:
-        if (
-            np.min(x_sample) < np.min(sig_energies)
-            or np.max(x_sample) > np.max(sig_energies)
-        ) and warn:
-            warnings.warn(
-                "Energy requested is outside of tabulated data, "
-                + "using linear extrapolation",
-                UserWarning,
-            )
-        return np.exp(linear(np.log(x_sample)))
-
-    if linear:
-        return linear_interpolator
     return interpolator
 
 
@@ -516,11 +619,46 @@ def make_log_log_spline(
     """
     log_x = np.log(x)
     log_y = np.log(y)
-    if not linear:
-        cs = PchipInterpolator(x=log_x, y=log_y)
-    linear = interp1d(x=log_x, y=log_y, kind="linear", fill_value="extrapolate")
+
+    linear_interp = interp1d(x=log_x, y=log_y, kind="linear", fill_value="extrapolate")
+
+    if linear:
+
+        def linear_interpolator(x_sample: np.ndarray) -> np.ndarray:
+            """
+            Linear log-log interpolator
+
+            Args:
+                - x_sample: sample points for interpolation
+
+            Returns:
+                - cross-section
+            """
+            if (
+                np.min(x_sample) < np.min(sig_energies)
+                or np.max(x_sample) > np.max(sig_energies)
+            ) and warn:
+                warnings.warn(
+                    "Energy requested is outside of tabulated data, "
+                    + "using linear extrapolation",
+                    UserWarning,
+                )
+            return np.exp(linear_interp(np.log(x_sample)))
+
+        return linear_interpolator
+
+    cubic_spline_interp = PchipInterpolator(x=log_x, y=log_y)
 
     def interpolator(x_sample: np.ndarray) -> np.ndarray:
+        """
+        Cubic spline log-log interpolator
+
+        Args:
+            - x_sample: sample points for interpolation
+
+        Returns:
+            - cross-section
+        """
         if (
             np.min(x_sample) < np.min(sig_energies)
             or np.max(x_sample) > np.max(sig_energies)
@@ -532,24 +670,12 @@ def make_log_log_spline(
             )
         return np.where(
             np.logical_and(x_sample > np.min(x), x_sample < np.max(x)),
-            np.exp(cs(np.log(x_sample))),  # Use cubic within data range
-            np.exp(linear(np.log(x_sample))),  # Extrapolate with linear
+            np.exp(
+                cubic_spline_interp(np.log(x_sample))
+            ),  # Use cubic within data range
+            np.exp(linear_interp(np.log(x_sample))),  # Extrapolate with linear
         )
 
-    def linear_interpolator(x_sample: np.ndarray) -> np.ndarray:
-        if (
-            np.min(x_sample) < np.min(sig_energies)
-            or np.max(x_sample) > np.max(sig_energies)
-        ) and warn:
-            warnings.warn(
-                "Energy requested is outside of tabulated data, "
-                + "using linear extrapolation",
-                UserWarning,
-            )
-        return np.exp(linear(np.log(x_sample)))
-
-    if linear:
-        return linear_interpolator
     return interpolator
 
 
@@ -563,20 +689,59 @@ def make_pair_interpolator(
     """
     Create spline of linearized log-log data
     """
+
     idx = x > threshold
-    if not linear:
-        cs = PchipInterpolator(
-            x=np.log(x[idx]),
-            y=np.log(y[idx] / (x[idx] * (x[idx] - threshold)) ** 3),
-        )
-    linear = interp1d(
+
+    linear_interp = interp1d(
         x=np.log(x[idx]),
         y=np.log(y[idx] / (x[idx] * (x[idx] - threshold)) ** 3),
         kind="linear",
         fill_value="extrapolate",
     )
 
+    if linear:
+
+        def linear_interpolator(x_sample: np.ndarray) -> np.ndarray:
+            """
+            Linearized pair production log-log interpolator
+
+            Args:
+                - x_sample: sample points for interpolation
+
+            Returns:
+                - pair production cross-section
+            """
+            if (np.max(x_sample) > np.max(sig_energies)) and warn:
+                warnings.warn(
+                    "Energy requested is outside of tabulated data, "
+                    + "using linear extrapolation",
+                    UserWarning,
+                )
+            idx = x_sample > threshold
+            y = np.zeros(x_sample.shape[0])
+            y[idx] = (
+                np.exp(linear_interp(np.log(x_sample[idx])))
+                * (x_sample[idx] * (x_sample[idx] - threshold)) ** 3
+            )
+            return y
+
+        return linear_interpolator
+
+    cubic_spline_interp = PchipInterpolator(
+        x=np.log(x[idx]),
+        y=np.log(y[idx] / (x[idx] * (x[idx] - threshold)) ** 3),
+    )
+
     def interpolator(x_sample: np.ndarray) -> np.ndarray:
+        """
+        Cubic spline linearized pair production log-log interpolator
+
+        Args:
+            - x_sample: sample points for interpolation
+
+        Returns:
+            - pair production cross-section
+        """
         if (np.max(x_sample) > np.max(sig_energies)) and warn:
             warnings.warn(
                 "Energy requested is outside of tabulated data, "
@@ -587,30 +752,13 @@ def make_pair_interpolator(
         y = np.zeros(x_sample.shape[0])
         y[idx] = np.where(
             x_sample[idx] < np.max(x),
-            np.exp(cs(np.log(x_sample[idx])))
+            np.exp(cubic_spline_interp(np.log(x_sample[idx])))
             * (x_sample[idx] * (x_sample[idx] - threshold)) ** 3,
-            np.exp(linear(np.log(x_sample[idx])))
+            np.exp(linear_interp(np.log(x_sample[idx])))
             * (x_sample[idx] * (x_sample[idx] - threshold)) ** 3,
         )
         return y
 
-    def linear_interpolator(x_sample: np.ndarray) -> np.ndarray:
-        if (np.max(x_sample) > np.max(sig_energies)) and warn:
-            warnings.warn(
-                "Energy requested is outside of tabulated data, "
-                + "using linear extrapolation",
-                UserWarning,
-            )
-        idx = x_sample > threshold
-        y = np.zeros(x_sample.shape[0])
-        y[idx] = (
-            np.exp(linear(np.log(x_sample[idx])))
-            * (x_sample[idx] * (x_sample[idx] - threshold)) ** 3
-        )
-        return y
-
-    if linear:
-        return linear_interpolator
     return interpolator
 
 
@@ -908,9 +1056,9 @@ def sig_pair_old(E: np.ndarray[float]) -> np.ndarray[float]:
     information.
 
     Arg:
-        E : energy of the photon [MeV]
+        E: energy of the photon [MeV]
     Returns:
-        sig_pair : the cross section of pair production at E [cm^2/atom]
+        sig_pair: the cross section of pair production at E [cm^2/atom]
     """
     # if isinstance(E, (float, int)):
     #     E = np.array(E)
@@ -924,12 +1072,3 @@ def sig_pair_old(E: np.ndarray[float]) -> np.ndarray[float]:
         * 1e-24
     )
     return sigma_pair
-
-
-# def sig_photo_nuc(E:np.ndarray[float]) -> np.ndarray[float]:
-#     """Cross section of photo-nuclear effect in germanium"""
-#     raise NotImplementedError
-
-# def sig_total(energies:np.ndarray[float]) -> np.ndarray[float]:
-#     """Interpolated total cross-section"""
-#     return sig_abs(energies) + sig_compt(energies) + sig_pair(energies)
