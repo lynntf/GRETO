@@ -4,6 +4,7 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 
 Utility functions
 """
+
 from copy import deepcopy
 from functools import lru_cache
 from typing import BinaryIO, Dict, Iterable, Tuple
@@ -21,6 +22,11 @@ def perm_to_transition(permutation: Tuple, D: int = 3) -> Tuple[np.ndarray]:
 
     We apply caching to take advantage of multiple calls to this function during
     a single FOM evaluation.
+
+    >>> permutation = (1, 2, 3, 4, 5, 6, 7, 8, 9)  # A permutation
+    >>> A = np.arange(1000).reshape((10, 10, 10))  # A 3D array
+    >>> A[perm_to_transition(permutation, D = 3)]  # Select i->j->k from permutation
+    array([123, 234, 345, 456, 567, 678])
     """
     p = np.array(permutation)
     return tuple(p[i : len(p) - (D - i) + 1] for i in range(D))
