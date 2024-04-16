@@ -357,24 +357,19 @@ def tango_incoming_estimate(
 
 
 def partial_tango_incoming_derivatives(
-    e: np.ndarray[float], o_m_cos_ijk: np.ndarray[float]
+    e: np.ndarray[float], o_m_cos_ijk: np.ndarray[float], fill_value: float = 10.0,
 ) -> np.ndarray[float]:
     """
     Partial derivatives of estimated incoming energy using local information
     """
-    o_m_cos_ijk[o_m_cos_ijk <= 0.0] = 10
-    e[e <= 0.0] = 10
+    o_m_cos_ijk[o_m_cos_ijk <= 0.0] = fill_value
+    e[e <= 0.0] = fill_value
     return (
         0.5
-        + 0.5
-        * 1
-        / np.sqrt(e**2 / 4 + e * MEC2 / o_m_cos_ijk)
+        + 0.5*(1/np.sqrt(e**2 / 4 + e * MEC2 / o_m_cos_ijk))
         * (e / 2 + MEC2 / o_m_cos_ijk),
-        0.5
-        * 1
-        / np.sqrt(e**2 / 4 + e * MEC2 / o_m_cos_ijk)
-        * (e * MEC2)
-        / (o_m_cos_ijk**2),
+        0.5*(1/np.sqrt(e**2 / 4 + e * MEC2 / o_m_cos_ijk))
+        * (e * MEC2) / (o_m_cos_ijk**2),
     )
 
 
