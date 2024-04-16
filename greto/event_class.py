@@ -4,23 +4,23 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 
 Event class
 """
+
 from __future__ import annotations
 
 from functools import cached_property, lru_cache
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 from scipy.cluster.hierarchy import linkage  # fcluster,
 from scipy.spatial.distance import pdist, squareform
 
+import greto.geometry as geo
+import greto.physics as phys
 from greto import default_config
 from greto.asym_heir_clustering import asym_hier_linkage
 from greto.coincidence_class import Coincidence
 from greto.detector_config_class import DetectorConfig
-import greto.geometry as geo
 from greto.interaction_class import Interaction
-import greto.physics as phys
-
 from greto.utils import perm_to_transition
 
 # TODO - change from eres constant to energy uncertainty
@@ -499,7 +499,9 @@ class Event:
         energies = self.cumulative_energies(
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
-        return phys.cos_theor_sigma(energies[:-1], energies[1:], Nmi, **cos_theor_kwargs)
+        return phys.cos_theor_sigma(
+            energies[:-1], energies[1:], Nmi, **cos_theor_kwargs
+        )
 
     # %% Permuted theoretical theta and error
     def theta_theor_perm(
@@ -591,8 +593,8 @@ class Event:
         else:
             full_perm = tuple(permutation)
         energies = self.energy_matrix[list(full_perm)]
-        # cum_energies = np.cumsum(energies[::-1])[::-1] # Reversed cumulative sum
-        cum_energies = np.flip(np.flip(energies, 0).cumsum(), 0)
+        cum_energies = np.cumsum(energies[::-1])[::-1] # Reversed cumulative sum
+        # cum_energies = np.flip(np.flip(energies, 0).cumsum(), 0)  # slightly slower for short vec
         if start_energy is None:
             return cum_energies[1:]
         return cum_energies[1:] + (start_energy - cum_energies[1])
@@ -650,7 +652,9 @@ class Event:
         Ns = np.arange(Nmi, Nmi - len(e_sum_lm1), -1, dtype=int)
         if debug:  # Debug information
             print("Ns ", Ns)
-            print("a ", eres**2 * (Ns + 1) + (err_cos * (e_scatter**2 / phys.MEC2)) ** 2)
+            print(
+                "a ", eres**2 * (Ns + 1) + (err_cos * (e_scatter**2 / phys.MEC2)) ** 2
+            )
             print("b ", eres * (e_scatter / e_sum_lm1) ** 2)
             print(
                 "delta_e_scatter ",
@@ -706,9 +710,7 @@ class Event:
         )
         d_de = self.tango_partial_derivatives[0][perm_to_transition(full_perm)]
         (d_d_cos) = self.tango_partial_derivatives[1][perm_to_transition(full_perm)]
-        return np.sqrt(
-            (eres**2 * ((1 - d_de) ** 2 + Ns)) + (err_cos * (d_d_cos)) ** 2
-        )
+        return np.sqrt((eres**2 * ((1 - d_de) ** 2 + Ns)) + (err_cos * (d_d_cos)) ** 2)
 
     def res_loc_geo(
         self,
@@ -822,27 +824,32 @@ class Event:
         permutation: Iterable[int],
         start_point: int = 0,
         start_energy: float = None,
+        fix_nan: Optional[float] = 2*np.pi,
         **cos_theor_kwargs,
     ) -> np.ndarray:
         """Residual between geometric theta and theoretical theta"""
-        geo = self.theta_act_perm(permutation=permutation, start_point=start_point)
+        geometric_theta = self.theta_act_perm(permutation=permutation, start_point=start_point)
         theo = self.theta_theor_perm(
             permutation=permutation,
             start_point=start_point,
             start_energy=start_energy,
             **cos_theor_kwargs,
         )
-        return geo - theo
+        out = geometric_theta - theo
+        if fix_nan is not None:
+            out[np.isnan(out)] = fix_nan
+        return out
 
     def res_theta_cap(
         self,
         permutation: Iterable[int],
         start_point: int = 0,
         start_energy: float = None,
+        fix_nan: Optional[float] = 2*np.pi,
         **cos_theor_kwargs,
     ) -> np.ndarray:
         """Residual between geometric theta and theoretical theta (cosine capped at -1)"""
-        geo = self.theta_act_perm(permutation=permutation, start_point=start_point)
+        geometric_theta = self.theta_act_perm(permutation=permutation, start_point=start_point)
         theo = self.cos_theor_perm(
             permutation=permutation,
             start_point=start_point,
@@ -850,7 +857,10 @@ class Event:
             **cos_theor_kwargs,
         )
         theo = np.arccos(np.maximum(theo, -1))
-        return geo - theo
+        out = geometric_theta - theo
+        if fix_nan is not None:
+            out[np.isnan(out)] = fix_nan
+        return out
 
     def res_theta_sigma(
         self,
@@ -969,13 +979,16 @@ class Event:
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
         if use_ei:
-            return phys.KN_vec(
+            return phys.KN_differential_cross(
                 energies[:-1],
                 1 - self.cos_act_perm(permutation),
                 Ei=energies[1:],
+                integrate=True,
                 **kwargs,
             )
-        return phys.KN_vec(energies[:-1], 1 - self.cos_act_perm(permutation), **kwargs)
+        return phys.KN_differential_cross(
+            energies[:-1], 1 - self.cos_act_perm(permutation), integrate=True, **kwargs
+        )
 
     def klein_nishina_differential_cross_section(
         self,
@@ -1006,9 +1019,8 @@ class Event:
         """
         Get transition quality tensor.
         """
-        from greto.transition_grade_clustering import (  # pylint: disable=import-outside-toplevel
-            get_grade_features,
-        )
+        from greto.transition_grade_clustering import \
+            get_grade_features  # pylint: disable=import-outside-toplevel
 
         f = get_grade_features(self)
         # TODO - implement a feature reduction here
