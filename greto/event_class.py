@@ -806,7 +806,9 @@ class Event:
         **cos_theor_kwargs,
     ) -> np.ndarray:
         """Residual between geometric cosine and theoretical cosine (capped at -1)"""
-        geometric_cosine = self.cos_act_perm(permutation=permutation, start_point=start_point)
+        geometric_cosine = self.cos_act_perm(
+            permutation=permutation, start_point=start_point
+        )
         theo = self.cos_theor_perm(
             permutation=permutation,
             start_point=start_point,
@@ -1172,13 +1174,17 @@ class Event:
     def copy(self):
         """Duplicate the current event"""
         return Event(
-            self.id, list(self.points), ground_truth=self.ground_truth, detector=self.detector_config, flat=self.flat
+            self.id,
+            list(self.points),
+            ground_truth=self.ground_truth,
+            detector=self.detector_config,
+            flat=self.flat,
         )
-    
-    def subevent(self, cluster: tuple[int], cluster_id: int):
-        return Event(
-            (self.id, cluster_id), [self.points[i] for i in cluster], detector=self.detector_config
-        )
+
+    # def subevent(self, cluster: tuple[int], cluster_id: int):
+    #     return Event(
+    #         (self.id, cluster_id), [self.points[i] for i in cluster], detector=self.detector_config
+    #     )
 
     @property
     def coincidence(self):
@@ -1215,9 +1221,10 @@ class Event:
 class _EventCalculator:
     """
     Calculator for event computations
-    
+
     Separate from the Event for memory purposes
     """
+
     def __init__(self) -> None:
         self.event = None
         self.event_id = None
