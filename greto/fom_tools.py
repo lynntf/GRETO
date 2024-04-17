@@ -2452,7 +2452,7 @@ def all_column_names():
     )
     escape_probability_feature_names = list(
         escape_prob_features(
-            default_event, default_clusters[1], 0.0, return_columns=True
+            default_event, default_clusters[1], 1e10, return_columns=True,
         ).keys()
     )
 
