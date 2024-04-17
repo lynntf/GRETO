@@ -8,6 +8,7 @@ Cluster tools
 from __future__ import annotations
 
 from copy import deepcopy
+from functools import cached_property
 from itertools import product
 from typing import Dict, Hashable, List, Optional, Tuple, Union
 
@@ -551,120 +552,219 @@ def cluster_properties_features(
     cluster: Tuple,
     start_point: int = 0,
     columns: Optional[List[str]] = None,
+    all_columns: bool = False,
+    columns_bool: np.ndarray = None,
+    return_columns: bool = False,
 ):
     """
     Some "property" features of clusters
     """
-    all_columns = False
-    if columns is None:
-        columns = []
-        all_columns = True
-    elif "all" in columns:
-        all_columns = True
+    if not all_columns:
+        if columns_bool is None:
+            if columns is None:
+                columns = []
+                all_columns = True
+            elif "all" in columns:
+                all_columns = True
 
-    features = {}
+    features_array = np.zeros((25,))
+    if all_columns:
+        columns_bool = np.ones(features_array.shape, dtype=bool)
+    fi = 0
+    feature_names = []
 
-    if all_columns or "n" in columns:
-        features["n"] = len(cluster)
-    centroid_columns = [
-        "centroid_r",
-        "length",
-        "width",
-        "aspect_ratio",
-    ]
-    if all_columns or any(column in centroid_columns for column in columns):
-        centroid = cluster_centroid(event, cluster)
-        if all_columns or "centroid_r" in columns:
-            features["centroid_r"] = np.linalg.norm(centroid)
-    if all_columns or "average_r" in columns:
-        features["average_r"] = np.mean(event.distance[0, list(cluster)])
-    if all_columns or "first_r" in columns:
-        features["first_r"] = event.distance[0, cluster[0]]
-    if all_columns or "final_r" in columns:
-        features["final_r"] = event.distance[0, cluster[-1]]
+    calc = property_calcs(event, cluster, start_point=start_point)
 
-    if len(cluster) > 1:
-        if (
-            all_columns
-            or "length" in columns
-            or "width" in columns
-            or "aspect_ratio" in columns
-        ):
-            points_x = event.point_matrix[[start_point] + list(cluster)]
-            vectors = points_x[1:] - points_x[:-1]
-            length_vector = np.sum(vectors, axis=0)
-            length_dir = length_vector / np.linalg.norm(length_vector)
-            centroid_vectors = points_x[1:] - centroid
-            lengths = np.abs(np.dot(centroid_vectors, length_dir))
-            if all_columns or "length" in columns or "aspect_ratio" in columns:
-                length = np.mean(lengths)
-                if all_columns or "length" in columns:
-                    features["length"] = length
-            if all_columns or "width" in columns or "aspect_ratio" in columns:
-                length_vectors = lengths[:, None] * length_dir[None, :]
-                width_vectors = centroid_vectors - length_vectors
-                widths = np.linalg.norm(width_vectors, axis=-1)
-                width = np.mean(widths)
-                if all_columns or "width" in columns:
-                    features["width"] = width
-            if all_columns or "aspect_ratio" in columns:
-                features["aspect_ratio"] = length / width
-        if all_columns or "first_energy_ratio" in columns:
-            esum = event.energy_sum(cluster)
-            features["first_energy_ratio"] = event.energy_matrix[cluster[0]] / esum
-        if all_columns or "final_energy_ratio" in columns:
-            features["final_energy_ratio"] = event.energy_matrix[cluster[-2]] / (
-                event.energy_matrix[cluster[-2]] + event.energy_matrix[cluster[-1]]
-            )
-        if all_columns or "first_is_not_largest" in columns:
-            features["first_is_not_largest"] = np.all(
-                event.energy_matrix[list(cluster)][0]
-                < event.energy_matrix[list(cluster)][1:]
-            )
-        if all_columns or "first_is_not_closest" in columns:
-            features["first_is_not_closest"] = np.all(
-                event.spherical_point_matrix[list(cluster)][:, 0][0]
-                > event.spherical_point_matrix[list(cluster)][:, 0][1:]
-            )
-        if all_columns or "tango_variance" in columns or "tango_sigma" in columns:
-            tangos = event.tango_estimates_perm(cluster, start_point=start_point)
-            if all_columns or "tango_variance" in columns:
-                features["tango_variance"] = np.var(tangos)
-            if all_columns or "tango_sigma" in columns:
-                features["tango_sigma"] = np.sqrt(np.var(tangos))
-        if all_columns or "tango_v_variance" in columns or "tango_v_sigma" in columns:
-            tangos_sigma = event.tango_estimates_sigma_perm(
-                cluster, start_point=start_point
-            )
-            if all_columns or "tango_v_variance" in columns:
-                features["tango_v_variance"] = 1 / np.sum(1 / tangos_sigma**2)
-            if all_columns or "tango_v_sigma" in columns:
-                features["tango_v_sigma"] = np.sqrt(1 / np.sum(1 / tangos_sigma**2))
-    else:
-        if all_columns or "length" in columns:
-            features["length"] = event.position_uncertainty[cluster[0]]
-        if all_columns or "width" in columns:
-            features["width"] = event.position_uncertainty[cluster[0]]
-        if all_columns or "aspect_ratio" in columns:
-            features["aspect_ratio"] = 1.0
-        if all_columns or "first_energy_ratio" in columns:
-            features["first_energy_ratio"] = 1.0
-        if all_columns or "final_energy_ratio" in columns:
-            features["final_energy_ratio"] = 1.0
-        if all_columns or "first_is_not_largest" in columns:
-            features["first_is_not_largest"] = False
-        if all_columns or "first_is_not_closest" in columns:
-            features["first_is_not_closest"] = False
-        if all_columns or "tango_variance" in columns:
-            features["tango_variance"] = 0.0
-        if all_columns or "tango_sigma" in columns:
-            features["tango_sigma"] = 0.0
-        if all_columns or "tango_v_variance" in columns:
-            features["tango_v_variance"] = 0.0
-        if all_columns or "tango_v_sigma" in columns:
-            features["tango_v_sigma"] = 0.0
+    # if all_columns or columns_bool[fi]:
+    #     features_array[fi] = calc.esum
+    # if return_columns:
+    #     feature_names.append("esum")
+    # fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.n
+    if return_columns:
+        feature_names.append("n")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.centroid_r
+    if return_columns:
+        feature_names.append("centroid_r")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.average_r
+    if return_columns:
+        feature_names.append("average_r")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.first_r
+    if return_columns:
+        feature_names.append("first_r")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.final_r
+    if return_columns:
+        feature_names.append("final_r")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.length
+    if return_columns:
+        feature_names.append("length")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.width
+    if return_columns:
+        feature_names.append("width")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.aspect_ratio
+    if return_columns:
+        feature_names.append("aspect_ratio")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.first_energy_ratio
+    if return_columns:
+        feature_names.append("first_energy_ratio")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.final_energy_ratio
+    if return_columns:
+        feature_names.append("final_energy_ratio")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.first_is_not_largest
+    if return_columns:
+        feature_names.append("first_is_not_largest")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.first_is_not_closest
+    if return_columns:
+        feature_names.append("first_is_not_closest")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.tango_variance
+    if return_columns:
+        feature_names.append("tango_variance")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.tango_v_variance
+    if return_columns:
+        feature_names.append("tango_v_variance")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.tango_sigma
+    if return_columns:
+        feature_names.append("tango_sigma")
+    fi += 1
+    if all_columns or columns_bool[fi]:
+        features_array[fi] = calc.tango_v_sigma
+    if return_columns:
+        feature_names.append("tango_v_sigma")
+    fi += 1
 
-    return features
+    # if all_columns or "n" in columns:
+    #     features["n"] = len(cluster)
+    # centroid_columns = [
+    #     "centroid_r",
+    #     "length",
+    #     "width",
+    #     "aspect_ratio",
+    # ]
+    # if all_columns or any(column in centroid_columns for column in columns):
+    #     centroid = cluster_centroid(event, cluster)
+    #     if all_columns or "centroid_r" in columns:
+    #         features["centroid_r"] = np.linalg.norm(centroid)
+    # if all_columns or "average_r" in columns:
+    #     features["average_r"] = np.mean(event.distance[0, list(cluster)])
+    # if all_columns or "first_r" in columns:
+    #     features["first_r"] = event.distance[0, cluster[0]]
+    # if all_columns or "final_r" in columns:
+    #     features["final_r"] = event.distance[0, cluster[-1]]
+
+    # if len(cluster) > 1:
+    #     if (
+    #         all_columns
+    #         or "length" in columns
+    #         or "width" in columns
+    #         or "aspect_ratio" in columns
+    #     ):
+    #         points_x = event.point_matrix[[start_point] + list(cluster)]
+    #         vectors = points_x[1:] - points_x[:-1]
+    #         length_vector = np.sum(vectors, axis=0)
+    #         length_dir = length_vector / np.linalg.norm(length_vector)
+    #         centroid_vectors = points_x[1:] - centroid
+    #         lengths = np.abs(np.dot(centroid_vectors, length_dir))
+    #         if all_columns or "length" in columns or "aspect_ratio" in columns:
+    #             length = np.mean(lengths)
+    #             if all_columns or "length" in columns:
+    #                 features["length"] = length
+    #         if all_columns or "width" in columns or "aspect_ratio" in columns:
+    #             length_vectors = lengths[:, None] * length_dir[None, :]
+    #             width_vectors = centroid_vectors - length_vectors
+    #             widths = np.linalg.norm(width_vectors, axis=-1)
+    #             width = np.mean(widths)
+    #             if all_columns or "width" in columns:
+    #                 features["width"] = width
+    #         if all_columns or "aspect_ratio" in columns:
+    #             features["aspect_ratio"] = length / width
+    #     if all_columns or "first_energy_ratio" in columns:
+    #         esum = event.energy_sum(cluster)
+    #         features["first_energy_ratio"] = event.energy_matrix[cluster[0]] / esum
+    #     if all_columns or "final_energy_ratio" in columns:
+    #         features["final_energy_ratio"] = event.energy_matrix[cluster[-2]] / (
+    #             event.energy_matrix[cluster[-2]] + event.energy_matrix[cluster[-1]]
+    #         )
+    #     if all_columns or "first_is_not_largest" in columns:
+    #         features["first_is_not_largest"] = np.all(
+    #             event.energy_matrix[list(cluster)][0]
+    #             < event.energy_matrix[list(cluster)][1:]
+    #         )
+    #     if all_columns or "first_is_not_closest" in columns:
+    #         features["first_is_not_closest"] = np.all(
+    #             event.spherical_point_matrix[list(cluster)][:, 0][0]
+    #             > event.spherical_point_matrix[list(cluster)][:, 0][1:]
+    #         )
+    #     if all_columns or "tango_variance" in columns or "tango_sigma" in columns:
+    #         tangos = event.tango_estimates_perm(cluster, start_point=start_point)
+    #         if all_columns or "tango_variance" in columns:
+    #             features["tango_variance"] = np.var(tangos)
+    #         if all_columns or "tango_sigma" in columns:
+    #             features["tango_sigma"] = np.sqrt(np.var(tangos))
+    #     if all_columns or "tango_v_variance" in columns or "tango_v_sigma" in columns:
+    #         tangos_sigma = event.tango_estimates_sigma_perm(
+    #             cluster, start_point=start_point
+    #         )
+    #         if all_columns or "tango_v_variance" in columns:
+    #             features["tango_v_variance"] = 1 / np.sum(1 / tangos_sigma**2)
+    #         if all_columns or "tango_v_sigma" in columns:
+    #             features["tango_v_sigma"] = np.sqrt(1 / np.sum(1 / tangos_sigma**2))
+    # else:
+    #     if all_columns or "length" in columns:
+    #         features["length"] = event.position_uncertainty[cluster[0]]
+    #     if all_columns or "width" in columns:
+    #         features["width"] = event.position_uncertainty[cluster[0]]
+    #     if all_columns or "aspect_ratio" in columns:
+    #         features["aspect_ratio"] = 1.0
+    #     if all_columns or "first_energy_ratio" in columns:
+    #         features["first_energy_ratio"] = 1.0
+    #     if all_columns or "final_energy_ratio" in columns:
+    #         features["final_energy_ratio"] = 1.0
+    #     if all_columns or "first_is_not_largest" in columns:
+    #         features["first_is_not_largest"] = False
+    #     if all_columns or "first_is_not_closest" in columns:
+    #         features["first_is_not_closest"] = False
+    #     if all_columns or "tango_variance" in columns:
+    #         features["tango_variance"] = 0.0
+    #     if all_columns or "tango_sigma" in columns:
+    #         features["tango_sigma"] = 0.0
+    #     if all_columns or "tango_v_variance" in columns:
+    #         features["tango_v_variance"] = 0.0
+    #     if all_columns or "tango_v_sigma" in columns:
+    #         features["tango_v_sigma"] = 0.0
+
+    if return_columns:
+        return dict(zip(feature_names, features_array))
+
+    return features_array
 
 
 class cluster_properties:
@@ -763,6 +863,227 @@ class cluster_properties:
 
     def __str__(self) -> str:
         pass
+
+
+class property_calcs:
+    """Lazy computation of properties"""
+
+    def __init__(self, event: Event, cluster: Tuple, start_point: int = 0):
+        self.event = event
+        self.cluster = cluster
+        self.start_point = start_point
+
+    @cached_property
+    def centroid(self):
+        """Centroid of interaction points"""
+        return cluster_centroid(self.event, self.cluster)
+
+    @cached_property
+    def barycenter(self):
+        """Energy barycenter of interactions"""
+        return cluster_barycenter(self.event, self.cluster)
+
+    @cached_property
+    def points_x(self):
+        """Spatial interaction locations"""
+        return self.event.point_matrix[[self.start_point] + list(self.cluster)]
+
+    @cached_property
+    def vectors(self):
+        """Vectors between interactions"""
+        return self.points_x[1:] - self.points_x[:-1]
+
+    @cached_property
+    def length_vector(self):
+        """Total length vector"""
+        # return np.sum(self.vectors, axis=0)
+        return self.points_x[-1] - self.points_x[0]
+
+    @cached_property
+    def directions(self):
+        """Unit vectors between interactions"""
+        return self.vectors / np.linalg.norm(self.vectors, axis=1, keepdims=True)
+
+    @cached_property
+    def esum(self):
+        """Sum of energies"""
+        return self.event.energy_sum(self.cluster)
+
+    @cached_property
+    def average_dir(self):
+        """Average vector for heading"""
+        if len(self.cluster) > 1:
+            return np.mean(self.directions, axis=0)
+        return self.directions[0]
+
+    @cached_property
+    def length_dir(self):
+        """Unit vectors in the length direction"""
+        if len(self.cluster) > 1:
+            return self.length_vector / np.linalg.norm(self.length_vector)
+        return self.directions[0]
+
+    @cached_property
+    def centroid_vectors(self):
+        """Vectors to interactions from the centroid"""
+        if len(self.cluster) > 1:
+            return self.points_x[1:] - self.centroid
+        return
+
+    @cached_property
+    def lengths(self):
+        """Estimates of a cluster length"""
+        if len(self.cluster) > 1:
+            return np.abs(np.dot(self.centroid_vectors, self.length_dir))
+        return
+
+    @cached_property
+    def length(self):
+        """Estimate of a cluster length"""
+        if len(self.cluster) > 1:
+            return np.mean(self.lengths)
+        return self.event.position_uncertainty[self.cluster[0]]
+
+    @cached_property
+    def length_vectors(self):
+        """Vectors in the length direction"""
+        if len(self.cluster) > 1:
+            return self.lengths[:, None] * self.length_dir[None, :]
+        return
+
+    @cached_property
+    def width_vectors(self):
+        """Vectors in the width direction"""
+        if len(self.cluster) > 1:
+            return self.centroid_vectors - self.length_vectors
+        return
+
+    @cached_property
+    def widths(self):
+        """Estimates of a cluster width"""
+        if len(self.cluster) > 1:
+            return np.linalg.norm(self.width_vectors, axis=-1)
+        return
+
+    @cached_property
+    def width(self):
+        """An estimate of cluster width"""
+        if len(self.cluster) > 1:
+            return np.mean(self.widths)
+        return self.event.position_uncertainty[self.cluster[0]]
+
+    @cached_property
+    def first_energy_ratio(self):
+        """Ratio of the first energy to the summed total energy"""
+        if len(self.cluster) > 1:
+            return self.event.energy_matrix[self.cluster[0]] / self.esum
+        return 1.0
+
+    @cached_property
+    def final_energy_ratio(self):
+        """Ratio of second to last energy to the final two energies"""
+        if len(self.cluster) > 1:
+            return self.event.energy_matrix[self.cluster[-2]] / (
+                self.event.energy_matrix[self.cluster[-2]]
+                + self.event.energy_matrix[self.cluster[-1]]
+            )
+        return 1.0
+
+    @cached_property
+    def first_is_not_largest(self):
+        """Boolean if the first interaction is not the largest energy"""
+        if len(self.cluster) > 1:
+            return np.all(
+                self.event.energy_matrix[list(self.cluster)][0]
+                < self.event.energy_matrix[list(self.cluster)][1:]
+            )
+        return False
+
+    @cached_property
+    def first_is_not_closest(self):
+        """Boolean if the first interaction is not the closest"""
+        if len(self.cluster) > 1:
+            return np.all(
+                self.event.spherical_point_matrix[list(self.cluster)][:, 0][0]
+                > self.event.spherical_point_matrix[list(self.cluster)][:, 0][1:]
+            )
+        return False
+
+    @cached_property
+    def tangos(self):
+        """TANGO estimates"""
+        if len(self.cluster) > 1:
+            return self.event.tango_estimates_perm(
+                self.cluster, start_point=self.start_point
+            )
+        return
+
+    @cached_property
+    def tangos_sigma(self):
+        """Standard error of TANGO estimates"""
+        if len(self.cluster) > 1:
+            return self.event.tango_estimates_sigma_perm(
+                self.cluster, start_point=self.start_point
+            )
+        return
+
+    @cached_property
+    def tango_variance(self):
+        """Variance in tango estimates"""
+        if len(self.cluster) > 1:
+            return np.var(self.tangos)
+        return 0.0
+
+    @cached_property
+    def tango_v_variance(self):
+        """Variance weighted variance in tango estimates"""
+        if len(self.cluster) > 1:
+            return 1 / np.sum(1 / self.tangos_sigma**2)
+        return 0.0
+
+    @cached_property
+    def tango_sigma(self):
+        """Standard error in tango estimates"""
+        if len(self.cluster) > 1:
+            return np.sqrt(np.var(self.tangos))
+        return 0.0
+
+    @cached_property
+    def tango_v_sigma(self):
+        """Variance weighted standard error in tango estimates"""
+        if len(self.cluster) > 1:
+            return np.sqrt(1 / np.sum(1 / self.tangos_sigma**2))
+        return 0.0
+
+    @cached_property
+    def aspect_ratio(self):
+        """Length over width"""
+        return self.length / self.width
+
+    @cached_property
+    def n(self):
+        """Number of interaction points"""
+        return len(self.cluster)
+
+    @cached_property
+    def centroid_r(self):
+        """Centroid of interaction points radius"""
+        return np.linalg.norm(self.centroid)
+
+    @cached_property
+    def average_r(self):
+        """Average interaction point radius"""
+        return np.mean(self.event.distance[0, list(self.cluster)])
+
+    @cached_property
+    def first_r(self):
+        """Initial interaction point radius"""
+        return self.event.distance[0, self.cluster[0]]
+
+    @cached_property
+    def final_r(self):
+        """Final interaction point radius"""
+        return self.event.distance[0, self.cluster[-1]]
 
 
 # class cluster_contextual_properties:
