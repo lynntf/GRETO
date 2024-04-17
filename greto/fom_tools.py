@@ -42,6 +42,7 @@ class FOM_model:
         self.predict = model_evaluation
         if columns is not None:
             self.columns = columns
+            self.columns_bool = column_names_to_bool(columns=columns)
         if model is not None:
             self.model = model
 
