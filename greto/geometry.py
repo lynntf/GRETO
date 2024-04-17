@@ -91,35 +91,43 @@ def cosine_vec(
     points: np.ndarray[float], center: np.ndarray = np.array([0.0, 0.0, 0.0])
 ) -> np.ndarray[float]:
     """
-    # Returns the pairwise cosine between vectors center -> point_1 and center ->
+    Returns the pairwise cosine between vectors center -> point_1 and center ->
     point_2.
 
     If we want the cosine between point_1 -> center and center -> point_2, this
     is negative. This allows the computation of angles centered away from the
     origin.
 
-    ## Args:
-        - `points`: Interaction point coordinates
-        - `center`: Center of the angle, default is the origin
+    pdist will return a 1 - cosine distance
+
+    Args:
+        - points: Interaction point coordinates
+        - center: Center of the angle, default is the origin
+    Returns:
+        - cosine distance between points given a center point
     """
-    return 1 - pdist(points - center, metric="cosine")
+    return 1.0 - pdist(points - center, metric="cosine")
 
 
 def one_minus_cosine_ijk(points: np.ndarray[float]) -> np.ndarray[float]:
     """
-    # Get all of the 1 - cos theta values for all transitions i -> j -> k
+    Get all of the 1 - cos theta values for all transitions i -> j -> k
 
-    ## Args:
-        - `points`: Interaction point coordinates
+    Args:
+        - points: Interaction point coordinates
+    Returns:
+        - array of 1 - cos values for transitions
     """
     N = len(points)
     o_m_cosine_ijk = np.zeros((N, N, N))
     for j in range(0, N):
-        omc_ijk = 1 + cosine_vec(points, points[j])
-        o_m_cosine_ijk[:, j, :] = squareform(omc_ijk)
+        # omc_ijk = 1 + cosine_vec(points, points[j])
+        # omc_ijk = 2.0 - pdist(points - points[j], metric="cosine")
+        # o_m_cosine_ijk[:, j, :] = squareform(omc_ijk)
+        o_m_cosine_ijk[:, j, :] = squareform(2.0 - pdist(points - points[j], metric="cosine"))
     o_m_cosine_ijk[
         np.logical_or(np.isnan(o_m_cosine_ijk), ~np.isfinite(o_m_cosine_ijk))
-    ] = 0
+    ] = 0.0
     return o_m_cosine_ijk
 
 
@@ -210,7 +218,7 @@ def err_cos_vec_precalc(
     sa, sb, sc = partial_err_theta_vec_precalc(
         distances=distances, cos_ijk=cos_ijk, position_err=position_err
     )
-    return np.sqrt((1 - (cos_ijk) ** 2) * (sa + sb + sc))
+    return np.sqrt((1 - np.square(cos_ijk)) * (sa + sb + sc))
 
 
 def err_theta_vec_precalc(
