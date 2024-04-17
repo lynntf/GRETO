@@ -2479,8 +2479,11 @@ def column_names_to_bool(columns: List[str], all_columns: bool = False):
     """
     feature_lists = all_column_names()
 
-    if "all" in columns:
-        all_columns = True
+    if columns is not None:
+        if "all" in columns:
+            all_columns = True
+    else:
+        columns = []
 
     bools = []
     for feature_list in feature_lists:
