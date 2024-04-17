@@ -35,7 +35,7 @@ ALPHA = physical_constants["fine-structure constant"][
 
 # %% Default event and clusters for testing (non-physical)
 default_event = Event(
-    0,
+    -1,
     [
         Interaction([25, 0, 0], 0.1, ts=0, crystal_no=0, seg_no=0, energy_factor=1.0),
         Interaction([25, 4, 0], 0.2, ts=0, crystal_no=1, seg_no=0, energy_factor=1.1),
