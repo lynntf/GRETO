@@ -4,6 +4,7 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 
 Event processing functions
 """
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -44,7 +45,10 @@ def merge_events(
             new_clusters[new_index] = [index + offset for index in cluster]
             new_index += 1
         offset = len(merged_points)
-    return (Event(merged_id, merged_points), new_clusters)
+    return (
+        Event(merged_id, merged_points, detector=list_of_events[0].detector_config),
+        new_clusters,
+    )
 
 
 def split_event(event: Event, clustering: Dict) -> List[Event]:
@@ -54,18 +58,21 @@ def split_event(event: Event, clustering: Dict) -> List[Event]:
     Args:
         clustering : A dictionary mapping cluster ids to lists of
             point indexes
+    Returns:
+        - split events
     """
     events = []
-    for c, cluster in clustering.items():
+    for cluster_id, cluster in clustering.items():
         if isinstance(event.id, tuple):
             new_event_id = event.id
         else:
-            new_event_id = (int(event.id), c)
+            new_event_id = (int(event.id), cluster_id)
         events.append(
             Event(
                 # str(event.id) + '_' + str(c),
                 new_event_id,
                 [event.points[i] for i in cluster],
+                detector=event.detector_config,
             ),
         )
     return events
@@ -80,14 +87,17 @@ def split_event_clusters(
     Args:
         clustering : A dictionary mapping cluster ids to lists of
             point indexes
+    Returns:
+        - split events
+        - split clusters
     """
     events = []
     clusters = []
-    for c, cluster in clustering.items():
+    for cluster_id, cluster in clustering.items():
         if isinstance(event.id, tuple):
             new_event_id = event.id
         else:
-            new_event_id = (int(event.id), c)
+            new_event_id = (int(event.id), cluster_id)
         events.append(
             Event(
                 # str(event.id) + '_' + str(c),
@@ -95,7 +105,7 @@ def split_event_clusters(
                 [event.points[i] for i in sorted(cluster)],
             ),
         )
-        clusters.append({c: list(np.argsort(cluster) + 1)})
+        clusters.append({cluster_id: list(np.argsort(cluster) + 1)})
     return events, clusters
 
 
