@@ -1228,7 +1228,7 @@ column_sets = {
     "oft_fast_tango": list(
         set(oft_columns + oft_tango_columns + fast_columns + fast_tango_columns)
     ),
-    "aft_true": ["rth_cap_sum_2", "c_penalty_sum_1"],
+    "aft_true": ["rth_cap_sum_2", "c_penalty_ell_sum_1"],
     "oft_true": [
         "rsg_sum_2v",
         "rsg_sum_2v_first",
@@ -1244,7 +1244,7 @@ column_sets = {
 methods = {
     "aft": {
         "w": [1.0, 0.4],
-        "columns": ["rth_cap_sum_2", "c_penalty_sum_1"],
+        "columns": ["rth_cap_sum_2", "c_penalty_ell_sum_1"],
     },
     "oft": {
         "w": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
@@ -1261,7 +1261,10 @@ methods = {
 
 column_sets["all"] = list(
     gr.fom_tools.cluster_FOM_features(
-        gr.default_event, gr.default_clusters[1], populate_empty_features=False
+        gr.default_event,
+        gr.default_clusters[1],
+        populate_empty_features=False,
+        return_columns=True
     ).keys()
 )
 
