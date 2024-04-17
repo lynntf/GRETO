@@ -5774,6 +5774,8 @@ def get_all_features_cluster(
             permutation=cluster,
             start_point=start_point,
             start_energy=start_energy,
+            all_columns=True,
+            return_columns=True,
         ),
     }
 
