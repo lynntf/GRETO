@@ -21,14 +21,17 @@ from greto.utils import perm_to_transition
 
 
 def merge_events(
-    list_of_events: List[Event], list_of_clusters: List[Dict[int, List[int]]] = None
+    list_of_events: List[Event],
+    list_of_clusters: List[Dict[int, List[int]]] = None,
 ) -> Tuple[Event, Dict]:
     """
     Merge a collection of Events into a single event
 
     Arg:
-        list_of_events: the events to be merged
-        list_of_clusters: the clusters to be merged
+        - list_of_events: the events to be merged
+        - list_of_clusters: the clusters to be merged
+        - reference_clusters: the clusters from the unmerged event (to ensure
+          interaction labels remain the same)
     """
     merged_id = (event.id for event in list_of_events)
     merged_points = []
@@ -49,6 +52,29 @@ def merge_events(
         Event(merged_id, merged_points, detector=list_of_events[0].detector_config),
         new_clusters,
     )
+
+def merge_clusters(
+    list_of_clusters: List[Dict[int, List[int]]],
+    reference_clusters: Dict[int, List[int]],
+):
+    """
+    Merge together clusters of points according to a reference clustering. This
+    will basically just sort the existing clusters in that reference clustering
+    according to the permutations in the list of clusters.
+    
+    Args:
+        - list_of_clusters: clusters to join; dict keys match reference_clusters
+        - reference_clusters: clusters before being split by `split_event_clusters`
+    Returns:
+        - dict of clusters: a permuted version of reference_clusters
+    """
+
+    new_clusters = {}
+    for clusters in list_of_clusters:
+        for cluster_id, cluster in clusters.items():
+            # interaction indices start with 1
+            new_clusters[cluster_id] = [reference_clusters[cluster_id][i-1] for i in cluster]
+    return new_clusters
 
 
 def split_event(event: Event, clustering: Dict) -> List[Event]:
@@ -122,7 +148,7 @@ def subset(
     """
     if event_id is None:
         event_id = event.id
-    sub_event = Event(event_id, [deepcopy(event.points[i]) for i in indices])
+    sub_event = Event((event_id, tuple(indices)), [deepcopy(event.points[i]) for i in indices])
     if reset_indices:
         for i, point in enumerate(sub_event.points):
             point.id = i
