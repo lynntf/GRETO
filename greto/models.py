@@ -9,7 +9,7 @@ TODO: Scikit-learn integration?
 
 import json
 import warnings
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, Optional
 
 import numpy as np
 import xgboost as xgb
@@ -17,7 +17,7 @@ from sklearn import preprocessing
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
-from greto.fom_tools import FOM_model
+from greto.fom_tools import FOM_model, column_names_to_bool, permute_column_names
 
 
 class LinearModel:
@@ -29,7 +29,9 @@ class LinearModel:
         self,
         weights: Iterable[float],
         bias: float = 0.0,
+        scale: Iterable[float] = None,
         columns: Optional[Iterable[str]] = None,
+        weight_threshold: float = 1e-8
     ) -> None:
         """
         Create a linear model object:
@@ -38,13 +40,51 @@ class LinearModel:
         Args:
             - weights: feature weight vector
             - bias: bias term (default is no bias; ranking does not need a bias)
+            - scale: scale factor for features; computed by division: features / scale
             - columns: feature names
         """
-        self.weights = np.array(weights)
+        # Feature names may not be provided in the order that they are created by other code
+        # This maps weights (etc.) to an order that matches features
+        self.permutation = permute_column_names(columns)
+        self.weights = np.array(weights)[self.permutation]
+
+        # Get only the weights that exceed the threshold
+        self.weight_threshold = weight_threshold
+        self.weight_indicator = np.abs(self.weights) > self.weight_threshold
+
         if bias is None:
             bias = 0.0
         self.bias = bias
-        self.columns = columns
+        if scale is None:
+            scale = np.ones(self.weights.shape)
+        self.scale = scale[self.permutation]
+        self.columns = np.array(columns)[self.permutation]
+
+        # select down weights, scale, and columns to only those that exceed the threshold
+        self.weights_thresholded = self.weights[self.weight_indicator]
+        self.scale_thresholded = self.scale[self.weight_indicator]
+        self.columns_thresholded = self.columns[self.weight_indicator]
+
+        self.columns_bool = column_names_to_bool(self.columns_thresholded)
+
+        self.effective_weights = self.weights_thresholded / self.scale_thresholded
+
+    def change_weight_threshold(self, weight_threshold:float = 1e-8) -> None:
+        """
+        Change the weight thresholding value
+        """
+        # Get only the weights that exceed the threshold
+        self.weight_threshold = weight_threshold
+        self.weight_indicator = np.abs(self.weights) > self.weight_threshold
+
+        # select down weights, scale, and columns to only those that exceed the threshold
+        self.weights_thresholded = self.weights[self.weight_indicator]
+        self.scale_thresholded = self.scale[self.weight_indicator]
+        self.columns_thresholded = self.columns[self.weight_indicator]
+
+        self.columns_bool = column_names_to_bool(self.columns_thresholded)
+
+        self.effective_weights = self.weights_thresholded / self.scale_thresholded
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """
@@ -56,11 +96,12 @@ class LinearModel:
         Returns:
             - dot product of features with model weights
         """
-        return np.dot(X, self.weights) + self.bias
+        return np.dot(X, self.effective_weights) + self.bias
 
 
 def save_linear_model(
     w: Iterable[float],
+    scale: Optional[Iterable[float]] = None,
     bias: Optional[float] = None,
     columns: Optional[Iterable[str]] = None,
     filename: Optional[str] = None,
@@ -70,6 +111,7 @@ def save_linear_model(
 
     Args:
         - w: model feature weights
+        - scale: weight scaling (if provided, weights require scaling)
         - bias: model bias term (not needed for ranking problems)
         - columns: feature names
         - filename: filename to write the model to
@@ -77,6 +119,7 @@ def save_linear_model(
     model_dict = {
         "model": "linear",
         "weights": list(w),
+        "scale": list(scale),
         "bias": bias,
         "columns": list(columns) if columns is not None else None,
     }
@@ -96,7 +139,12 @@ def load_linear_model(filename: str) -> Dict | LinearModel:
         d = json.load(f)
     if d.get("model") != "linear":
         warnings.warn(f"{__name__}: Loaded model ({filename}) may not be linear")
-    return LinearModel(d["weights"], d["bias"], d["columns"])
+    return LinearModel(
+        weights=d.get("weights"),
+        scale=d.get("scale"),
+        bias=d.get("bias"),
+        columns=d.get("columns"),
+    )
 
 
 def load_linear_FOM_model(filename: str) -> FOM_model:
@@ -110,21 +158,47 @@ def load_linear_FOM_model(filename: str) -> FOM_model:
     return FOM_model(model.predict, model.columns, model)
 
 
+class xgbranker_FOM_model:
+    """
+    Ranking model using XGBoost
+
+    Feature scaling is not important for boosted tree models so we don't use it.
+    """
+
+    def __init__(self, ranker) -> None:
+        self.model = ranker
+        self.columns = ranker.get_booster().feature_names
+
+        self.columns_bool = column_names_to_bool(self.columns)
+
+        # Here we need to map the data onto the structure of the model so we
+        # need the inverse permutation
+        self.permutation = np.argsort(permute_column_names(self.columns))
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        """
+        Predict values by applying weights to input data X
+
+        Args:
+            - X: input features, shape: (sample index, feature index)
+
+        Returns:
+            - ranker inferred scores
+        """
+        return self.model.predict(X[:, self.permutation])
+
+
 def save_xgbranker_model(
-    ranker: xgb.XGBRanker, filename: str, scale: Optional[List[float]] = None
+    ranker: xgb.XGBRanker, filename: str,
 ) -> None:
     """
-    Save a XGBoost Ranker model
+    Save a XGBoost Ranker model (feature scaling is not used)
 
     Args:
         - ranker: trained XGBoost Ranker model
         - filename: filename for saved model [`.json` or `.ubj` (binary)]
-        - scale: linear scaling factors for features (not required for ranking
-          models, but may enhance performance)
     """
     d = json.loads(ranker.get_booster().save_raw("json"))  # Model as dict
-    if scale is not None:
-        d["scale_"] = list(scale)
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(d, f)
 
@@ -137,13 +211,13 @@ def load_xgbranker_model(filename: str) -> xgb.XGBRanker:
         - filename: filename for saved model [`.json` or `.ubj` (binary)]
     """
     ranker = xgb.XGBRanker()
-    with open(filename, "r", encoding="utf-8") as f:
-        d = json.load(f)
-    scale = d.pop("scale_", None)
-    ranker.load_model(bytearray(json.dumps(d), encoding="utf-8"))
-    if scale is not None:
-        return ranker, scale
-    # ranker.load_model(filename)
+    # with open(filename, "r", encoding="utf-8") as f:
+    #     d = json.load(f)
+    # scale = d.pop("scale_", None)
+    # ranker.load_model(bytearray(json.dumps(d), encoding="utf-8"))
+    # if scale is not None:
+    #     return ranker, scale
+    ranker.load_model(filename)
     return ranker
 
 
@@ -155,14 +229,15 @@ def load_xgbranker_FOM_model(filename: str) -> FOM_model:
         - filename: filename for saved model [`.json` or `.ubj` (binary)]
     """
     ranker = load_xgbranker_model(filename)
-    if isinstance(ranker, tuple):
-        ranker, scale = ranker
-        return FOM_model(
-            lambda x: ranker.predict(x / scale),
-            ranker.get_booster().feature_names,
-            ranker,
-        )
-    return FOM_model(ranker.predict, ranker.get_booster().feature_names, ranker)
+    # if isinstance(ranker, tuple):
+    #     ranker, scale = ranker
+    #     return FOM_model(
+    #         lambda x: ranker.predict(x / scale),
+    #         ranker.get_booster().feature_names,
+    #         ranker,
+    #     )
+    # return FOM_model(ranker.predict, ranker.get_booster().feature_names, ranker)
+    return xgbranker_FOM_model(ranker)
 
 
 def load_FOM_model(filename: str) -> FOM_model:
@@ -240,7 +315,7 @@ class sns_model:
             - training indices, validation indices
         """
         num_train = int(X.shape[0] * train_frac)
-        rng = np.random.RandomState(random_state)
+        rng = np.random.RandomState(random_state)  # pylint: disable=no-member
         indices = np.arange(X.shape[0], dtype=int)
         rng.shuffle(indices)
         return indices[:num_train], indices[num_train:]
@@ -262,7 +337,8 @@ class sns_model:
             self.scaler_ns.transform(np.clip(X[~singles], self.lb, self.ub))
         )
 
-        # Fit the scaled and PCA transformed data for scattered gamma-rays with multiple interactions
+        # Fit the scaled and PCA transformed data for scattered gamma-rays with
+        # multiple interactions
         self.model_ns.fit(
             self.pca_ns.transform(
                 self.scaler_ns.transform(np.clip(X[~singles], self.lb, self.ub))
