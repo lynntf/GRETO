@@ -32,14 +32,14 @@ class Event:
     as the result of a sequence of &gamma;-rays emitted from a source.
 
     ## Attributes:
-        - `id`: An event id
-        - `point`s: A list of &gamma;-ray Interactions in time coincidence with
+        - id: An event id
+        - points: A list of &gamma;-ray Interactions in time coincidence with
           one another. The zeroth index of this list is always reserved for the
           origin, and is a shared interaction for each &gamma;-ray.
-        - `hit_points`: The list of Interactions excluding the origin
-        - `ground_truth` (Clustering): If the ground truth clustering and
+        - hit_points: The list of Interactions excluding the origin
+        - ground_truth (Clustering): If the ground truth clustering and
           ordering is known, it can be passed in.
-        - `flat` : If the event has been flattened, the third dimension has been
+        - flat: If the event has been flattened, the third dimension has been
           removed for 2D plotting
     """
 
@@ -153,7 +153,7 @@ class Event:
         """Distance between two points"""
         # return squareform(geo.pairwise_distance(self.point_matrix))
         _calculator.set_event(self)
-        return _calculator.distance(self.id)
+        return _calculator.distance((self.id, tuple(self.points[1].x)))
 
     def distance_perm(
         self, permutation: Iterable[int], start_point: int = 0
@@ -175,7 +175,7 @@ class Event:
         #     np.arccos(1.0 - pdist(self.hit_point_matrix, metric="cosine"))
         # )
         _calculator.set_event(self)
-        return _calculator.angle_distance(self.id)
+        return _calculator.angle_distance((self.id, tuple(self.points[1].x)))
 
     @property
     def ge_distance(self) -> np.ndarray:
@@ -184,7 +184,7 @@ class Event:
         #     geo.ge_distance(self.point_matrix, d12_euc=squareform(self.distance))
         # )
         _calculator.set_event(self)
-        return _calculator.ge_distance(self.id)
+        return _calculator.ge_distance((self.id, tuple(self.points[1].x)))
 
     def ge_distance_perm(
         self, permutation: Iterable[int], start_point: int = 0
@@ -284,7 +284,7 @@ class Event:
         """Cosine between interaction points"""
         # return 1 - geo.one_minus_cosine_ijk(self.point_matrix)
         _calculator.set_event(self)
-        return _calculator.cos_act(self.id)
+        return _calculator.cos_act((self.id, tuple(self.points[1].x)))
 
     @property
     def cos_err(self) -> np.ndarray:
@@ -296,7 +296,7 @@ class Event:
         # # err[0,:,:] /= 2 # Center point is more accurate
         # return err
         _calculator.set_event(self)
-        return _calculator.cos_err(self.id)
+        return _calculator.cos_err((self.id, tuple(self.points[1].x)))
 
     @property
     def theta_err(self) -> np.ndarray:
@@ -308,7 +308,7 @@ class Event:
         # # err[0,:,:] /= 2 # Center point is more accurate as in AFT
         # return err
         _calculator.set_event(self)
-        return _calculator.theta_err(self.id)
+        return _calculator.theta_err((self.id, tuple(self.points[1].x)))
 
     # %% Permuted geometric cosine and error
     def cos_act_perm(
@@ -359,7 +359,7 @@ class Event:
         #     self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
         # )
         _calculator.set_event(self)
-        return _calculator.tango_estimates(self.id)
+        return _calculator.tango_estimates((self.id, tuple(self.points[1].x)))
 
     @property
     def tango_partial_derivatives(self) -> Tuple[np.ndarray]:
@@ -368,7 +368,7 @@ class Event:
         #     self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
         # )
         _calculator.set_event(self)
-        return _calculator.tango_partial_derivatives(self.id)
+        return _calculator.tango_partial_derivatives((self.id, tuple(self.points[1].x)))
 
     @property
     def tango_estimates_sigma(self) -> np.ndarray:
@@ -382,7 +382,7 @@ class Event:
         # #                             1 - self.cos_act,
         # #                             self.cos_err, eres=1e-3)
         _calculator.set_event(self)
-        return _calculator.tango_estimates_sigma(self.id)
+        return _calculator.tango_estimates_sigma((self.id, tuple(self.points[1].x)))
 
     # %% Permuted incoming energy estimates
     def tango_estimates_perm(
@@ -1233,9 +1233,9 @@ class _EventCalculator:
         """Set the event (and cluster id) for calculations"""
         self.event = event
         if cluster_id is not None:
-            self.event_id = (event.id, cluster_id)
+            self.event_id = ((event.id, cluster_id), tuple(event.points[1].x))
         else:
-            self.event_id = event.id
+            self.event_id = (event.id, tuple(event.points[1].x))
 
     @lru_cache(maxsize=100)
     def distance(self, event_id: int | tuple):
