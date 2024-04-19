@@ -22,6 +22,12 @@ from greto.event_class import Event
 from greto.geometry import cone
 from greto.interaction_class import Interaction
 from greto.physics import MEC2, RANGE_PROCESS, cos_theor, lin_att_total, theta_theor
+from greto.event_tools import split_event_clusters, merge_clusters
+
+num_property_features = 16
+num_escape_features = 2
+num_scatter_features = 228
+num_singles_features = 15
 
 
 class FOM_model:
@@ -1035,6 +1041,7 @@ def semi_greedy_clusters(
     width: int = 3,
     stride: int = 1,
     direction: Union["forward", "backward", "hybrid"] = "forward",
+    split_event: bool = True,
     **FOM_kwargs,
 ) -> Dict[Hashable, Iterable]:
     """
@@ -1052,27 +1059,39 @@ def semi_greedy_clusters(
     Returns:
         - copy of input clusters with new order
     """
-    best_ordered_clusters = {
-        s: semi_greedy(
-            event,
-            list(cluster),
-            width=width,
-            stride=stride,
-            direction=direction,
-            **FOM_kwargs,
+    if not split_event:
+        best_ordered_clusters = {
+            s: semi_greedy(
+                event,
+                list(cluster),
+                width=width,
+                stride=stride,
+                direction=direction,
+                **FOM_kwargs,
+            )
+            for (s, cluster) in clusters.items()
+        }
+        return best_ordered_clusters
+
+    s_events, s_clusters = split_event_clusters(event, clusters)
+    for ev, (i, clu) in zip(s_events, enumerate(s_clusters)):
+        s_clusters[i] = semi_greedy_clusters(
+            ev, clu, width, stride, direction, split_event=False
         )
-        for (s, cluster) in clusters.items()
-    }
-    return best_ordered_clusters
+    # _joined_event, joined_clusters = merge_events(s_events, s_clusters)
+    joined_clusters = merge_clusters(s_clusters, clusters)
+    return joined_clusters
 
 
 def semi_greedy_batch_clusters(
     event: Event,
-    clusters: Dict[Hashable, Iterable],
+    clusters: Dict[int, Iterable],
     model: FOM_model,
     width: int = 3,
     stride: int = 1,
     direction: str = "forward",
+    split_event: bool = True,
+    batch_size: int = 1,
     **FOM_kwargs,
 ):
     """
@@ -1086,24 +1105,36 @@ def semi_greedy_batch_clusters(
         - stride: number of interactions accepted from combinatorial search
         - direction: search direction; forward is from target; backward is from
           "absorption"; hybrid is not implemented
+        - split_events: split the events into smaller sub-events
         - FOM_kwargs: keyword args for the FOM used
 
     Returns:
         - copy of input clusters with new order
     """
-    best_ordered_clusters = {
-        s: semi_greedy_batch(
-            event,
-            cluster,
-            model=model,
-            width=width,
-            stride=stride,
-            direction=direction,
-            **FOM_kwargs,
+    if not split_event:
+        best_ordered_clusters = {
+            s: semi_greedy_batch(
+                event,
+                cluster,
+                model=model,
+                width=width,
+                stride=stride,
+                direction=direction,
+                batch_size=batch_size,
+                **FOM_kwargs,
+            )
+            for (s, cluster) in clusters.items()
+        }
+        return best_ordered_clusters
+    
+    s_events, s_clusters = split_event_clusters(event, clusters)
+    for ev, (i, clu) in zip(s_events, enumerate(s_clusters)):
+        s_clusters[i] = semi_greedy_batch_clusters(
+            ev, clu, model, width, stride, direction, split_event=False
         )
-        for (s, cluster) in clusters.items()
-    }
-    return best_ordered_clusters
+    # _joined_event, joined_clusters = merge_events(s_events, s_clusters)
+    joined_clusters = merge_clusters(s_clusters, clusters)
+    return joined_clusters
 
 
 def num_perms(iterable: Iterable | int, r: int) -> int:
@@ -1142,6 +1173,7 @@ def semi_greedy_batch(
     debug: bool = False,
     model: FOM_model = None,
     model_columns: Optional[List[str]] = None,
+    model_columns_bool: Optional[Tuple[np.ndarray]] = None,
     minimize: bool = True,
     batch_size: int = 1,
     **FOM_kwargs,
@@ -1215,6 +1247,11 @@ def semi_greedy_batch(
     if model_columns is None:
         model_columns = model.columns
 
+    if model_columns_bool is None:
+        model_columns_bool = model.columns_bool
+    if model_columns_bool is None:
+        model_columns_bool = column_names_to_bool(model_columns)
+
     if direction == "forward":
         curr_e = sum(event.points[i].e for i in cluster)  # Current energy
         # excess_e = 0
@@ -1269,17 +1306,14 @@ def semi_greedy_batch(
                 # Loop over permutations and generate features for each
                 # TODO - potential problem with the order of the features
                 for i, perm in enumerate(perms):
-                    features[i, :] = np.fromiter(
-                        cluster_FOM_features(
+                    features[i, :] = cluster_FOM_features(
                             event=event,
                             permutation=tuple(order + list(perm)),
                             start_point=start_point,
                             start_energy=curr_e,
                             Nmi=len(cluster),
-                            columns=model_columns,
-                        ).values(),
-                        dtype=float,
-                    )
+                            columns_bool=model_columns_bool,
+                        )
 
                     # Get the FOM values for each set of features
                     scores = model.predict(features)
@@ -1900,7 +1934,7 @@ def single_FOM_features(
     """
     if isinstance(permutation, int):
         permutation = (permutation,)
-    features_array = np.zeros((15,))
+    features_array = np.zeros((num_singles_features,))
     all_columns = False
     if columns is None and columns_bool is None:
         all_columns = True
@@ -2465,6 +2499,25 @@ def all_column_names():
     )
 
 
+def permute_column_names(columns: List[str]):
+    """
+    Takes a list of column names and spits out the permutation that is necessary
+    to sort them in the right order
+    """
+    feature_lists = all_column_names()
+    feature_list = []
+    for features in feature_lists:
+        feature_list.extend(features)
+    permutation = [0]*len(columns)
+
+    num_columns_processed = 0
+    for feature in feature_list:
+        for column_index, column in enumerate(columns):
+            if feature == column:
+                permutation[column_index] = num_columns_processed
+                num_columns_processed += 1
+    return permutation
+
 def column_names_to_bool(columns: List[str], all_columns: bool = False):
     """
     Convert a list of column names into a boolean vector for faster execution of
@@ -2553,7 +2606,7 @@ def FOM_features(
     elif columns is not None and "all" in columns:
         all_columns = True
 
-    features_array = np.zeros((228,))  # TODO - get actual number of features somehow?
+    features_array = np.zeros((num_scatter_features,))  # TODO - get actual number of features somehow?
     if all_columns:
         columns_bool = np.ones(features_array.shape, dtype=bool)
 
@@ -5530,11 +5583,11 @@ def cluster_FOM_features(
     if start_energy is None:
         start_energy = np.sum(event.energy_matrix[list(permutation)])
 
-    singles_features = np.zeros((15,))
-    energy_sum_features = np.zeros((228,))
-    tango_energy_features = np.zeros((228,))
-    escape_probability_features = np.zeros((2,))
-    property_features = np.zeros((25,))
+    singles_features = np.zeros((num_singles_features,))
+    energy_sum_features = np.zeros((num_scatter_features,))
+    tango_energy_features = np.zeros((num_scatter_features,))
+    escape_probability_features = np.zeros((num_escape_features,))
+    property_features = np.zeros((num_property_features,))
 
     # prop_columns = [
     #     "n",
@@ -5565,6 +5618,8 @@ def cluster_FOM_features(
         )
         if return_columns:
             features = features | property_features
+        # elif not populate_empty_features:
+        #     property_features = property_features[columns_bool_prop]
 
     # singles_columns = [
     #     "penetration_cm",
@@ -5595,6 +5650,8 @@ def cluster_FOM_features(
         )
         if return_columns:
             features = features | singles_features
+        # elif not populate_empty_features:
+        #     singles_features = singles_features[columns_bool_singles]
 
     if len(permutation) > 1:
         if all_columns or np.any(columns_bool_scatter):
@@ -5611,6 +5668,8 @@ def cluster_FOM_features(
             )
             if return_columns:
                 features = features | energy_sum_features
+            # elif not populate_empty_features:
+            #     energy_sum_features = energy_sum_features[columns_bool_scatter]
 
         if all_columns or np.any(columns_bool_tango):
             # TODO - tango energy would not necessarily be the max of the two, but
@@ -5640,6 +5699,8 @@ def cluster_FOM_features(
                     for key, value in tango_energy_features.items()
                 }
                 features = features | new_tango_features
+            # elif not populate_empty_features:
+            #     tango_energy_features = tango_energy_features[columns_bool_tango]
 
         if all_columns or np.any(columns_bool_escape):
             escape_probability_features = escape_prob_features(
@@ -5653,6 +5714,8 @@ def cluster_FOM_features(
             )
             if return_columns:
                 features = features | escape_probability_features
+            # elif not populate_empty_features:
+            #     escape_probability_features = escape_probability_features[columns_bool_escape]
 
     # For instance, add zero values for singles features when not a single
     if return_columns:
@@ -5660,7 +5723,7 @@ def cluster_FOM_features(
             zeros = {column: 0.0 for column in columns}
             features = {**features, **zeros}
         return features
-    else:
+    elif populate_empty_features:
         return np.concatenate(
             (
                 energy_sum_features,
@@ -5668,6 +5731,16 @@ def cluster_FOM_features(
                 property_features,
                 singles_features,
                 escape_probability_features,
+            )
+        )
+    else:
+        return np.concatenate(
+            (
+                energy_sum_features[columns_bool_scatter],
+                tango_energy_features[columns_bool_tango],
+                property_features[columns_bool_prop],
+                singles_features[columns_bool_singles],
+                escape_probability_features[columns_bool_escape],
             )
         )
 
