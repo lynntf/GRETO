@@ -20,6 +20,7 @@ from greto.event_class import Event
 from greto.geometry import ge_distance
 from greto.interaction_class import Interaction
 
+num_property_features = 16
 
 def remove_interactions(
     event: Event,
@@ -567,7 +568,7 @@ def cluster_properties_features(
             elif "all" in columns:
                 all_columns = True
 
-    features_array = np.zeros((25,))
+    features_array = np.zeros((num_property_features,))
     if all_columns:
         columns_bool = np.ones(features_array.shape, dtype=bool)
     fi = 0
