@@ -37,18 +37,22 @@ class FOM_model:
         self,
         model_evaluation: Callable,
         columns: Optional[List[str]] = None,
+        columns_bool: Optional[List[str]] = None,
         model: Optional[object] = None,
     ):
         """
         Args:
             - model_evaluation: how the model transforms input features to outputs
             - columns: the names of the input features used by the model
+            - columns_bool: the boolean values for the usage of columns
             - model: the model object itself
         """
         self.predict = model_evaluation
-        if columns is not None:
+        if columns is not None and columns_bool is None:
             self.columns = columns
             self.columns_bool = column_names_to_bool(columns=columns)
+        else:
+            self.columns_bool = columns_bool
         if model is not None:
             self.model = model
 
@@ -67,6 +71,35 @@ def cluster_FOM(
         FOM_kwargs (Dict): kwargs for the FOM to be used
     """
     return {s: FOM(event, cluster, **FOM_kwargs) for (s, cluster) in clusters.items()}
+
+
+def cluster_model_FOM(
+    event: Event,
+    clusters: Dict[Hashable, Iterable[int]],
+    model: FOM_model,
+    **FOM_kwargs,
+) -> Dict[int, float]:
+    """
+    Compute the FOM for each of the passed in clusters using the provided model.
+
+    Args:
+        event: a g-ray coincidence event
+        clusters: ordered interaction points for each g-ray
+        model: FOM computing model
+        FOM_kwargs: other keyword arguments for FOM computation
+    """
+    for s, cluster in clusters.items():
+        feats = cluster_FOM_features(event, cluster, columns_bool=model.columns_bool, **FOM_kwargs)
+        print(s, cluster, feats.shape, np.sum(feats))
+
+    return {
+        s: model.predict(
+            cluster_FOM_features(
+                event, cluster, columns_bool=model.columns_bool, **FOM_kwargs
+            )
+        )
+        for (s, cluster) in clusters.items()
+    }
 
 
 # %% FOM backbone
@@ -1126,7 +1159,7 @@ def semi_greedy_batch_clusters(
             for (s, cluster) in clusters.items()
         }
         return best_ordered_clusters
-    
+
     s_events, s_clusters = split_event_clusters(event, clusters)
     for ev, (i, clu) in zip(s_events, enumerate(s_clusters)):
         s_clusters[i] = semi_greedy_batch_clusters(
@@ -1244,8 +1277,8 @@ def semi_greedy_batch(
     # TODO - this implementation passes features as an array to the model. This
     # restricts the models that can be used to only those that accept arrays of
     # features. Expanding this code to handle other cases may be beneficial.
-    if model_columns is None:
-        model_columns = model.columns
+    # if model_columns is None:
+    #     model_columns = model.columns
 
     if model_columns_bool is None:
         model_columns_bool = model.columns_bool
@@ -1301,19 +1334,20 @@ def semi_greedy_batch(
                     n_perms -= batch_size
 
                 # Allocate the features array
-                features = np.empty((len(perms), len(model_columns)))
+                num_features = int(sum(np.sum(b) for b in model_columns_bool))
+                features = np.empty((len(perms), num_features ))
 
                 # Loop over permutations and generate features for each
                 # TODO - potential problem with the order of the features
                 for i, perm in enumerate(perms):
                     features[i, :] = cluster_FOM_features(
-                            event=event,
-                            permutation=tuple(order + list(perm)),
-                            start_point=start_point,
-                            start_energy=curr_e,
-                            Nmi=len(cluster),
-                            columns_bool=model_columns_bool,
-                        )
+                        event=event,
+                        permutation=tuple(order + list(perm)),
+                        start_point=start_point,
+                        start_energy=curr_e,
+                        Nmi=len(cluster),
+                        columns_bool=model_columns_bool,
+                    )
 
                     # Get the FOM values for each set of features
                     scores = model.predict(features)
@@ -2486,7 +2520,10 @@ def all_column_names():
     )
     escape_probability_feature_names = list(
         escape_prob_features(
-            default_event, default_clusters[1], 1e10, return_columns=True,
+            default_event,
+            default_clusters[1],
+            1e10,
+            return_columns=True,
         ).keys()
     )
 
@@ -2508,7 +2545,7 @@ def permute_column_names(columns: List[str]):
     feature_list = []
     for features in feature_lists:
         feature_list.extend(features)
-    permutation = [0]*len(columns)
+    permutation = [0] * len(columns)
 
     num_columns_processed = 0
     for feature in feature_list:
@@ -2517,6 +2554,7 @@ def permute_column_names(columns: List[str]):
                 permutation[column_index] = num_columns_processed
                 num_columns_processed += 1
     return permutation
+
 
 def column_names_to_bool(columns: List[str], all_columns: bool = False):
     """
@@ -2606,7 +2644,9 @@ def FOM_features(
     elif columns is not None and "all" in columns:
         all_columns = True
 
-    features_array = np.zeros((num_scatter_features,))  # TODO - get actual number of features somehow?
+    features_array = np.zeros(
+        (num_scatter_features,)
+    )  # TODO - get actual number of features somehow?
     if all_columns:
         columns_bool = np.ones(features_array.shape, dtype=bool)
 
