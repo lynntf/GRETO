@@ -354,7 +354,7 @@ def split_event(event: Event, clusters: Dict):
     """
     new_events, new_clusters = [], []
     for i, cluster in clusters.items():
-        new_events.append(Event(event.id, [event.points[j] for j in cluster]))
+        new_events.append(Event((event.id, i, tuple(event.points[cluster[0]].x)), [event.points[j] for j in cluster]))
         new_clusters.append({i: tuple(range(1, len(cluster) + 1))})
     return new_events, new_clusters
 
@@ -387,6 +387,7 @@ def join_events(
     combined_clusters = {}
     current_cluster_indices = []
     current_point_index = 0
+    new_id = np.inf
     for event, clusters in zip(list_of_events_to_join, list_of_clusters_to_combine):
         combined_points.extend(event.hit_points)
         for cluster_index, cluster in clusters.items():
@@ -401,7 +402,11 @@ def join_events(
             ]
             current_cluster_index += 1
         current_point_index += len(event.hit_points)
-    return Event(list_of_events_to_join[0].id, combined_points), combined_clusters
+        if isinstance(event.id, tuple):
+            new_id = min(new_id, event.id[0])
+        else:
+            new_id = min(new_id, event.id)
+    return Event(new_id, combined_points), combined_clusters
 
 
 # %% Cluster features
