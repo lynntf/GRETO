@@ -131,7 +131,7 @@ def save_linear_model(
     return model_dict
 
 
-def load_linear_model(filename: str) -> Dict | LinearModel:
+def load_linear_model(filename: str, weight_threshold: float = 1e-8) -> Dict | LinearModel:
     """
     Read a json linear model
     """
@@ -144,18 +144,19 @@ def load_linear_model(filename: str) -> Dict | LinearModel:
         scale=d.get("scale"),
         bias=d.get("bias"),
         columns=d.get("columns"),
+        weight_threshold=weight_threshold
     )
 
 
-def load_linear_FOM_model(filename: str) -> FOM_model:
+def load_linear_FOM_model(filename: str, weight_threshold:float = 1e-8) -> FOM_model:
     """
     Load a linear FOM model into the FOM_model class
 
     Args:
         - filename: filename for saved model
     """
-    model = load_linear_model(filename)
-    return FOM_model(model.predict, model.columns, model)
+    model = load_linear_model(filename, weight_threshold=weight_threshold)
+    return FOM_model(model_evaluation=model.predict, columns_bool=model.columns_bool, model=model)
 
 
 class xgbranker_FOM_model:
