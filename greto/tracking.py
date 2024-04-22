@@ -28,8 +28,16 @@ from greto.file_io import (
     read_agata_simulated_data,
     tracked_generator,
 )
-from greto.fom_tools import cluster_FOM, semi_greedy, semi_greedy_clusters
+from greto.fom_tools import (
+    cluster_FOM,
+    semi_greedy,
+    semi_greedy_clusters,
+    semi_greedy_batch,
+    semi_greedy_batch_clusters,
+    cluster_model_FOM,
+)
 from greto.utils import get_file_size
+from greto.models import load_FOM_model
 
 
 def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
@@ -37,18 +45,36 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
     Take in the mode2 file to track, the mode1 file to write, and tracking
     options
     """
-    order_FOM_kwargs = options["order_FOM_kwargs"]
-    secondary_order_FOM_kwargs = options["secondary_order_FOM_kwargs"]
-    eval_FOM_kwargs = options["eval_FOM_kwargs"]
-    cluster_kwargs = options["cluster_kwargs"]
+    order_FOM_kwargs = options.get("order_FOM_kwargs", {})
+    secondary_order_FOM_kwargs = options.get("secondary_order_FOM_kwargs", {})
+    eval_FOM_kwargs = options.get("eval_FOM_kwargs", {})
+    cluster_kwargs = options.get("cluster_kwargs", {})
 
-    print(f"Detector is set to {options['DETECTOR']}")
-    default_config.set_detector(options["DETECTOR"])
+    print(f"Detector is set to {options.get('DETECTOR', 'defaulting to GRETINA')}")
+    default_config.set_detector(options.get("DETECTOR", "GRETINA"))
 
-    if options["SAVE_INTERMEDIATE"]:
+    if options.get("SAVE_INTERMEDIATE", False):
         print("Tracking will save an intermediate tracked format instead of mode1")
-    elif options["SAVE_EXTENDED_MODE1"]:
+    elif options.get("SAVE_EXTENDED_MODE1", False):
         print("Tracking will save an extended mode1 data format with all interactions")
+
+    order_model = None
+    if order_FOM_kwargs.get("fom_method") == "model":
+        if order_FOM_kwargs.get("model_filename") is not None:
+            order_model = load_FOM_model(order_FOM_kwargs.get("model_filename"))
+        else:
+            raise ValueError("Provide model filename for ordering")
+    order_FOM_kwargs["model"] = order_model
+
+    secondary_order_model = None
+    if secondary_order_FOM_kwargs.get("fom_method") == "model":
+        if secondary_order_FOM_kwargs.get("model_filename") is not None:
+            secondary_order_model = load_FOM_model(
+                order_FOM_kwargs.get("model_filename")
+            )
+        else:
+            raise ValueError("Provide model filename for secondary ordering")
+    secondary_order_FOM_kwargs["model"] = secondary_order_model
 
     GEB_EVENT_SIZE = 480
     filesize = get_file_size(mode2file)
@@ -70,34 +96,107 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
 
     if options["VERBOSITY"] >= 3:
         progress_bar = tqdm(total=final_position, unit="bytes", unit_scale=True)
-    with mp.Pool(options["NUM_PROCESSES"]) as pool:  # pylint: disable=E1102
+
+    if options["NUM_PROCESSES"] > 1:
+        with mp.Pool(options["NUM_PROCESSES"]) as pool:  # pylint: disable=E1102
+            mode2_data = mode2_loader(
+                mode2file,
+                time_gap=options["COINCIDENCE_TIME_GAP"],
+                monitor_progress=False,
+                global_coords=options["GLOBAL_COORDS"],
+            )
+            tracking_processes = []
+            for num_events, coincidence_event in enumerate(mode2_data):
+                if coincidence_event is not None:
+                    coincidence_event = remove_zero_energy_interactions(coincidence_event)
+                    tracking_processes.append(
+                        pool.apply_async(
+                            track_and_get_energy,
+                            args=(
+                                coincidence_event,
+                                options["MONSTER_SIZE"],
+                                options["SECONDARY_ORDER"],
+                                eval_FOM_kwargs,
+                                options["MAX_HIT_POINTS"],
+                                cluster_kwargs,
+                                order_FOM_kwargs,
+                                secondary_order_FOM_kwargs,
+                                options["SAVE_INTERMEDIATE"],
+                                options["SAVE_EXTENDED_MODE1"],
+                            ),
+                        )
+                    )
+                position = mode2file.tell()
+                if (
+                    position // (chunk_size * GEB_EVENT_SIZE) > chunk
+                    or position >= final_position
+                ):
+                    chunk += 1
+                    elapsed_time = datetime.now() - start
+                    average_time = (elapsed_time) // (max(1, chunk - 1))
+                    if options["VERBOSITY"] >= 2:
+                        print(
+                            f'[{datetime.now().strftime("%H:%M:%S")} || {elapsed_time}]'
+                            + f"  Processing chunk {chunk} of {chunks + 1}"
+                        )
+                        print(
+                            f"           Progress {previous_position} of {final_position} || "
+                            + f"{previous_position/final_position*100:2.2f}%"
+                        )
+                        print(f"           Events {num_events}")
+                        print(f"  Average time per chunk:   {average_time}")
+                        print(
+                            f"  Average time per event:   {elapsed_time/max(1, num_events)}"
+                        )
+                        print(
+                            "  Est. time remaining:      "
+                            + f"{elapsed_time*(final_position/previous_position - 1)}"
+                        )
+                    for j, tracking_outputs in enumerate(tracking_processes):
+                        try:
+                            outputs = tracking_outputs.get(
+                                timeout=options["TIMEOUT_SECONDS"]
+                            )
+                        except mp.TimeoutError:  # pylint: disable=E1101
+                            print(f"Timeout occurred for process {j}")
+                        except ValueError:
+                            print(f"Found a bad event at process {j}")
+                        else:
+                            output_file.write(outputs)
+                    tracking_processes = []
+                    if options["VERBOSITY"] >= 3:
+                        progress_bar.update(position - previous_position)
+                    previous_position = position
+                    if position >= final_position:
+                        break
+        print(f'[{datetime.now().strftime("%H:%M:%S")}] Completed')
+        print(f"[Total time : {datetime.now() - start}].")
+        print(
+            f"[Average event processing time : {(datetime.now() - start)/max(1,num_events)}]."
+        )
+    elif options["NUM_PROCESSES"] == 1:
+        print("Using single process")
         mode2_data = mode2_loader(
             mode2file,
             time_gap=options["COINCIDENCE_TIME_GAP"],
             monitor_progress=False,
             global_coords=options["GLOBAL_COORDS"],
         )
-        tracking_processes = []
         for num_events, coincidence_event in enumerate(mode2_data):
             if coincidence_event is not None:
                 coincidence_event = remove_zero_energy_interactions(coincidence_event)
-                tracking_processes.append(
-                    pool.apply_async(
-                        track_and_get_energy,
-                        args=(
-                            coincidence_event,
-                            options["MONSTER_SIZE"],
-                            options["SECONDARY_ORDER"],
-                            eval_FOM_kwargs,
-                            options["MAX_HIT_POINTS"],
-                            cluster_kwargs,
-                            order_FOM_kwargs,
-                            secondary_order_FOM_kwargs,
-                            options["SAVE_INTERMEDIATE"],
-                            options["SAVE_EXTENDED_MODE1"],
-                        ),
+                outputs = track_and_get_energy(
+                        coincidence_event,
+                        options["MONSTER_SIZE"],
+                        options["SECONDARY_ORDER"],
+                        eval_FOM_kwargs,
+                        options["MAX_HIT_POINTS"],
+                        cluster_kwargs,
+                        order_FOM_kwargs,
+                        secondary_order_FOM_kwargs,
+                        options["SAVE_INTERMEDIATE"],
+                        options["SAVE_EXTENDED_MODE1"],
                     )
-                )
             position = mode2file.tell()
             if (
                 position // (chunk_size * GEB_EVENT_SIZE) > chunk
@@ -124,28 +223,17 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                         "  Est. time remaining:      "
                         + f"{elapsed_time*(final_position/previous_position - 1)}"
                     )
-                for j, tracking_outputs in enumerate(tracking_processes):
-                    try:
-                        outputs = tracking_outputs.get(
-                            timeout=options["TIMEOUT_SECONDS"]
-                        )
-                    except mp.TimeoutError:  # pylint: disable=E1101
-                        print(f"Timeout occurred for process {j}")
-                    except ValueError:
-                        print(f"Found a bad event at process {j}")
-                    else:
-                        output_file.write(outputs)
-                tracking_processes = []
+                output_file.write(outputs)
                 if options["VERBOSITY"] >= 3:
                     progress_bar.update(position - previous_position)
                 previous_position = position
                 if position >= final_position:
                     break
-    print(f'[{datetime.now().strftime("%H:%M:%S")}] Completed')
-    print(f"[Total time : {datetime.now() - start}].")
-    print(
-        f"[Average event processing time : {(datetime.now() - start)/max(1,num_events)}]."
-    )
+        print(f'[{datetime.now().strftime("%H:%M:%S")}] Completed')
+        print(f"[Total time : {datetime.now() - start}].")
+        print(
+            f"[Average event processing time : {(datetime.now() - start)/max(1,num_events)}]."
+        )
 
 
 def track_simulated(events: List[Event], output_file: BinaryIO, options: Dict):
@@ -339,12 +427,24 @@ def solve_clusters(
         ordered_clusters = []
         for ev, clusters in zip(split_events, split_clusters):
             clu = list(clusters.values())[0]
-            ordered_clusters.append({1: semi_greedy(ev, clu, **order_FOM_kwargs)})
+            if order_FOM_kwargs.get("model", None) is not None:
+                ordered_clusters.append(
+                    {1: semi_greedy_batch(ev, clu, **order_FOM_kwargs)}
+                )
+            else:
+                ordered_clusters.append({1: semi_greedy(ev, clu, **order_FOM_kwargs)})
 
         # Recombine the split event into a single event
         event, pred_clusters = join_events(split_events, ordered_clusters)
     else:
-        pred_clusters = semi_greedy_clusters(event, pred_clusters, **order_FOM_kwargs)
+        if order_FOM_kwargs.get("model", None) is not None:
+            pred_clusters = semi_greedy_batch_clusters(
+                event, pred_clusters, **order_FOM_kwargs
+            )
+        else:
+            pred_clusters = semi_greedy_clusters(
+                event, pred_clusters, **order_FOM_kwargs
+            )
 
     return event, pred_clusters
 
@@ -376,16 +476,38 @@ def solve_clusters_secondary_fom(
         ordered_clusters = []
         for ev, clusters in zip(split_events, split_clusters):
             clu = list(clusters.values())[0]
-            ordered_clusters.append(
-                {1: semi_greedy(ev, clu, **secondary_order_FOM_kwargs)}
-            )
+            if secondary_order_FOM_kwargs.get("model", None) is not None:
+                ordered_clusters.append(
+                    {1: semi_greedy_batch(ev, clu, **secondary_order_FOM_kwargs)}
+                )
+            else:
+                ordered_clusters.append(
+                    {1: semi_greedy(ev, clu, **secondary_order_FOM_kwargs)}
+                )
         event, pred_clusters = join_events(split_events, ordered_clusters)
     else:
-        pred_clusters = semi_greedy_clusters(
-            event, pred_clusters, **secondary_order_FOM_kwargs
-        )
+        if secondary_order_FOM_kwargs.get("model", None) is not None:
+            pred_clusters = semi_greedy_batch_clusters(
+                event, pred_clusters, **secondary_order_FOM_kwargs
+            )
+        else:
+            pred_clusters = semi_greedy_clusters(
+                event, pred_clusters, **secondary_order_FOM_kwargs
+            )
 
-    return cluster_FOM(event, pred_clusters, **secondary_order_FOM_kwargs)
+    if secondary_order_FOM_kwargs.get("model", None) is not None:
+        return cluster_model_FOM(
+            event,
+            pred_clusters,
+            secondary_order_FOM_kwargs.get("model"),
+            **secondary_order_FOM_kwargs,
+        )
+    try:
+        out = cluster_FOM(event, pred_clusters, **secondary_order_FOM_kwargs)
+    except Exception as ex:
+        print(event, pred_clusters)
+        raise ex
+    return out
 
 
 def track_and_get_energy(
