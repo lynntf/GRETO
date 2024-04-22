@@ -9,11 +9,11 @@ from __future__ import annotations
 import os
 import pickle as pkl
 import struct
-from typing import BinaryIO, Dict, Generator, List, Tuple
-import pkg_resources
 import zipfile
+from typing import BinaryIO, Dict, Generator, List, Tuple
 
 import numpy as np
+import pkg_resources
 import yaml
 from scipy.spatial.distance import pdist, squareform
 
@@ -816,11 +816,11 @@ def mode1_data(
 
     mode1_output = struct.pack(
         GEBHeader_format,
-        int(3.0),
+        3,  # type
         struct.calcsize(
             tracked_gamma_hit_format + ngam * (mode1_format + extra_data_format)
-        ),
-        int(event.id),
+        ),  # payload size
+        int(min(point.ts for point in event.hit_points)),  # timestamp of event
     )
     mode1_output += struct.pack(tracked_gamma_hit_format, ngam, 0)
     if foms is None:
@@ -977,7 +977,7 @@ def mode1_extended_data(
     )
 
     mode1_output = struct.pack(
-        GEBHeader_format, int(GEB_type), struct.calcsize(data_format), int(event.id)
+        GEBHeader_format, int(GEB_type), struct.calcsize(data_format), int(min(point.ts for point in event.hit_points))
     )
     pad = 0
     mode1_output += struct.pack(tracked_gamma_hit_format, ngam, pad)
