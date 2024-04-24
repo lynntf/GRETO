@@ -21,7 +21,7 @@ from greto.asym_heir_clustering import asym_hier_linkage
 from greto.coincidence_class import Coincidence
 from greto.detector_config_class import DetectorConfig
 from greto.interaction_class import Interaction
-from greto.utils import perm_to_transition
+from greto.utils import perm_to_transition, reverse_cumsum
 
 # TODO - change from eres constant to energy uncertainty
 
@@ -422,6 +422,8 @@ class Event:
         )
         if use_threshold:
             e_sum = self.energy_sum(permutation)
+            if estimate < e_sum:
+                return e_sum
             e_final = self.energy_matrix[permutation[-1]]
             estimated_outgoing = estimate - e_sum
             if phys.cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
@@ -458,7 +460,7 @@ class Event:
                 self.tango_estimates_sigma_perm(
                     permutation=permutation, start_point=start_point
                 )
-                + eres * np.sqrt(np.arange(1, len(energies[:-1]), 1))
+                + eres * np.sqrt(np.arange(1, len(energies) - 1, 1))
             )
         ) / np.sum(
             1
@@ -466,11 +468,13 @@ class Event:
                 self.tango_estimates_sigma_perm(
                     permutation=permutation, start_point=start_point
                 )
-                + eres * np.sqrt(np.arange(1, len(energies[:-1]), 1))
+                + eres * np.sqrt(np.arange(1, len(energies) - 1, 1))
             )
         )
         if use_threshold:
             e_sum = self.energy_sum(permutation)
+            if estimate < e_sum:
+                return e_sum
             e_final = self.energy_matrix[permutation[-1]]
             estimated_outgoing = estimate - e_sum
             if phys.cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
@@ -613,8 +617,7 @@ class Event:
         else:
             full_perm = tuple(permutation)
         energies = self.energy_matrix[list(full_perm)]
-        cum_energies = np.cumsum(energies[::-1])[::-1]  # Reversed cumulative sum
-        # cum_energies = np.flip(np.flip(energies, 0).cumsum(), 0)  # slightly slower for short vec
+        cum_energies = reverse_cumsum(energies)
         if start_energy is None:
             return cum_energies[1:]
         return cum_energies[1:] + (start_energy - cum_energies[1])
@@ -789,14 +792,14 @@ class Event:
         **cos_theor_kwargs,
     ) -> np.ndarray:
         """Residual between geometric cosine and theoretical cosine"""
-        geo = self.cos_act_perm(permutation=permutation, start_point=start_point)
+        geometric_cosine = self.cos_act_perm(permutation=permutation, start_point=start_point)
         theo = self.cos_theor_perm(
             permutation=permutation,
             start_point=start_point,
             start_energy=start_energy,
             **cos_theor_kwargs,
         )
-        return geo - theo
+        return geometric_cosine - theo
 
     def res_cos_cap(
         self,
