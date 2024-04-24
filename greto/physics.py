@@ -183,8 +183,10 @@ def compton_penalty_ell1(cosines: np.ndarray[float]):
     Returns:
         - -1.0 - cosine if cosine < -1, 0.0 otherwise
     """
-    # return np.clip(-cosines - 1, 0.0, np.inf) # slightly slower but identical behavior
-    return np.where(cosines < -1, -1 - cosines, 0.0)
+    # return np.clip(-cosines - 1, 0.0, np.inf)  # slightly slower but identical behavior
+    # return np.where(cosines < -1, -1 - cosines, 0.0)
+    # return (cosines < -1) * (-1 - cosines)  # slightly faster than where
+    return -1 - np.minimum(cosines, -1.0)  # almost 2x faster than clip
 
 
 def compton_penalty(cosines: np.ndarray[float]):
@@ -197,7 +199,8 @@ def compton_penalty(cosines: np.ndarray[float]):
     Returns:
         - 1.0 if cosine < -1, 0.0 otherwise
     """
-    return np.where(cosines < -1, 1.0, 0.0)
+    # return np.where(cosines < -1, 1.0, 0.0)
+    return (cosines < -1).astype(float)  # ~2x faster than where
 
 
 def cos_theor_sigma(
@@ -357,7 +360,9 @@ def tango_incoming_estimate(
 
 
 def partial_tango_incoming_derivatives(
-    e: np.ndarray[float], o_m_cos_ijk: np.ndarray[float], fill_value: float = 10.0,
+    e: np.ndarray[float],
+    o_m_cos_ijk: np.ndarray[float],
+    fill_value: float = 10.0,  # TODO - get rid of arbitrary number
 ) -> np.ndarray[float]:
     """
     Partial derivatives of estimated incoming energy using local information
@@ -366,10 +371,13 @@ def partial_tango_incoming_derivatives(
     e[e <= 0.0] = fill_value
     return (
         0.5
-        + 0.5*(1/np.sqrt(e**2 / 4 + e * MEC2 / o_m_cos_ijk))
+        + 0.5
+        * (1 / np.sqrt(e**2 / 4 + e * MEC2 / o_m_cos_ijk))
         * (e / 2 + MEC2 / o_m_cos_ijk),
-        0.5*(1/np.sqrt(e**2 / 4 + e * MEC2 / o_m_cos_ijk))
-        * (e * MEC2) / (o_m_cos_ijk**2),
+        0.5
+        * (1 / np.sqrt(e**2 / 4 + e * MEC2 / o_m_cos_ijk))
+        * (e * MEC2)
+        / (o_m_cos_ijk**2),
     )
 
 
@@ -518,6 +526,105 @@ sig_pair_electron = np.array([
 # %% Cross sections
 # Interpolation code adapted version from nist-calculators by Mikhail Zelenyi,
 # an adaptation of XCOM by NIST
+
+
+def fit_absorption(energy_MeV: np.ndarray):
+    """
+    A least squares fit of a softplus and linear function to the linearized
+    data. Roughly 2x speedup over interpolation
+
+    Args:
+        - energy_MeV: energy in MeV
+
+    Returns:
+        - fit absorption cross section
+    """
+
+    # params = np.array([1.323055064485636, -1.482065598945699, 14.074922175534187, -1.011696561692707, 10.35705559222397])
+    def softplus(beta, x):
+        return 1 / beta * np.log(1 + np.exp(beta * x))
+
+    def approx(
+        log_energy_eV,
+        params=np.array(
+            [
+                1.323055064485636,
+                -1.482065598945699,
+                14.074922175534187,
+                -1.011696561692707,
+                10.35705559222397,
+            ]
+        ),
+    ):
+        return params[0] * softplus(1, params[1] * (log_energy_eV - params[2])) + (
+            params[3] * log_energy_eV + params[4]
+        )
+
+    return np.exp(approx(np.log(energy_MeV * 1e6))) / BARNS_PER_SQCM
+
+
+def fit_compton(energy_MeV: np.ndarray):
+    """
+    A least squares fit of a exponential and linear function to the linearized
+    data. Roughly 2x speedup over interpolation
+
+    Args:
+        - energy_MeV: energy in MeV
+
+    Returns:
+        - fit absorption cross section
+    """
+
+    # params = np.array([-5.774955832030122, -0.2543840306526608, 9.371990906611588,-0.9697234863980574, 17.151770815858818])
+    def approx(
+        log_energy_eV,
+        params=np.array(
+            [
+                -5.774955832030122,
+                -0.2543840306526608,
+                9.371990906611588,
+                -0.9697234863980574,
+                17.151770815858818,
+            ]
+        ),
+    ):
+        return params[0] * np.exp(params[1] * (log_energy_eV - params[2])) + (
+            params[3] * log_energy_eV + params[4]
+        )
+
+    return np.exp(approx(np.log(energy_MeV * 1e6))) / BARNS_PER_SQCM
+
+
+def fit_pair(energy_MeV: np.ndarray):
+    """
+    A least squares fit of a quadratic function to the linearized data. Roughly
+    2x speedup over interpolation
+
+    Args:
+        - energy_MeV: energy in MeV
+
+    Returns:
+        - fit absorption cross section
+    """
+
+    # params = np.array([-0.020682536090183546, -5.060366786984834, -8.632083599358173])
+    def approx(
+        log_energy_eV,
+        params=np.array(
+            [-0.020682536090183546, -5.060366786984834, -8.632083599358173]
+        ),
+    ):
+        return params[0] * log_energy_eV**2 + params[1] * log_energy_eV + params[2]
+
+    energy_eV = energy_MeV * 1e6
+    y = np.zeros((energy_eV.shape))
+    idx = energy_eV > THRESHOLD_PAIR_ATOM
+    y[idx] = (
+        np.exp(approx(np.log(energy_eV[idx])))
+        * ((energy_eV[idx] * (energy_eV[idx] - THRESHOLD_PAIR_ATOM)) ** 3)
+        / BARNS_PER_SQCM
+    )
+    return y
 
 
 def interpolateAbsorptionEdge(
@@ -767,14 +874,17 @@ __sig_pair = make_pair_interpolator(
 )
 
 
-def sig_abs(energies: np.ndarray[float]) -> np.ndarray[float]:
+def sig_abs(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
     """Interpolated absorption cross-sections for Germanium"""
+    if use_fit:
+        return fit_absorption(energies)
     return __sig_abs(energies)
+    
 
 
-def lin_att_abs(energies: np.ndarray[float]) -> np.ndarray[float]:
+def lin_att_abs(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
     """Interpolated absorption linear attenuation [1/cm]"""
-    return sig_abs(energies) * RANGE_PROCESS
+    return sig_abs(energies, use_fit) * RANGE_PROCESS
 
 
 def sig_ray(energies: np.ndarray[float]) -> np.ndarray[float]:
@@ -787,35 +897,41 @@ def lin_att_ray(energies: np.ndarray[float]) -> np.ndarray[float]:
     return sig_ray(energies) * RANGE_PROCESS
 
 
-def sig_compt(energies: np.ndarray[float]) -> np.ndarray[float]:
+def sig_compt(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
     """Interpolated Compton scattering cross-sections"""
+    if use_fit:
+        return fit_compton(energies)
     return __sig_compt(energies)
+    
 
 
-def lin_att_compt(energies: np.ndarray[float]) -> np.ndarray[float]:
+def lin_att_compt(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
     """Interpolated Compton scattering linear attenuation [1/cm]"""
-    return sig_compt(energies) * RANGE_PROCESS
+    return sig_compt(energies, use_fit) * RANGE_PROCESS
 
 
-def sig_pair(energies: np.ndarray[float]) -> np.ndarray[float]:
+def sig_pair(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
     """Interpolated pair production cross-sections"""
+    if use_fit:
+        return fit_pair(energies)
     return __sig_pair(energies)
+    
 
 
-def lin_att_pair(energies: np.ndarray[float]) -> np.ndarray[float]:
+def lin_att_pair(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
     """Interpolated pair production linear attenuation [1/cm]"""
-    return sig_pair(energies) * RANGE_PROCESS
+    return sig_pair(energies, use_fit) * RANGE_PROCESS
 
 
-def sig_total(energies: np.ndarray[float]) -> np.ndarray[float]:
+def sig_total(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
     """Interpolated total cross-section"""
-    return sig_abs(energies) + sig_compt(energies) + sig_pair(energies)
+    return sig_abs(energies, use_fit) + sig_compt(energies, use_fit) + sig_pair(energies, use_fit)
 
 
-def lin_att_total(energies: np.ndarray[float]) -> np.ndarray[float]:
+def lin_att_total(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
     """Interpolated total linear attenuation [1/cm]"""
     return (
-        sig_abs(energies) + sig_compt(energies) + sig_pair(energies)
+        sig_abs(energies, use_fit) + sig_compt(energies, use_fit) + sig_pair(energies, use_fit)
     ) * RANGE_PROCESS
 
 
