@@ -31,6 +31,19 @@ def perm_to_transition(permutation: Tuple, D: int = 3) -> Tuple[np.ndarray]:
     p = np.array(permutation)
     return tuple(p[i : len(p) - (D - i) + 1] for i in range(D))
 
+def reverse_cumsum(x:np.ndarray) -> np.ndarray:
+    """
+    Reversed cumulative sum for the vector x
+    
+    Args:
+        - x: array we want the reverse cumulative sum of
+
+    Returns:
+        - reversed cumulative sum
+    """
+    return np.cumsum(x[::-1])[::-1]  # Reversed cumulative sum
+    # return np.flip(np.flip(x, 0).cumsum(), 0)  # slightly slower for short vec
+
 
 def log_interp(x: np.ndarray, xp: np.ndarray, fp: np.ndarray) -> np.ndarray:
     """
