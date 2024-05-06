@@ -7,7 +7,7 @@ Forward estimate of tracking using geometry to pre-screen interactions
 from typing import List
 
 from greto.event_class import Event
-from greto.physics import theta_theor
+from greto.physics import theta_theor_single
 
 
 def interactions_in_cone(
@@ -52,7 +52,7 @@ def interactions_in_cone(
         return []
 
     # Compton Scattering Formula
-    pred_angle = theta_theor(energy, energy - pt.e)
+    pred_angle = theta_theor_single(energy, energy - pt.e)
     good_interactions = []
     for i in range(1, len(event.points)):
         if i == pt_idx:
