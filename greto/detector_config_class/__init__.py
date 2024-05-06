@@ -188,34 +188,34 @@ class DetectorConfig:
         Set the position uncertainty parameters to either AGATA default,
         Soederstroem, or Siciliano.
         """
-        match method.lower():
-            case "agata":
-                self.position_error_w0 = self.position_error_w0_agata
-                self.position_error_w1 = self.position_error_w1_agata
-            case "soederstroem":
-                self.position_error_w0 = self.position_error_w0_Soederstroem
-                self.position_error_w1 = self.position_error_w1_Soederstroem
-            case "siciliano" | "default":
-                self.position_error_w0 = self.position_error_w0_Siciliano
-                self.position_error_w1 = self.position_error_w1_Siciliano
-            case _:
-                self.set_position_uncertainty("default")
-                raise ValueError(
-                    "Invalid uncertainty method, falling back to default Siciliano"
-                )
+        # match method.lower():
+        #     case "agata":
+        #         self.position_error_w0 = self.position_error_w0_agata
+        #         self.position_error_w1 = self.position_error_w1_agata
+        #     case "soederstroem":
+        #         self.position_error_w0 = self.position_error_w0_Soederstroem
+        #         self.position_error_w1 = self.position_error_w1_Soederstroem
+        #     case "siciliano" | "default":
+        #         self.position_error_w0 = self.position_error_w0_Siciliano
+        #         self.position_error_w1 = self.position_error_w1_Siciliano
+        #     case _:
+        #         self.set_position_uncertainty("default")
+        #         raise ValueError(
+        #             "Invalid uncertainty method, falling back to default Siciliano"
+        #         )
 
-        # if method.lower() == "agata":
-        #     self.position_error_w0 = self.position_error_w0_agata
-        #     self.position_error_w1 = self.position_error_w1_agata
-        # elif method.lower() == "soederstroem":
-        #     self.position_error_w0 = self.position_error_w0_Soederstroem
-        #     self.position_error_w1 = self.position_error_w1_Soederstroem
-        # elif method.lower() == "siciliano" or method.lower() == "default":
-        #     self.position_error_w0 = self.position_error_w0_Siciliano
-        #     self.position_error_w1 = self.position_error_w1_Siciliano
-        # else:
-        #     self.set_position_uncertainty("default")
-        #     raise ValueError('Invalid uncertainty method, falling back to default Siciliano')
+        if method.lower() == "agata":
+            self.position_error_w0 = self.position_error_w0_agata
+            self.position_error_w1 = self.position_error_w1_agata
+        elif method.lower() == "soederstroem":
+            self.position_error_w0 = self.position_error_w0_Soederstroem
+            self.position_error_w1 = self.position_error_w1_Soederstroem
+        elif method.lower() == "siciliano" or method.lower() == "default":
+            self.position_error_w0 = self.position_error_w0_Siciliano
+            self.position_error_w1 = self.position_error_w1_Siciliano
+        else:
+            self.set_position_uncertainty("default")
+            raise ValueError('Invalid uncertainty method, falling back to default Siciliano')
 
     def position_error(self, energy: np.ndarray):
         """
