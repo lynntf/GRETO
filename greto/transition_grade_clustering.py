@@ -187,10 +187,10 @@ def get_grade_features(
     ind = log_P_ij > 0
     P_angle[ind] = -np.log(
         KN_differential_cross(
-            E_imo=E_ijk[ind],
-            one_minus_cos_theta=one_minus_cosine_ijk[ind],
+            E_ijk[ind],
+            one_minus_cosine_ijk[ind],
+            E_ijk_mj[ind],
             sigma_compt=mu_compt_ijk[ind] / RANGE_PROCESS,
-            Ei=E_ijk_mj[ind],
             integrate=True,
         )
     )
