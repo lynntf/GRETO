@@ -17,7 +17,7 @@ from scipy.cluster.hierarchy import fcluster, fclusterdata
 from scipy.spatial.distance import pdist, squareform
 
 from greto.event_class import Event
-from greto.geometry import ge_distance
+import greto.geometry as geo
 from greto.interaction_class import Interaction
 
 num_property_features = 16
@@ -483,11 +483,14 @@ def cluster_pdist(
         else:
             centers = get_barycenters(event, clusters)
         if metric == "euclidean":
-            return squareform(pdist(centers, metric="euclidean"))
+            # return squareform(pdist(centers, metric="euclidean"))
+            return geo.njit_square_pdist(centers)
         elif metric == "germanium":
-            return squareform(ge_distance(centers))
+            # return squareform(geo.ge_distance(centers))
+            return geo.njit_square_ge_pdist(centers, event.detector_config.inner_radius)
         elif metric == "angle":
-            return squareform(np.arccos(1 - pdist(centers, metric="cosine")))
+            return np.arccos(1 - geo.njit_square_cosine_pdist(centers))
+            # return squareform(np.arccos(1 - pdist(centers, metric="cosine")))
 
     pairwise_distance = np.zeros((len(clusters), len(clusters)))
 
@@ -1191,7 +1194,7 @@ class cluster_calcs:
             if metric == "germanium":
                 # Centroids could be computed in many ways for germanium
                 # distances, this is just one way
-                d = ge_distance(
+                d = geo.ge_distance(
                     np.array(
                         [
                             self.cluster_centroid(cluster1),
