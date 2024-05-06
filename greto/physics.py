@@ -10,6 +10,7 @@ from __future__ import annotations
 import warnings
 from typing import Callable, Optional
 
+import numba
 import numpy as np
 from scipy.constants import physical_constants
 from scipy.interpolate import PchipInterpolator, interp1d  # CubicSpline,
@@ -52,6 +53,7 @@ imposed by the Compton Edge.
 """
 
 
+@numba.njit
 def compton_edge_incoming(
     E_out: np.ndarray[float] | float,
 ) -> np.ndarray[float] | float:
@@ -84,6 +86,7 @@ def compton_edge_incoming(
     return E_out / (1 - 2 * E_out / MEC2)
 
 
+@numba.njit
 def compton_edge_incoming_diff(
     E_out: np.ndarray[float] | float,
 ) -> np.ndarray[float] | float:
@@ -95,10 +98,11 @@ def compton_edge_incoming_diff(
 
     Find the energy deposited (E_in - E_out), assuming a maximal energy deposit.
     """
-    return compton_edge_outgoing(E_out) - E_out
-    # return E_out * (-1 + 1/(1 - 2*E_out/MEC2) )
+    # return compton_edge_outgoing(E_out) - E_out
+    return E_out * (-1 + 1 / (1 - 2 * E_out / MEC2))
 
 
+@numba.njit
 def compton_edge_outgoing(E_in: np.ndarray[float] | float) -> np.ndarray[float] | float:
     """
     Outgoing energy assuming a back-scatter given incoming energy
@@ -121,6 +125,7 @@ def compton_edge_outgoing(E_in: np.ndarray[float] | float) -> np.ndarray[float] 
     return E_in / (1 + 2 * E_in / MEC2)
 
 
+@numba.njit
 def compton_edge_outgoing_diff(
     E_in: np.ndarray[float] | float,
 ) -> np.ndarray[float] | float:
@@ -136,11 +141,43 @@ def compton_edge_outgoing_diff(
     What is the largest energy deposit that could happen with incoming energy
     E_in?
     """
-    return E_in - compton_edge_outgoing(E_in)
-    # return E_in * (1 - 1/(1 + 2*E_in/MEC2))
+    # return E_in - compton_edge_outgoing(E_in)
+    return E_in * (1 - 1 / (1 + 2 * E_in / MEC2))
 
 
 # %% Compton Scattering Formula: Cosine
+@numba.njit
+def njit_cos_theor(
+    E_imo: float | np.ndarray[float],
+    E_i: float | np.ndarray[float],
+) -> np.ndarray[float]:
+    """
+    Compton scattering formula. Compute cosine of angle based on starting and
+    ending energy after an interaction.
+
+    Args:
+        - E_imo: The energy prior to the interaction
+        - E_i: The energy after the interaction
+    """
+    return 1 - MEC2 * (1 / E_i - 1 / E_imo)
+
+
+@numba.njit
+def cos_theor_sequence(energies: np.ndarray) -> np.ndarray:
+    """
+    Compton scattering formula. Compute cosine of angle based on starting and
+    ending energy after an interaction.
+
+    Args:
+        - energies: sequence of energies [MeV]
+    """
+    # return 1 - MEC2 * np.diff(1 / energies)
+    out = np.zeros((energies.shape[0]-1,))  # for loop is faster when compiled
+    for i in range(out.shape[0]):
+        out[i] = 1 - MEC2 * (1/energies[i+1] - 1/energies[i])
+    return out
+
+
 def cos_theor(
     E_imo: float | np.ndarray[float],
     E_i: float | np.ndarray[float],
@@ -173,6 +210,13 @@ def cos_theor(
     return cos_theta
 
 
+@numba.njit
+def compton_penalty_ell1_single(cosine: float) -> float:
+    """Returns how much smaller than -1 the cosine value is or 0.0"""
+    return max(0, -1.0 - cosine)
+
+
+@numba.njit
 def compton_penalty_ell1(cosines: np.ndarray[float]):
     """
     Return how much more negative the theoretical cosine is compared to -1
@@ -186,9 +230,24 @@ def compton_penalty_ell1(cosines: np.ndarray[float]):
     # return np.clip(-cosines - 1, 0.0, np.inf)  # slightly slower but identical behavior
     # return np.where(cosines < -1, -1 - cosines, 0.0)
     # return (cosines < -1) * (-1 - cosines)  # slightly faster than where
-    return -1 - np.minimum(cosines, -1.0)  # almost 2x faster than clip
+    # return -1 - np.minimum(cosines, -1.0)  # almost 2x faster than clip
+    # return np.maximum(0, -1 - cosines)
+    out = np.zeros(cosines.shape)  # for loop is even faster
+    for i in range(len(cosines)):
+        if cosines[i] < -1:
+            out[i] = -1 - cosines[i]
+    return out
 
 
+@numba.njit
+def compton_penalty_single(cosine: float) -> float:
+    """Indicator if a penalty for non-physical scattering should be applied"""
+    if cosine < -1:
+        return 1.0
+    return 0.0
+
+
+@numba.njit
 def compton_penalty(cosines: np.ndarray[float]):
     """
     Return if the theoretical cosine is less than -1
@@ -200,9 +259,15 @@ def compton_penalty(cosines: np.ndarray[float]):
         - 1.0 if cosine < -1, 0.0 otherwise
     """
     # return np.where(cosines < -1, 1.0, 0.0)
-    return (cosines < -1).astype(float)  # ~2x faster than where
+    # return (cosines < -1).astype(float)  # ~2x faster than where
+    out = np.zeros(cosines.shape)  # for loop is even faster
+    for i in range(len(cosines)):
+        if cosines[i] < -1:
+            out[i] = 1.0
+    return out
 
 
+@numba.njit
 def cos_theor_sigma(
     E_imo: float | np.ndarray[float],
     E_i: float | np.ndarray[float],
@@ -224,16 +289,46 @@ def cos_theor_sigma(
     if Nmi is None:
         nmi = np.arange(len(E_imo), 0, -1)
     else:
+        Nmi = max(Nmi, len(E_imo))
         nmi = np.arange(Nmi, Nmi - len(E_imo), -1)
     sigma_squared = 1 / E_imo**4 + nmi * (1 / E_i**2 - 1 / E_imo**2)
     return MEC2 * eres * np.sqrt(sigma_squared)
 
 
-def theta_theor(
-    E_imo: float | np.ndarray[float],
-    E_i: float | np.ndarray[float],
+# def cos_theor_err(
+#     E_imo: float | np.ndarray[float],
+#     E_i: float | np.ndarray[float],
+#     Nmi: Optional[int] = None,
+#     eres: float = 1e-3,
+# ) -> np.ndarray[float]:
+#     """
+#     Compton scattering formula. Compute the error of computing cosine of angle
+#     based on starting and ending energy after an interaction.
+
+#     Args:
+#         E_imo: The energy prior to the interaction
+#         E_i: The energy after the interaction
+#         Nmi: The number of interactions in the entire cluster
+#         penalty: The penalty for having an unrealistic
+#             energy drop (cosine is < -1) violating the Compton edge
+#         penalty_slack: Slack in the cosine value
+#     """
+#     if isinstance(E_imo, float):
+#         E_imo = np.array(E_imo)
+#         E_i = np.array(E_i)
+#     cos_theta = cos_theor(E_imo, E_i, penalty=None)
+#     if Nmi is None:
+#         return np.where(cos_theta > -1, MEC2 * eres / E_imo**2, 1)
+#     return np.where(cos_theta > -1,
+#         MEC2 * eres * np.sqrt( 1 / E_imo**4 + np.arange(Nmi, Nmi - len(E_imo), -1) * (1 / E_i**2 - 1 / E_imo**2) ** 2),
+#         1,
+#     )
+
+@numba.njit
+def theta_theor_single(
+    E_imo: float,
+    E_i: float,
     penalty: Optional[float] = None,
-    **kwargs,
 ) -> float:
     """
     The arccosine of cos_theor.
@@ -243,57 +338,67 @@ def theta_theor(
         - E_i: The energy after the interaction
         - penalty: Compton Edge violation penalty value
     """
-    if isinstance(E_imo, float):
-        E_imo = np.array(E_imo)
-        E_i = np.array(E_i)
-    c_theta = cos_theor(E_imo, E_i, penalty=None, **kwargs)
+    # c_theta = np.arccos(njit_cos_theor(E_imo, E_i))
+    c_theta = njit_cos_theor(E_imo, E_i)
     if penalty is not None:
-        penalty_inds = c_theta < -1
-        # Assign penalty to values that violate physics
-        c_theta[penalty_inds] = penalty
-        # Take the arccos of values that are not the penalty value
-        c_theta[~penalty_inds] = np.arccos(c_theta[~penalty_inds])
-        return c_theta
+        if c_theta < -1:
+            return penalty
+    return np.arccos(c_theta)
+
+@numba.njit
+def theta_theor(
+    E_imo: np.ndarray[float],
+    E_i: np.ndarray[float],
+    penalty: Optional[float] = None,
+) -> float:
+    """
+    The arccosine of cos_theor.
+
+    Args:
+        - E_imo: The energy prior to the interaction
+        - E_i: The energy after the interaction
+        - penalty: Compton Edge violation penalty value
+
+    >>> phys.theta_theor(
+            np.array([4.0,3.0,2.0,1.0,4.0]),
+            np.array([3.5,2.5,1.5,0.5,0.1]),
+            -12,
+        )
+    array([  0.19134129,   0.26177011,   0.41570088,   1.05985215, -12.        ])
+    """
+    # c_theta = np.where(c_theta < -1, penalty, np.arccos(c_theta))
+    # penalty_inds = c_theta < -1
+    # # Assign penalty to values that violate physics
+    # c_theta[penalty_inds] = penalty
+    # # Take the arccos of values that are not the penalty value
+    # c_theta[~penalty_inds] = np.arccos(c_theta[~penalty_inds])
+
+    c_theta = np.zeros((E_imo.shape[0],))
+    for i in numba.prange(c_theta.shape[0]):
+        if E_imo[i] > 0 and E_i[i] > 0 and E_imo[i] > E_i[i]:
+            c_theta[i] = theta_theor_single(E_imo[i], E_i[i], penalty)
+        elif penalty is not None:
+            c_theta[i] = penalty
+    return c_theta
+
+
+@numba.njit
+def theta_theor_single(
+    E_imo: float,
+    E_i: float,
+    penalty: Optional[float] = None,
+) -> float:
+    """
+    Computes theoretical scattering angle using two floats
+    """
+    c_theta = njit_cos_theor(E_imo, E_i)
+    if penalty is not None and c_theta < -1:
+        return penalty
     return np.arccos(c_theta)
 
 
-def cos_theor_err(
-    E_imo: float | np.ndarray[float],
-    E_i: float | np.ndarray[float],
-    Nmi: Optional[int] = None,
-    eres: float = 1e-3,
-) -> np.ndarray[float]:
-    """
-    Compton scattering formula. Compute the error of computing cosine of angle
-    based on starting and ending energy after an interaction.
-
-    Args:
-        E_imo: The energy prior to the interaction
-        E_i: The energy after the interaction
-        Nmi: The number of interactions in the entire cluster
-        penalty: The penalty for having an unrealistic
-            energy drop (cosine is < -1) violating the Compton edge
-        penalty_slack: Slack in the cosine value
-    """
-    if isinstance(E_imo, float):
-        E_imo = np.array(E_imo)
-        E_i = np.array(E_i)
-    cos_theta = cos_theor(E_imo, E_i, penalty=None)
-    if Nmi is None:
-        return np.where(cos_theta > -1, MEC2 * eres / E_imo**2, 1)
-    return np.where(
-        cos_theta > -1,
-        MEC2
-        * eres
-        * np.sqrt(
-            1 / E_imo**4
-            + np.arange(Nmi, Nmi - len(E_imo), -1) * (1 / E_i**2 - 1 / E_imo**2) ** 2
-        ),
-        1,
-    )
-
-
 # %% Compton Scattering Formula: Outbound energy
+@numba.njit
 def outgoing_energy_csf(
     E_imo: float | np.ndarray[float], one_minus_cosines: float | np.ndarray[float]
 ) -> float | np.ndarray[float]:
@@ -306,7 +411,7 @@ def outgoing_energy_csf(
     """
     return E_imo / (1 + (E_imo / MEC2) * one_minus_cosines)
 
-
+@numba.njit
 def outgoing_energy_csf_sigma(
     E_imo: np.ndarray[float],
     one_minus_cosines: np.ndarray[float],
@@ -331,6 +436,7 @@ def outgoing_energy_csf_sigma(
 
 
 # %% Compton Scattering Formula: Inbound energy
+@numba.njit
 def incoming_energy_csf(
     E_i: np.ndarray[float], one_minus_cosines: np.ndarray[float]
 ) -> np.ndarray[float]:
@@ -349,36 +455,68 @@ def incoming_energy_csf_sigma(
 
 
 # %% Compton Scattering Formula: Local inbound energy (TANGO)
+@numba.njit
 def tango_incoming_estimate(
-    e: np.ndarray[float], one_minus_cosines: np.ndarray[float]
+    e: np.ndarray[float],
+    one_minus_cosines: np.ndarray[float],
+    fill_value:float = 123456789.0,  # TODO - get rid of arbitrary number
 ) -> np.ndarray[float]:
     """
     Estimated incoming energy from local energy and the angle of scattering
     """
-    one_minus_cosines[one_minus_cosines <= 0.0] = 10
-    return 0.5 * e + np.sqrt(e**2 / 4 + e * MEC2 / one_minus_cosines)
+    out = np.zeros(one_minus_cosines.shape)
+    for i in range(one_minus_cosines.shape[0]):
+        for j in range(one_minus_cosines.shape[1]):
+            for k in range(one_minus_cosines.shape[2]):
+                if one_minus_cosines[i,j,k] <= 0.0:
+                    out[i,j,k] = fill_value
+                else:
+                    out[i,j,k] = 0.5 * e[j] + np.sqrt(e[j]**2 / 4 + e[j] * MEC2 / one_minus_cosines[i,j,k])
+    # one_minus_cosines[one_minus_cosines <= 0.0] = 10
+    return out
 
+@numba.njit
+def partial_tango_incoming_derivatives_d_de_single(e, omc):
+    return 0.5 + 0.5 * (1 / np.sqrt(e**2 / 4 + e*MEC2/omc)) * (e/2 + MEC2/omc)
 
+@numba.njit
+def partial_tango_incoming_derivatives_d_d_cos_single(e, omc):
+    return 0.5 * (1 / np.sqrt(e**2 / 4 + e * MEC2 / omc)) * (e * MEC2) / (omc**2)
+
+@numba.njit
 def partial_tango_incoming_derivatives(
     e: np.ndarray[float],
     o_m_cos_ijk: np.ndarray[float],
-    fill_value: float = 10.0,  # TODO - get rid of arbitrary number
+    fill_value: float = 123456789.0,  # TODO - get rid of arbitrary number
 ) -> np.ndarray[float]:
     """
     Partial derivatives of estimated incoming energy using local information
     """
-    o_m_cos_ijk[o_m_cos_ijk <= 0.0] = fill_value
-    e[e <= 0.0] = fill_value
-    return (
-        0.5
-        + 0.5
-        * (1 / np.sqrt(e**2 / 4 + e * MEC2 / o_m_cos_ijk))
-        * (e / 2 + MEC2 / o_m_cos_ijk),
-        0.5
-        * (1 / np.sqrt(e**2 / 4 + e * MEC2 / o_m_cos_ijk))
-        * (e * MEC2)
-        / (o_m_cos_ijk**2),
-    )
+
+    out_1 = np.zeros(o_m_cos_ijk.shape)
+    out_2 = np.zeros(o_m_cos_ijk.shape)
+    for i in range(out_1.shape[0]):
+        for j in range(out_1.shape[1]):
+            for k in range(out_1.shape[2]):
+                if o_m_cos_ijk[i,j,k] <= 0.0 or e[j] <= 0.0:
+                    out_1[i,j,k] = fill_value
+                    out_2[i,j,k] = fill_value
+                else:
+                    # out_1[i,j,k] = 0.5 + 0.5 * (1 / np.sqrt(e[j]**2 / 4 + e[j] * MEC2 / o_m_cos_ijk[i,j,k])) * (e[j] / 2 + MEC2 / o_m_cos_ijk[i,j,k])
+                    # out_2[i,j,k] = 0.5 * (1 / np.sqrt(e[j]**2 / 4 + e[j] * MEC2 / o_m_cos_ijk[i,j,k])) * (e[j] * MEC2) / (o_m_cos_ijk[i,j,k]**2)
+                    out_1[i,j,k] = partial_tango_incoming_derivatives_d_de_single(e[j], o_m_cos_ijk[i,j,k])
+                    out_2[i,j,k] = partial_tango_incoming_derivatives_d_d_cos_single(e[j], o_m_cos_ijk[i,j,k])
+    # out_1 = np.where(
+    #     np.logical_or(o_m_cos_ijk <= 0.0, e[np.newaxis,:,np.newaxis] <= 0),
+    #     0.0,
+    #     0.5 + 0.5 * (1 / np.sqrt(e[np.newaxis, :, np.newaxis]**2 / 4 + e[np.newaxis, :, np.newaxis] * MEC2 / o_m_cos_ijk)) * (e[np.newaxis, :, np.newaxis] / 2 + MEC2 / o_m_cos_ijk[i,j,k])
+    # )
+    # out_1 = np.where(
+    #     np.logical_or(o_m_cos_ijk <= 0.0, e[np.newaxis,:,np.newaxis] <= 0),
+    #     0.0,
+    #     0.5 * (1 / np.sqrt(e[np.newaxis, :, np.newaxis]**2 / 4 + e[np.newaxis, :, np.newaxis] * MEC2 / o_m_cos_ijk)) * (e[np.newaxis, :, np.newaxis] * MEC2) / (o_m_cos_ijk**2)
+    # )
+    return (out_1, out_2)
 
 
 def tango_incoming_sigma(
@@ -528,6 +666,7 @@ sig_pair_electron = np.array([
 # an adaptation of XCOM by NIST
 
 
+@numba.njit
 def fit_absorption(energy_MeV: np.ndarray):
     """
     A least squares fit of a softplus and linear function to the linearized
@@ -546,7 +685,8 @@ def fit_absorption(energy_MeV: np.ndarray):
 
     def approx(
         log_energy_eV,
-        params=np.array(
+    ):
+        params = np.array(
             [
                 1.323055064485636,
                 -1.482065598945699,
@@ -554,8 +694,7 @@ def fit_absorption(energy_MeV: np.ndarray):
                 -1.011696561692707,
                 10.35705559222397,
             ]
-        ),
-    ):
+        )
         return params[0] * softplus(1, params[1] * (log_energy_eV - params[2])) + (
             params[3] * log_energy_eV + params[4]
         )
@@ -563,6 +702,7 @@ def fit_absorption(energy_MeV: np.ndarray):
     return np.exp(approx(np.log(energy_MeV * 1e6))) / BARNS_PER_SQCM
 
 
+@numba.njit
 def fit_compton(energy_MeV: np.ndarray):
     """
     A least squares fit of a exponential and linear function to the linearized
@@ -578,7 +718,8 @@ def fit_compton(energy_MeV: np.ndarray):
     # params = np.array([-5.774955832030122, -0.2543840306526608, 9.371990906611588,-0.9697234863980574, 17.151770815858818])
     def approx(
         log_energy_eV,
-        params=np.array(
+    ):
+        params = np.array(
             [
                 -5.774955832030122,
                 -0.2543840306526608,
@@ -586,8 +727,7 @@ def fit_compton(energy_MeV: np.ndarray):
                 -0.9697234863980574,
                 17.151770815858818,
             ]
-        ),
-    ):
+        )
         return params[0] * np.exp(params[1] * (log_energy_eV - params[2])) + (
             params[3] * log_energy_eV + params[4]
         )
@@ -595,7 +735,8 @@ def fit_compton(energy_MeV: np.ndarray):
     return np.exp(approx(np.log(energy_MeV * 1e6))) / BARNS_PER_SQCM
 
 
-def fit_pair(energy_MeV: np.ndarray):
+@numba.njit
+def fit_pair(energy_MeV: np.ndarray | float):
     """
     A least squares fit of a quadratic function to the linearized data. Roughly
     2x speedup over interpolation
@@ -610,13 +751,21 @@ def fit_pair(energy_MeV: np.ndarray):
     # params = np.array([-0.020682536090183546, -5.060366786984834, -8.632083599358173])
     def approx(
         log_energy_eV,
-        params=np.array(
-            [-0.020682536090183546, -5.060366786984834, -8.632083599358173]
-        ),
     ):
+        params = np.array(
+            [-0.020682536090183546, -5.060366786984834, -8.632083599358173]
+        )
         return params[0] * log_energy_eV**2 + params[1] * log_energy_eV + params[2]
 
     energy_eV = energy_MeV * 1e6
+    if isinstance(energy_eV, float):
+        if energy_eV <= THRESHOLD_PAIR_ATOM:
+            return 0.0
+        return (
+            np.exp(approx(np.log(energy_eV)))
+            * ((energy_eV * (energy_eV - THRESHOLD_PAIR_ATOM)) ** 3)
+            / BARNS_PER_SQCM
+        )
     y = np.zeros((energy_eV.shape))
     idx = energy_eV > THRESHOLD_PAIR_ATOM
     y[idx] = (
@@ -874,15 +1023,14 @@ __sig_pair = make_pair_interpolator(
 )
 
 
-def sig_abs(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
+def sig_abs(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[float]:
     """Interpolated absorption cross-sections for Germanium"""
     if use_fit:
         return fit_absorption(energies)
     return __sig_abs(energies)
-    
 
 
-def lin_att_abs(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
+def lin_att_abs(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[float]:
     """Interpolated absorption linear attenuation [1/cm]"""
     return sig_abs(energies, use_fit) * RANGE_PROCESS
 
@@ -897,41 +1045,60 @@ def lin_att_ray(energies: np.ndarray[float]) -> np.ndarray[float]:
     return sig_ray(energies) * RANGE_PROCESS
 
 
-def sig_compt(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
+def sig_compt(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[float]:
     """Interpolated Compton scattering cross-sections"""
     if use_fit:
         return fit_compton(energies)
     return __sig_compt(energies)
-    
 
 
-def lin_att_compt(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
+def lin_att_compt(
+    energies: np.ndarray[float], use_fit: bool = True
+) -> np.ndarray[float]:
     """Interpolated Compton scattering linear attenuation [1/cm]"""
     return sig_compt(energies, use_fit) * RANGE_PROCESS
 
 
-def sig_pair(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
+def sig_pair(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[float]:
     """Interpolated pair production cross-sections"""
     if use_fit:
         return fit_pair(energies)
     return __sig_pair(energies)
-    
 
 
-def lin_att_pair(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
+def lin_att_pair(
+    energies: np.ndarray[float], use_fit: bool = True
+) -> np.ndarray[float]:
     """Interpolated pair production linear attenuation [1/cm]"""
     return sig_pair(energies, use_fit) * RANGE_PROCESS
 
 
-def sig_total(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
+def sig_total(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[float]:
     """Interpolated total cross-section"""
-    return sig_abs(energies, use_fit) + sig_compt(energies, use_fit) + sig_pair(energies, use_fit)
+    return (
+        sig_abs(energies, use_fit)
+        + sig_compt(energies, use_fit)
+        + sig_pair(energies, use_fit)
+    )
 
 
-def lin_att_total(energies: np.ndarray[float], use_fit:bool = True) -> np.ndarray[float]:
+def lin_att_total(
+    energies: np.ndarray[float], use_fit: bool = True
+) -> np.ndarray[float]:
     """Interpolated total linear attenuation [1/cm]"""
     return (
-        sig_abs(energies, use_fit) + sig_compt(energies, use_fit) + sig_pair(energies, use_fit)
+        sig_abs(energies, use_fit)
+        + sig_compt(energies, use_fit)
+        + sig_pair(energies, use_fit)
+    ) * RANGE_PROCESS
+
+@numba.njit
+def lin_att_total_fit(energies: np.ndarray[float]) -> np.ndarray[float]:
+    """Interpolated total linear attenuation [1/cm]"""
+    return (
+        fit_absorption(energies)
+        + fit_compton(energies)
+        + fit_pair(energies)
     ) * RANGE_PROCESS
 
 
@@ -959,14 +1126,15 @@ def proba(
 
 
 # %% Klein-Nishina formula
-def KN_differential_cross(
-    E_imo: np.ndarray[float],
-    one_minus_cos_theta: np.ndarray[float],
-    sigma_compt: np.ndarray[float] = None,
-    Ei: np.ndarray[float] = None,
+@numba.njit
+def KN_differential_cross_single(
+    E_imo: float,
+    one_minus_cos_theta: float,
+    Ei: float = None,
+    sigma_compt: float = None,
     relative: bool = True,
     integrate: bool = False,
-) -> np.ndarray[float]:
+) -> float:
     """
     Vectorized (relative) Klein-Nishina differential cross-section
 
@@ -981,24 +1149,55 @@ def KN_differential_cross(
         - Klein-Nishina differential cross-section value
     """
     if sigma_compt is None and relative:
-        sigma_compt = sig_compt(E_imo)
-    if isinstance(E_imo, (float, int)):
-        E_imo = np.array(E_imo)
-        one_minus_cos_theta = np.array(one_minus_cos_theta)
-        if relative:
-            sigma_compt = np.array(sigma_compt)
-    ind = E_imo > 0
-    out = np.zeros(E_imo.shape)
+        sigma_compt = fit_compton(E_imo)
+    if E_imo <= 0:
+        return 0.0
     if Ei is not None:
-        ll = Ei[ind] / E_imo[ind]
+        ll = Ei / E_imo
     else:
-        ll = 1 / (1 + E_imo[ind] / MEC2 * (one_minus_cos_theta[ind]))
-    sin_sq = 1 - (1 - one_minus_cos_theta[ind]) ** 2
-    out[ind] = 0.5 * (R_0**2) * (ll**2) * (ll + 1 / ll - sin_sq)
+        ll = 1 / (1 + E_imo / MEC2 * (one_minus_cos_theta))
+    sin_sq = 1 - (1 - one_minus_cos_theta) ** 2
+    out = 0.5 * (R_0**2) * (ll**2) * (ll + 1 / ll - sin_sq)
     if integrate:
-        out[ind] *= 2 * np.pi * np.sqrt(sin_sq)  # Integrate with respect to phi
+        out *= 2 * np.pi * np.sqrt(sin_sq)  # Integrate with respect to phi
     if relative:
-        out[ind] /= sigma_compt[ind]
+        out /= sigma_compt
+    return out
+
+@numba.njit
+def KN_differential_cross(
+    E_imo: np.ndarray[float],
+    one_minus_cos_theta: np.ndarray[float],
+    Ei: np.ndarray[float] = None,
+    sigma_compt: np.ndarray[float] = None,
+    relative: bool = True,
+    integrate: bool = False,
+) -> np.ndarray[float]:
+    """
+    Klein-Nishina differential cross-section
+
+    Args:
+        - E_imo: incoming gamma-ray energy
+        - one_minus_cos_theta: 1 - cos(theta) of the scattering angle theta
+        - sigma_compt: Compton scattering cross-section at energy E_imo
+        - Ei: outgoing energy
+        - relative: divide by the total Compton scattering cross-section value
+
+    Returns:
+        - Klein-Nishina differential cross-section value
+    """
+    out = np.zeros((len(E_imo),))
+    for i in numba.prange(len(E_imo)):
+        if Ei is not None:
+            if sigma_compt is not None:
+                out[i] = KN_differential_cross_single(E_imo[i], one_minus_cos_theta[i], Ei[i], sigma_compt[i], relative, integrate)
+            else:
+                out[i] = KN_differential_cross_single(E_imo[i], one_minus_cos_theta[i], Ei[i], None, relative, integrate)
+        else:
+            if sigma_compt is not None:
+                out[i] = KN_differential_cross_single(E_imo[i], one_minus_cos_theta[i], None, sigma_compt[i], relative, integrate)
+            else:
+                out[i] = KN_differential_cross_single(E_imo[i], one_minus_cos_theta[i], None, None, relative, integrate)
     return out
 
 
