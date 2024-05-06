@@ -13,16 +13,17 @@ from functools import cached_property, lru_cache
 from itertools import permutations
 from typing import Callable, Dict, Hashable, Iterable, List, Optional, Tuple, Union
 
+import numba
 import numpy as np
 from scipy import integrate
 
+import greto.physics as phys
 from greto import default_config
 from greto.detector_config_class import DetectorConfig
 from greto.event_class import Event
-from greto.geometry import cone
+from greto.event_tools import merge_clusters, split_event_clusters
+from greto.geometry import cone_ray_lengths  # cone
 from greto.interaction_class import Interaction
-from greto.physics import MEC2, RANGE_PROCESS, cos_theor, lin_att_total, theta_theor
-from greto.event_tools import split_event_clusters, merge_clusters
 
 num_property_features = 16
 num_escape_features = 2
@@ -89,7 +90,9 @@ def cluster_model_FOM(
         FOM_kwargs: other keyword arguments for FOM computation
     """
     for s, cluster in clusters.items():
-        feats = cluster_FOM_features(event, cluster, columns_bool=model.columns_bool, **FOM_kwargs)
+        feats = cluster_FOM_features(
+            event, cluster, columns_bool=model.columns_bool, **FOM_kwargs
+        )
         print(s, cluster, feats.shape, np.sum(feats))
 
     return {
@@ -114,7 +117,7 @@ def FOM(
     normalize_start_energy_estimate: bool = False,
     accept_max: bool = True,
     min_excess: float = 0.1,
-    max_excess: float = MEC2,
+    max_excess: float = phys.MEC2,
     eres: float = 1e-3,
     Nmi: int = None,
     singles_method: str = "depth",
@@ -214,150 +217,172 @@ def FOM(
             start_energy = estimate
 
     fom_method = fom_method.lower()
-    # if fom_method == 'agata':
-    #     return agata_FOM(event,perm,
-    #                         start_energy=start_energy,
-    #                         start_point=start_point,
-    #                         Nmi=Nmi,
-    #                         **FOM_kwargs)
-    # if fom_method == 'angle' or fom_method == 'aft':
-    #     return angle_FOM(event,perm,
-    #                         start_energy=start_energy,
-    #                         start_point=start_point,
-    #                         Nmi=Nmi,
-    #                         **FOM_kwargs)
-    # if fom_method == 'agata_exp' or fom_method == 'oft':
-    #     FOM_kwargs['exponential'] = True
-    #     return agata_FOM(event,perm,
-    #                         start_energy=start_energy,
-    #                         start_point=start_point,
-    #                         Nmi=Nmi,
-    #                         **FOM_kwargs)
-    # if fom_method == 'cos':
-    #     return cosine_FOM(event,perm,
-    #                           start_energy=start_energy,
-    #                           start_point=start_point,
-    #                           Nmi=Nmi,
-    #                           **FOM_kwargs)
-    # if fom_method == 'local':
-    #     return local_tango_FOM(event,perm,
-    #                                start_energy=start_energy,
-    #                                start_point=start_point,
-    #                                min_excess = min_excess,
-    #                                max_excess = max_excess,
-    #                                Nmi=Nmi,
-    #                                **FOM_kwargs)
-    # if fom_method == 'geo_loc' or from_method ==  'geo_local':
-    #     return geo_loc_FOM(event,perm,
-    #                            start_energy=start_energy,
-    #                            start_point=start_point,
-    #                            Nmi=Nmi,
-    #                            **FOM_kwargs)
-    # if fom_method == 'tango_variance':
-    #     return tango_variance(event,perm,
-    #                               start_point=start_point)
-    # if fom_method == 'feature':
-    #     return feature_FOM(event, perm,
-    #                            start_energy=start_energy,
-    #                            start_point=start_point,
-    #                            Nmi=Nmi,
-    #                            eres=eres,
-    #                            **FOM_kwargs)
-    # if fom_method == 'selected':
-    #     return selected_FOM(event, perm,
-    #                             start_point=start_point,
-    #                             start_energy=start_energy,
-    #                             Nmi=Nmi,
-    #                             eres=eres,
-    #                             **FOM_kwargs)
-    # if fom_method == 'reduce' or fom_method == 'transition':
-    #     return reduction_FOM(event, perm, start_point=start_point,
-    #                              **FOM_kwargs)
-    # raise NotImplementedError('The FOM method name is not implemented.')
-    match fom_method:
-        case "agata":
-            return agata_FOM(
-                event,
-                perm,
-                start_energy=start_energy,
-                start_point=start_point,
-                Nmi=Nmi,
-                **FOM_kwargs,
-            )
-        case "angle" | "aft":
-            return angle_FOM(
-                event,
-                perm,
-                start_energy=start_energy,
-                start_point=start_point,
-                Nmi=Nmi,
-                **FOM_kwargs,
-            )
-        case "agata_exp" | "oft":
-            FOM_kwargs["exponential"] = True
-            return agata_FOM(
-                event,
-                perm,
-                start_energy=start_energy,
-                start_point=start_point,
-                Nmi=Nmi,
-                **FOM_kwargs,
-            )
-        case "cos":
-            return cosine_FOM(
-                event,
-                perm,
-                start_energy=start_energy,
-                start_point=start_point,
-                Nmi=Nmi,
-                **FOM_kwargs,
-            )
-        case "local":
-            return local_tango_FOM(
-                event,
-                perm,
-                start_energy=start_energy,
-                start_point=start_point,
-                min_excess=min_excess,
-                max_excess=max_excess,
-                Nmi=Nmi,
-                **FOM_kwargs,
-            )
-        case "geo_loc" | "geo_local":
-            return geo_loc_FOM(
-                event,
-                perm,
-                start_energy=start_energy,
-                start_point=start_point,
-                Nmi=Nmi,
-                **FOM_kwargs,
-            )
-        case "tango_variance":
-            return tango_variance(event, perm, start_point=start_point)
-        case "feature":
-            return feature_FOM(
-                event,
-                perm,
-                start_energy=start_energy,
-                start_point=start_point,
-                Nmi=Nmi,
-                eres=eres,
-                **FOM_kwargs,
-            )
-        case "selected":
-            return selected_FOM(
-                event,
-                perm,
-                start_point=start_point,
-                start_energy=start_energy,
-                Nmi=Nmi,
-                eres=eres,
-                **FOM_kwargs,
-            )
-        case "reduce" | "transition":
-            return reduction_FOM(event, perm, start_point=start_point, **FOM_kwargs)
-        case _:
-            raise NotImplementedError("The FOM method name is not implemented.")
+    if fom_method == "agata":
+        return agata_FOM(
+            event,
+            perm,
+            start_energy=start_energy,
+            start_point=start_point,
+            Nmi=Nmi,
+            **FOM_kwargs,
+        )
+    if fom_method == "angle" or fom_method == "aft":
+        return angle_FOM(
+            event,
+            perm,
+            start_energy=start_energy,
+            start_point=start_point,
+            Nmi=Nmi,
+            **FOM_kwargs,
+        )
+    if fom_method == "agata_exp" or fom_method == "oft":
+        FOM_kwargs["exponential"] = True
+        return agata_FOM(
+            event,
+            perm,
+            start_energy=start_energy,
+            start_point=start_point,
+            Nmi=Nmi,
+            **FOM_kwargs,
+        )
+    if fom_method == "cos":
+        return cosine_FOM(
+            event,
+            perm,
+            start_energy=start_energy,
+            start_point=start_point,
+            Nmi=Nmi,
+            **FOM_kwargs,
+        )
+    if fom_method == "local":
+        return local_tango_FOM(
+            event,
+            perm,
+            start_energy=start_energy,
+            start_point=start_point,
+            min_excess=min_excess,
+            max_excess=max_excess,
+            Nmi=Nmi,
+            **FOM_kwargs,
+        )
+    if fom_method == "geo_loc" or from_method == "geo_local":
+        return geo_loc_FOM(
+            event,
+            perm,
+            start_energy=start_energy,
+            start_point=start_point,
+            Nmi=Nmi,
+            **FOM_kwargs,
+        )
+    if fom_method == "tango_variance":
+        return tango_variance(event, perm, start_point=start_point)
+    if fom_method == "feature":
+        return feature_FOM(
+            event,
+            perm,
+            start_energy=start_energy,
+            start_point=start_point,
+            Nmi=Nmi,
+            eres=eres,
+            **FOM_kwargs,
+        )
+    if fom_method == "selected":
+        return selected_FOM(
+            event,
+            perm,
+            start_point=start_point,
+            start_energy=start_energy,
+            Nmi=Nmi,
+            eres=eres,
+            **FOM_kwargs,
+        )
+    if fom_method == "reduce" or fom_method == "transition":
+        return reduction_FOM(event, perm, start_point=start_point, **FOM_kwargs)
+    raise NotImplementedError("The FOM method name is not implemented.")
+    # match fom_method:
+    #     case "agata":
+    #         return agata_FOM(
+    #             event,
+    #             perm,
+    #             start_energy=start_energy,
+    #             start_point=start_point,
+    #             Nmi=Nmi,
+    #             **FOM_kwargs,
+    #         )
+    #     case "angle" | "aft":
+    #         return angle_FOM(
+    #             event,
+    #             perm,
+    #             start_energy=start_energy,
+    #             start_point=start_point,
+    #             Nmi=Nmi,
+    #             **FOM_kwargs,
+    #         )
+    #     case "agata_exp" | "oft":
+    #         FOM_kwargs["exponential"] = True
+    #         return agata_FOM(
+    #             event,
+    #             perm,
+    #             start_energy=start_energy,
+    #             start_point=start_point,
+    #             Nmi=Nmi,
+    #             **FOM_kwargs,
+    #         )
+    #     case "cos":
+    #         return cosine_FOM(
+    #             event,
+    #             perm,
+    #             start_energy=start_energy,
+    #             start_point=start_point,
+    #             Nmi=Nmi,
+    #             **FOM_kwargs,
+    #         )
+    #     case "local":
+    #         return local_tango_FOM(
+    #             event,
+    #             perm,
+    #             start_energy=start_energy,
+    #             start_point=start_point,
+    #             min_excess=min_excess,
+    #             max_excess=max_excess,
+    #             Nmi=Nmi,
+    #             **FOM_kwargs,
+    #         )
+    #     case "geo_loc" | "geo_local":
+    #         return geo_loc_FOM(
+    #             event,
+    #             perm,
+    #             start_energy=start_energy,
+    #             start_point=start_point,
+    #             Nmi=Nmi,
+    #             **FOM_kwargs,
+    #         )
+    #     case "tango_variance":
+    #         return tango_variance(event, perm, start_point=start_point)
+    #     case "feature":
+    #         return feature_FOM(
+    #             event,
+    #             perm,
+    #             start_energy=start_energy,
+    #             start_point=start_point,
+    #             Nmi=Nmi,
+    #             eres=eres,
+    #             **FOM_kwargs,
+    #         )
+    #     case "selected":
+    #         return selected_FOM(
+    #             event,
+    #             perm,
+    #             start_point=start_point,
+    #             start_energy=start_energy,
+    #             Nmi=Nmi,
+    #             eres=eres,
+    #             **FOM_kwargs,
+    #         )
+    #     case "reduce" | "transition":
+    #         return reduction_FOM(event, perm, start_point=start_point, **FOM_kwargs)
+    #     case _:
+    #         raise NotImplementedError("The FOM method name is not implemented.")
 
 
 # %% general FOM
@@ -799,69 +824,85 @@ def single_FOM(
             + " interaction and a singles method should not be used"
         )
     singles_method = singles_method.lower()
-    # if singles_method is None:
-    #     return 0.
-    # if singles_method == "continuous":
-    #     return singles_continuous(event, permutation, start_point=start_point,
-    #                                   singles_penalty_min=singles_penalty_min,
-    #                                   singles_penalty_max=singles_penalty_max)
-    # if singles_method == "proba" or singles_method == "probability":
-    #     return singles_proba(event, permutation, start_point=start_point,
-    #                              singles_penalty_min=singles_penalty_min,
-    #                              singles_penalty_max=singles_penalty_max)
-    # if singles_method == "range":
-    #     return singles_in_range(event, permutation, start_point=start_point,
-    #                                 singles_penalty_min=singles_penalty_min,
-    #                                 singles_penalty_max=singles_penalty_max,
-    #                                 singles_range=singles_range)
-    # if singles_method == "depth" or singles_method == "chat":
-    #     return singles_depth(event, permutation, start_point=start_point,
-    #                              singles_penalty_min=singles_penalty_min,
-    #                              singles_penalty_max=singles_penalty_max,
-    #                              singles_range=singles_range)
-    # raise NotImplementedError("The singles method chosen is not implemented.")
-    match singles_method:
-        case None:
-            return 0.0
-        case "continuous":
-            return singles_continuous(
-                event,
-                permutation,
-                start_point=start_point,
-                singles_penalty_min=singles_penalty_min,
-                singles_penalty_max=singles_penalty_max,
-                small_depth=small_depth,
-            )
-        case "proba" | "probability":
-            return singles_proba(
-                event,
-                permutation,
-                start_point=start_point,
-                singles_penalty_min=singles_penalty_min,
-                singles_penalty_max=singles_penalty_max,
-                small_depth=small_depth,
-            )
-        case "range":
-            return singles_in_range(
-                event,
-                permutation,
-                start_point=start_point,
-                singles_penalty_min=singles_penalty_min,
-                singles_penalty_max=singles_penalty_max,
-                singles_range=singles_range,
-                small_depth=small_depth,
-            )
-        case "depth" | "chat":
-            return singles_depth(
-                event,
-                permutation,
-                start_point=start_point,
-                singles_penalty_min=singles_penalty_min,
-                singles_penalty_max=singles_penalty_max,
-                singles_range=singles_range,
-            )
-        case _:
-            raise NotImplementedError("The singles method chosen is not implemented.")
+    if singles_method is None:
+        return 0.0
+    if singles_method == "continuous":
+        return singles_continuous(
+            event,
+            permutation,
+            start_point=start_point,
+            singles_penalty_min=singles_penalty_min,
+            singles_penalty_max=singles_penalty_max,
+        )
+    if singles_method == "proba" or singles_method == "probability":
+        return singles_proba(
+            event,
+            permutation,
+            start_point=start_point,
+            singles_penalty_min=singles_penalty_min,
+            singles_penalty_max=singles_penalty_max,
+        )
+    if singles_method == "range":
+        return singles_in_range(
+            event,
+            permutation,
+            start_point=start_point,
+            singles_penalty_min=singles_penalty_min,
+            singles_penalty_max=singles_penalty_max,
+            singles_range=singles_range,
+        )
+    if singles_method == "depth" or singles_method == "chat":
+        return singles_depth(
+            event,
+            permutation,
+            start_point=start_point,
+            singles_penalty_min=singles_penalty_min,
+            singles_penalty_max=singles_penalty_max,
+            singles_range=singles_range,
+        )
+    raise NotImplementedError("The singles method chosen is not implemented.")
+    # match singles_method:
+    #     case None:
+    #         return 0.0
+    #     case "continuous":
+    #         return singles_continuous(
+    #             event,
+    #             permutation,
+    #             start_point=start_point,
+    #             singles_penalty_min=singles_penalty_min,
+    #             singles_penalty_max=singles_penalty_max,
+    #             small_depth=small_depth,
+    #         )
+    #     case "proba" | "probability":
+    #         return singles_proba(
+    #             event,
+    #             permutation,
+    #             start_point=start_point,
+    #             singles_penalty_min=singles_penalty_min,
+    #             singles_penalty_max=singles_penalty_max,
+    #             small_depth=small_depth,
+    #         )
+    #     case "range":
+    #         return singles_in_range(
+    #             event,
+    #             permutation,
+    #             start_point=start_point,
+    #             singles_penalty_min=singles_penalty_min,
+    #             singles_penalty_max=singles_penalty_max,
+    #             singles_range=singles_range,
+    #             small_depth=small_depth,
+    #         )
+    #     case "depth" | "chat":
+    #         return singles_depth(
+    #             event,
+    #             permutation,
+    #             start_point=start_point,
+    #             singles_penalty_min=singles_penalty_min,
+    #             singles_penalty_max=singles_penalty_max,
+    #             singles_range=singles_range,
+    #         )
+    #     case _:
+    #         raise NotImplementedError("The singles method chosen is not implemented.")
 
 
 def singles_continuous(
@@ -1031,11 +1072,41 @@ def singles_depth(
     - A float that represents the FOM value for the single interaction
     &gamma;-ray.
     """
-    assert len(permutation) == 1
     interaction = event.points[permutation[0]]
     depth = np.linalg.norm(interaction.x) - detector.get_inner_radius()
     energy = interaction.e
-    #                Energy [MeV],    Depth [cm]
+    singles_depth_explicit(depth, energy, singles_penalty_min, singles_penalty_max)
+
+def singles_depth_explicit(
+    depth: float,
+    energy: float,
+    singles_penalty_min: float = 0.0,
+    singles_penalty_max: float = 1.85,
+) -> float:
+    """
+    # Reject singles based on their energy and depth
+
+    This is the default used in GRETINA tracking code. Approximately rejection
+    at 81%-83% or gamma-ray range. Data is from AFT tracking chat file and
+    indicates energy [MeV] and depth [cm].
+
+    ## Args:
+    - event: An Event object that represents the event to be evaluated
+    - permutation: An iterable of integers that represents a permutation of
+      the interactions in the event. For a single interaction event, this should
+      be an iterable with one element.
+    - singles_penalty_min: A float that indicates the minimum
+      value of the FOM. The default value is 0.0.
+    - singles_penalty_max: A float that indicates the scale factor
+      for the FOM, or the maximum value for indicator FOMs. The default value is
+      1.85.
+    - detector: configuration of the detector
+
+    ## Returns:
+    - A float that represents the FOM value for the single interaction
+    &gamma;-ray.
+    """
+    #  Energy [MeV], Depth [cm]
     data = np.array(
         [
             [0.000, 0.59],
@@ -1335,7 +1406,7 @@ def semi_greedy_batch(
 
                 # Allocate the features array
                 num_features = int(sum(np.sum(b) for b in model_columns_bool))
-                features = np.empty((len(perms), num_features ))
+                features = np.empty((len(perms), num_features))
 
                 # Loop over permutations and generate features for each
                 # TODO - potential problem with the order of the features
@@ -1747,7 +1818,20 @@ def selected_FOM(
     eres: float = 1e-3,
     **kwargs,  # pylint: disable=unused-argument
 ):
-    """Features for learning a synthetic FOM"""
+    """
+    Features for learning a synthetic FOM
+    ["rsg_mean_1",
+    "c_penalty_sum_1",
+    "rc_sum_1_penalty_removed",
+    "-log_p_abs_final",
+    "cross_compt_ge_dist_sum",
+    "-log_p_compt_max",
+    "klein-nishina_rel_sum_sum",
+    "rth_cap_mean_1_tango",
+    "cross_compt_ge_dist_mean_tango",
+    "-log_klein-nishina_rel_geo_sum_tango",
+    "-log_klein-nishina_geo_sum_tango",]
+    """
     perm = tuple(permutation)
     if len(perm) == 1:
         return None
@@ -1839,7 +1923,7 @@ def selected_FOM(
             use_ei=False,
             relative=False,
         )
-        * RANGE_PROCESS
+        * phys.RANGE_PROCESS
     )
 
     # features["-log_klein-nishina_rel_geo_sum_tango"] = np.sum(-np.log(klein_nishina_rel_geo))
@@ -2458,7 +2542,7 @@ class FOM_calcs:
                 use_ei=True,
                 relative=False,
             )
-            * RANGE_PROCESS
+            * phys.RANGE_PROCESS
         )
 
     @cached_property
@@ -2472,7 +2556,7 @@ class FOM_calcs:
                 use_ei=False,
                 relative=False,
             )
-            * RANGE_PROCESS
+            * phys.RANGE_PROCESS
         )
 
     @cached_property
@@ -4910,7 +4994,7 @@ def FOM_features(
     #             use_ei=True,
     #             relative=False,
     #         )
-    #         * RANGE_PROCESS
+    #         * phys.RANGE_PROCESS
     #     )
     #     if all_columns or "klein-nishina_sum_sum" in columns:
     #         features["klein-nishina_sum_sum"] = np.sum(klein_nishina_sum)
@@ -4950,7 +5034,7 @@ def FOM_features(
     #             use_ei=False,
     #             relative=False,
     #         )
-    #         * RANGE_PROCESS
+    #         * phys.RANGE_PROCESS
     #     )
     #     if all_columns or "klein-nishina_geo_sum" in columns:
     #         features["klein-nishina_geo_sum"] = np.sum(klein_nishina_geo)
@@ -5395,7 +5479,7 @@ def FOM_sequence_features(
             use_ei=True,
             relative=False,
         )
-        * RANGE_PROCESS
+        * phys.RANGE_PROCESS
     )
     klein_nishina_geo = (
         event.klein_nishina(
@@ -5405,7 +5489,7 @@ def FOM_sequence_features(
             use_ei=False,
             relative=False,
         )
-        * RANGE_PROCESS
+        * phys.RANGE_PROCESS
     )
 
     features["klein-nishina_rel_sum"] = klein_nishina_rel_sum
@@ -5447,36 +5531,125 @@ def FOM_sequence_features(
     return features
 
 
+@numba.njit
+def cone_pen_prob(
+    theta: np.ndarray,
+    point: np.ndarray,
+    direction: np.ndarray,
+    opening_angle: float,
+    detector_radius: float,
+    linear_attenuation: float,
+) -> np.ndarray:
+    """
+    Penetration probability for a cone ray with some linear attenuation
+
+    Args:
+        - theta: angle about cone axis
+        - point: cone apex
+        - direction: cone direction unit vector; direction of scatter axis
+          (previous point to current point)
+        - opening_angle: cone angle
+        - detector_radius: outer sphere radius [cm]
+        - linear_attenuation: attenuation [1/cm] coefficient of g-ray
+
+    Returns:
+        - probability of penetration for the distance from the cone apex to the
+          sphere at various angles theta
+    """
+    return np.exp(
+        -linear_attenuation
+        * cone_ray_lengths(point, direction, opening_angle, theta, detector_radius)
+    ) / (2 * np.pi)
+
+
 def escape_probability(
-    p_imo: Interaction,
-    p_i: Interaction,
-    E_x: float,
-    detector: DetectorConfig = default_config,
+    penultimate_point: np.ndarray,
+    final_point: np.ndarray,
+    final_energy: float,
+    escaped_energy: float,
+    detector_radius: float,
 ):
     """
-    point location of last point before scattering out
-    direction of scatter axis (previous point to current point)
-    opening angle (CSF)
-    Ex excess energy for cross section values
+    Args:
+        - penultimate_point: point location of point incoming final point before
+          scattering out
+        - final_point: point location of final point before scattering out
+        - final_energy: energy of final scatter interaction
+        - escaped_energy: assumed remaining energy (excess energy predicted by
+          TANGO or another method)
+        - detector_radius: radius of the detector sphere
+
+    Returns:
+        - average probability of escape (averaged across all scattering
+          directions with a fixed scattering angle)
+
     """
-    point = p_i.x
-    direction = p_i.x - p_imo.x
-    direction /= np.linalg.norm(direction)
-    opening_angle = theta_theor(E_x + p_i.e, E_x)
-    theor_cos = cos_theor(E_x + p_i.e, E_x)
-    if theor_cos < -1:
-        # return (0., 0)
+    if escaped_energy <= 0:
         return 0.0
+    theor_cos = phys.njit_cos_theor(escaped_energy + final_energy, escaped_energy)
+    if theor_cos < -1:
+        return 0.0
+    point = final_point
+    direction = final_point - penultimate_point
+    direction = direction / np.sum(direction**2)
+    opening_angle = phys.theta_theor_single(
+        escaped_energy + final_energy, escaped_energy
+    )
 
-    c = cone(point, direction, opening_angle, detector.outer_radius)
-    linear_attenuation = lin_att_total(np.array([E_x]))[0]
+    linear_attenuation = phys.lin_att_total_fit(escaped_energy)
 
-    def probability(theta):
-        # not clear if its faster to exploit symmetry and only integrate over
-        # [0, pi) and multiply by 2 instead of integrating over [0, 2*pi)
-        return np.exp(-linear_attenuation * c.ray_lengths(theta)) / 2 / np.pi
+    return (
+        integrate.quad(
+            cone_pen_prob,
+            0.0,
+            np.pi,
+            full_output=0,
+            args=(point, direction, opening_angle, detector_radius, linear_attenuation),
+        )[0]
+        * 2
+    )
 
-    return integrate.quad(probability, 0, 2 * np.pi)[0]
+
+# def escape_probability(
+#     p_imo: Interaction,
+#     p_i: Interaction,
+#     E_x: float,
+#     detector: DetectorConfig = default_config,
+# ):
+#     """
+#     point location of last point before scattering out
+#     direction of scatter axis (previous point to current point)
+#     opening angle (CSF)
+#     Ex excess energy for cross section values
+#     """
+#     point = p_i.x
+#     direction = p_i.x - p_imo.x
+#     direction /= np.linalg.norm(direction)
+#     opening_angle = phys.theta_theor_single(E_x + p_i.e, E_x)
+#     theor_cos = phys.njit_cos_theor(E_x + p_i.e, E_x)
+#     if theor_cos < -1:
+#         # return (0., 0)
+#         return 0.0
+
+#     # c = cone(point, direction, opening_angle, detector.outer_radius)
+#     # linear_attenuation = phys.lin_att_total(np.array([E_x]))[0]
+#     linear_attenuation = phys.lin_att_total(E_x)
+
+#     def probability(theta):
+#         # not clear if its faster to exploit symmetry and only integrate over
+#         # [0, pi) and multiply by 2 instead of integrating over [0, 2*pi)
+#         return (
+#             np.exp(
+#                 -linear_attenuation
+#                 * cone_ray_lengths(
+#                     point, direction, opening_angle, theta, detector.outer_radius
+#                 )
+#             )
+#             / 2
+#             / np.pi
+#         )
+
+#     return integrate.quad(probability, 0, 2 * np.pi)[0]
 
 
 def escape_prob_features(
@@ -5545,8 +5718,15 @@ def escape_prob_cluster(
     if E_x <= 0:
         return 0.0
     return escape_probability(
-        event.points[full_perm[-2]], event.points[full_perm[-1]], E_x, detector=detector
+        event.points[full_perm[-2]].x,
+        event.points[full_perm[-1]].x,
+        event.points[full_perm[-1]].e,
+        E_x,
+        detector.outer_radius,
     )
+    # return escape_probability(
+    #     event.points[full_perm[-2]], event.points[full_perm[-1]], E_x, detector=detector
+    # )
 
 
 # TODO - likelihood for a ray being emitted from a specific location: basically
