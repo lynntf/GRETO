@@ -12,7 +12,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 from scipy.cluster.hierarchy import linkage  # fcluster,
-from scipy.spatial.distance import pdist, squareform
+# from scipy.spatial.distance import pdist, squareform
 
 import greto.geometry as geo
 import greto.physics as phys
@@ -209,20 +209,21 @@ class Event:
         """Clustering linkage"""
         if len(self.hit_points) <= 1:
             return None
-        time_gap_accept = (
-            pdist(np.expand_dims(np.array([p.ts for p in self.hit_points]), axis=1))
-            < time_gap
-        )
+        # time_gap_accept = (pdist(np.expand_dims(np.array([p.ts for p in self.hit_points]), axis=1)) < time_gap)
+        time_gap_accept = (geo.njit_pdist(np.expand_dims(np.array([p.ts for p in self.hit_points]), axis=1)) < time_gap)
         if distance.lower() == "euclidean":
-            distances = squareform(self.distance[1:, 1:])
+            # distances = squareform(self.distance[1:, 1:])
+            distances = geo.njit_squareform_matrix(self.distance[1:, 1:])
         elif distance.lower() in ["great_circle", "cosine"]:
-            distances = np.arccos(1 - pdist(self.hit_point_matrix, metric="cosine"))
+            # distances = np.arccos(1 - pdist(self.hit_point_matrix, metric="cosine"))
+            distances = np.arccos(1 - geo.njit_cosine_pdist(self.hit_point_matrix))
         elif distance.lower() == "germanium":
-            distances = squareform(self.ge_distance[1:, 1:])
+            # distances = squareform(self.ge_distance[1:, 1:])
+            distances = geo.njit_squareform_matrix(self.ge_distance[1:, 1:])
             if center_cross_penalty > 0.0 or center_cross_factor > 0.0:
                 center_cross_factor = np.nan_to_num(center_cross_factor)
                 center_cross_penalty = np.nan_to_num(center_cross_penalty)
-                euc_distances = squareform(self.distance[1:, 1:])
+                euc_distances = geo.njit_squareform_matrix(self.distance[1:, 1:])
                 if center_cross_factor > 0.0:
                     distances += (
                         np.maximum(euc_distances - distances, 0) * center_cross_factor
@@ -237,7 +238,8 @@ class Event:
         distances[~time_gap_accept] += np.nan_to_num(np.inf)
 
         if method.startswith("dir") or method.startswith("asym"):
-            Z = asym_hier_linkage(squareform(distances), **kwargs)
+            # Z = asym_hier_linkage(squareform(distances), **kwargs)
+            Z = asym_hier_linkage(geo.njit_squareform_vector(distances), **kwargs)
         else:
             Z = linkage(distances, method=method)
         self.linkage = Z
@@ -282,7 +284,7 @@ class Event:
     @property
     def cos_act(self) -> np.ndarray:
         """Cosine between interaction points"""
-        # return 1 - geo.one_minus_cosine_ijk(self.point_matrix)
+        # return geo.cosine_ijk(self.point_matrix)
         _calculator.set_event(self)
         return _calculator.cos_act((self.id, tuple(self.points[1].x)))
 
@@ -426,7 +428,7 @@ class Event:
                 return e_sum
             e_final = self.energy_matrix[permutation[-1]]
             estimated_outgoing = estimate - e_sum
-            if phys.cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
+            if phys.njit_cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
                 return e_sum
         return estimate
 
@@ -477,7 +479,7 @@ class Event:
                 return e_sum
             e_final = self.energy_matrix[permutation[-1]]
             estimated_outgoing = estimate - e_sum
-            if phys.cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
+            if phys.njit_cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
                 return e_sum
         return estimate
 
@@ -490,7 +492,7 @@ class Event:
         e_sum = self.energy_sum(permutation)
         e_final = self.energy_matrix[permutation[-1]]
         estimated_outgoing = estimate - e_sum
-        if phys.cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
+        if phys.njit_cos_theor(estimated_outgoing + e_final, estimated_outgoing) < -1:
             return e_sum
         return estimate
         # if estimated_outgoing + e_final > compton_edge_incoming(estimated_outgoing):
@@ -503,13 +505,12 @@ class Event:
         permutation: Iterable[int],
         start_point: int = 0,
         start_energy: float = None,
-        **cos_theor_kwargs,
     ) -> np.ndarray:
         """Theoretical cosine"""
         energies = self.cumulative_energies(
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
-        return phys.cos_theor(energies[:-1], energies[1:], **cos_theor_kwargs)
+        return phys.cos_theor_sequence(energies)
 
     def cos_theor_sigma_perm(
         self,
@@ -517,14 +518,13 @@ class Event:
         start_point: int = 0,
         start_energy: float = None,
         Nmi: int = None,
-        **cos_theor_kwargs,
     ) -> np.ndarray:
         """Theoretical cosine error"""
         energies = self.cumulative_energies(
             tuple(permutation), start_point=start_point, start_energy=start_energy
         )
         return phys.cos_theor_sigma(
-            energies[:-1], energies[1:], Nmi, **cos_theor_kwargs
+            energies[:-1], energies[1:], Nmi,
         )
 
     # %% Permuted theoretical theta and error
@@ -1011,7 +1011,7 @@ class Event:
             return phys.KN_differential_cross(
                 energies[:-1],
                 1 - self.cos_act_perm(permutation),
-                Ei=energies[1:],
+                energies[1:],
                 integrate=True,
                 **kwargs,
             )
@@ -1035,7 +1035,7 @@ class Event:
             return phys.KN_differential_cross(
                 energies[:-1],
                 1 - self.cos_act_perm(permutation),
-                Ei=energies[1:],
+                energies[1:],
                 **kwargs,
             )
         return phys.KN_differential_cross(
@@ -1229,7 +1229,7 @@ class _EventCalculator:
     """
 
     def __init__(self) -> None:
-        self.event = None
+        self.event:Event = None
         self.event_id = None
 
     def set_event(self, event: Event, cluster_id: Optional[int] = None) -> None:
@@ -1243,7 +1243,8 @@ class _EventCalculator:
     @lru_cache(maxsize=100)
     def distance(self, event_id: int | tuple):
         """Cached distance using event_id as the caching key"""
-        return squareform(geo.pairwise_distance(self.event.point_matrix))
+        # return squareform(geo.pairwise_distance(self.event.point_matrix))
+        return geo.njit_square_pdist(self.event.point_matrix)
 
     # def distance_perm(
     #     self, permutation: tuple[int], start_point: int = 0
@@ -1261,19 +1262,14 @@ class _EventCalculator:
         Angular distance between two points
         TODO - can use cos_act property for this to avoid possible extra computation
         """
-        return squareform(
-            np.arccos(1.0 - pdist(self.event.hit_point_matrix, metric="cosine"))
-        )
+        # return squareform(np.arccos(1.0 - pdist(self.event.hit_point_matrix, metric="cosine")))
+        return np.arccos(1.0 - geo.njit_square_cosine_pdist(self.event.hit_point_matrix))
 
     @lru_cache(maxsize=100)
     def ge_distance(self, event_id: int | tuple) -> np.ndarray:
         """Distance between two points"""
-        return squareform(
-            geo.ge_distance(
-                self.event.point_matrix,
-                d12_euc=squareform(self.distance(self.event_id)),
-            )
-        )
+        # return squareform(geo.ge_distance(self.event.point_matrix,d12_euc=squareform(self.distance(self.event_id)),))
+        return geo.njit_square_ge_pdist(self.event.point_matrix, self.event.detector_config.inner_radius, d12_euc=self.distance(self.event_id))
 
     # def ge_distance_perm(
     #     self, permutation: Iterable[int], start_point: int = 0
@@ -1335,7 +1331,7 @@ class _EventCalculator:
     @lru_cache(maxsize=100)
     def cos_act(self, event_id: int | tuple) -> np.ndarray:
         """Cosine between interaction points"""
-        return 1 - geo.one_minus_cosine_ijk(self.event.point_matrix)
+        return geo.cosine_ijk(self.event.point_matrix)
 
     @lru_cache(maxsize=100)
     def cos_err(self, event_id: int | tuple) -> np.ndarray:
@@ -1402,7 +1398,8 @@ class _EventCalculator:
     def tango_estimates(self, event_id: int | tuple) -> np.ndarray:
         """Local incoming energy estimates"""
         return phys.tango_incoming_estimate(
-            self.event.energy_matrix[np.newaxis, :, np.newaxis],
+            # self.event.energy_matrix[np.newaxis, :, np.newaxis],
+            self.event.energy_matrix,
             1 - self.cos_act(self.event_id),
         )
 
@@ -1410,7 +1407,8 @@ class _EventCalculator:
     def tango_partial_derivatives(self, event_id: int | tuple) -> Tuple[np.ndarray]:
         """d/de and d/d_cos for the TANGO estimates"""
         return phys.partial_tango_incoming_derivatives(
-            self.event.energy_matrix[np.newaxis, :, np.newaxis],
+            # self.event.energy_matrix[np.newaxis, :, np.newaxis],
+            self.event.energy_matrix,
             1 - self.cos_act(self.event_id),
         )
 
