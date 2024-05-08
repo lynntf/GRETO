@@ -276,7 +276,7 @@ def FOM(
             Nmi=Nmi,
             **FOM_kwargs,
         )
-    if fom_method == "geo_loc" or from_method == "geo_local":
+    if fom_method == "geo_loc" or fom_method == "geo_local":
         return geo_loc_FOM(
             event,
             perm,
