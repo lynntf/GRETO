@@ -4,6 +4,7 @@ This software is provided without warranty and is licensed under the GNU GPL 2.0
 
 File in/out for reading/writing GEB files and ASCII simulated files
 """
+
 from __future__ import annotations
 
 import os
@@ -977,7 +978,10 @@ def mode1_extended_data(
     )
 
     mode1_output = struct.pack(
-        GEBHeader_format, int(GEB_type), struct.calcsize(data_format), int(min(point.ts for point in event.hit_points))
+        GEBHeader_format,
+        int(GEB_type),
+        struct.calcsize(data_format),
+        int(min(point.ts for point in event.hit_points)),
     )
     pad = 0
     mode1_output += struct.pack(tracked_gamma_hit_format, ngam, pad)
@@ -1032,9 +1036,11 @@ def mode1_extended_data(
                     + [
                         1000 * event.points[j].e,
                         int(event.points[j].ts - mode1["timestamp"]),
-                        int(event.points[j].crystal_no)
-                        if event.points[j].crystal_no is not None
-                        else 0,
+                        (
+                            int(event.points[j].crystal_no)
+                            if event.points[j].crystal_no is not None
+                            else 0
+                        ),
                         event.points[j].energy_factor,
                     ]
                 )
@@ -1061,7 +1067,11 @@ def mode1_extended_data(
                 int(mode1["timestamp"]),
             )
         except struct.error:
-            print(f"format {gamma_info_format}, esum {mode1["esum"]}, ndet {int(mode1["ndet"])}, fom {mode1["fom"]}, tracked {mode1["tracked"]}, timestamp {int(mode1["timestamp"])}")
+            print(
+                f'format {gamma_info_format}, esum {mode1["esum"]},'
+                + f' ndet {int(mode1["ndet"])}, fom {mode1["fom"]},'
+                + f' tracked {mode1["tracked"]}, timestamp {int(mode1["timestamp"])}'
+            )
         for interaction in mode1["interactions"]:
             mode1_output += struct.pack(interaction_format, *interaction)
         mode1_output += struct.pack(
@@ -1549,14 +1559,18 @@ def read_simulated_ascii(filename):
                 break
         return events, rays
 
+
 # Get the file path from the package data
 m30_path = pkg_resources.resource_filename(__name__, "data/GammaEvents.Mul30")
 
-m30_zipped_path = pkg_resources.resource_filename(__name__, "data/GammaEvents.Mul30.zip")
+m30_zipped_path = pkg_resources.resource_filename(
+    __name__, "data/GammaEvents.Mul30.zip"
+)
 
 if not os.path.exists(m30_path):
-    with zipfile.ZipFile(m30_zipped_path, 'r') as zip_ref:
+    with zipfile.ZipFile(m30_zipped_path, "r") as zip_ref:
         zip_ref.extractall(m30_path)
+
 
 def load_m30(
     filename: str = m30_path,
