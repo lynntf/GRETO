@@ -1069,10 +1069,15 @@ def mode1_extended_data(
         except struct.error as e:
             print('Stuct packing error: got an unexpected value:\n'
                 + f'format {gamma_info_format}, esum {mode1["esum"]},'
+        except struct.error as e:
+            print('Stuct packing error: got an unexpected value:\n'
+                + f'format {gamma_info_format}, esum {mode1["esum"]},'
                 + f' ndet {int(mode1["ndet"])}, fom {mode1["fom"]},'
                 + f' tracked {mode1["tracked"]}, timestamp {int(mode1["timestamp"])}'
             )
             
+            print("foms", foms)
+            raise e
             print("foms", foms)
             raise e
         for interaction in mode1["interactions"]:
