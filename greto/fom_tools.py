@@ -1086,7 +1086,7 @@ def singles_depth(
     interaction = event.points[permutation[0]]
     depth = np.linalg.norm(interaction.x) - detector.get_inner_radius()
     energy = interaction.e
-    phys.singles_depth_explicit(depth, energy, singles_penalty_min, singles_penalty_max)
+    return phys.singles_depth_explicit(depth, energy, singles_penalty_min, singles_penalty_max)
 
 
 # %% Ordering routines
