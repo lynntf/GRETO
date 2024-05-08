@@ -17,7 +17,8 @@ from sklearn import preprocessing
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
-from greto.fom_tools import FOM_model, column_names_to_bool, permute_column_names
+import greto.fast_features as ff
+from greto.fom_tools import FOM_model  # , column_names_to_bool, permute_column_names
 
 
 class LinearModel:
@@ -31,7 +32,7 @@ class LinearModel:
         bias: float = 0.0,
         scale: Iterable[float] = None,
         columns: Optional[Iterable[str]] = None,
-        weight_threshold: float = 1e-8
+        weight_threshold: float = 1e-8,
     ) -> None:
         """
         Create a linear model object:
@@ -45,7 +46,8 @@ class LinearModel:
         """
         # Feature names may not be provided in the order that they are created by other code
         # This maps weights (etc.) to an order that matches features
-        self.permutation = permute_column_names(columns)
+        # self.permutation = permute_column_names(columns)
+        self.permutation = ff.permute_column_names(columns)
         self.weights = np.array(weights)[self.permutation]
 
         # Get only the weights that exceed the threshold
@@ -65,11 +67,14 @@ class LinearModel:
         self.scale_thresholded = self.scale[self.weight_indicator]
         self.columns_thresholded = self.columns[self.weight_indicator]
 
-        self.columns_bool = column_names_to_bool(self.columns_thresholded)
+        # self.columns_bool = column_names_to_bool(self.columns_thresholded)
+        self.boolean_vectors = ff.convert_feature_names_to_boolean_vectors(
+            self.columns_thresholded
+        )
 
         self.effective_weights = self.weights_thresholded / self.scale_thresholded
 
-    def change_weight_threshold(self, weight_threshold:float = 1e-8) -> None:
+    def change_weight_threshold(self, weight_threshold: float = 1e-8) -> None:
         """
         Change the weight thresholding value
         """
@@ -82,7 +87,10 @@ class LinearModel:
         self.scale_thresholded = self.scale[self.weight_indicator]
         self.columns_thresholded = self.columns[self.weight_indicator]
 
-        self.columns_bool = column_names_to_bool(self.columns_thresholded)
+        # self.columns_bool = column_names_to_bool(self.columns_thresholded)
+        self.boolean_vectors = ff.convert_feature_names_to_boolean_vectors(
+            self.columns_thresholded
+        )
 
         self.effective_weights = self.weights_thresholded / self.scale_thresholded
 
@@ -131,7 +139,9 @@ def save_linear_model(
     return model_dict
 
 
-def load_linear_model(filename: str, weight_threshold: float = 1e-8) -> Dict | LinearModel:
+def load_linear_model(
+    filename: str, weight_threshold: float = 1e-8
+) -> Dict | LinearModel:
     """
     Read a json linear model
     """
@@ -144,11 +154,11 @@ def load_linear_model(filename: str, weight_threshold: float = 1e-8) -> Dict | L
         scale=d.get("scale"),
         bias=d.get("bias"),
         columns=d.get("columns"),
-        weight_threshold=weight_threshold
+        weight_threshold=weight_threshold,
     )
 
 
-def load_linear_FOM_model(filename: str, weight_threshold:float = 1e-8) -> FOM_model:
+def load_linear_FOM_model(filename: str, weight_threshold: float = 1e-8) -> FOM_model:
     """
     Load a linear FOM model into the FOM_model class
 
@@ -156,7 +166,11 @@ def load_linear_FOM_model(filename: str, weight_threshold:float = 1e-8) -> FOM_m
         - filename: filename for saved model
     """
     model = load_linear_model(filename, weight_threshold=weight_threshold)
-    return FOM_model(model_evaluation=model.predict, columns_bool=model.columns_bool, model=model)
+    return FOM_model(
+        model_evaluation=model.predict,
+        boolean_vectors=model.boolean_vectors,
+        model=model,
+    )
 
 
 class xgbranker_FOM_model:
@@ -170,11 +184,12 @@ class xgbranker_FOM_model:
         self.model = ranker
         self.columns = ranker.get_booster().feature_names
 
-        self.columns_bool = column_names_to_bool(self.columns)
+        # self.columns_bool = column_names_to_bool(self.columns)
+        self.boolean_vectors = ff.convert_feature_names_to_boolean_vectors(self.columns)
 
         # Here we need to map the data onto the structure of the model so we
         # need the inverse permutation
-        self.permutation = np.argsort(permute_column_names(self.columns))
+        self.permutation = np.argsort(ff.permute_column_names(self.columns))
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """
@@ -190,7 +205,8 @@ class xgbranker_FOM_model:
 
 
 def save_xgbranker_model(
-    ranker: xgb.XGBRanker, filename: str,
+    ranker: xgb.XGBRanker,
+    filename: str,
 ) -> None:
     """
     Save a XGBoost Ranker model (feature scaling is not used)
@@ -212,12 +228,6 @@ def load_xgbranker_model(filename: str) -> xgb.XGBRanker:
         - filename: filename for saved model [`.json` or `.ubj` (binary)]
     """
     ranker = xgb.XGBRanker()
-    # with open(filename, "r", encoding="utf-8") as f:
-    #     d = json.load(f)
-    # scale = d.pop("scale_", None)
-    # ranker.load_model(bytearray(json.dumps(d), encoding="utf-8"))
-    # if scale is not None:
-    #     return ranker, scale
     ranker.load_model(filename)
     return ranker
 
@@ -230,14 +240,6 @@ def load_xgbranker_FOM_model(filename: str) -> FOM_model:
         - filename: filename for saved model [`.json` or `.ubj` (binary)]
     """
     ranker = load_xgbranker_model(filename)
-    # if isinstance(ranker, tuple):
-    #     ranker, scale = ranker
-    #     return FOM_model(
-    #         lambda x: ranker.predict(x / scale),
-    #         ranker.get_booster().feature_names,
-    #         ranker,
-    #     )
-    # return FOM_model(ranker.predict, ranker.get_booster().feature_names, ranker)
     return xgbranker_FOM_model(ranker)
 
 
@@ -266,15 +268,32 @@ class sns_model:
     Maintains two separate models, one for singles data, one for non-singles.
     Fits and predicts separately using these models and then combines them for a
     final combined model.
+    
+    Q: Why might we want separate models for singles and non-singles?
+    A: Data imbalance. Different behaviors. Inability to capture either
+    independently in a single model. Additional model flexibility. Independent
+    feature scaling (keeping zero features changes scaling).
+    
+    In general, we should not expect that a model need to be trained on singles
+    and non-singles separately. Having zero value features for the irrelevant
+    values should be sufficient. However, it seems that performance is better
+    when separating the two. Given a value from a singles model, how should that
+    be compared to a non-singles output model value? The two are separate
+    objectives, so there is some Pareto front where we can balance the two
+    objectives.
+
+    We add in more flexibility in this model because we are less constrained by
+    computation than in the ordering case. We add in a PCA fit, a scaling function.
     """
 
     def __init__(
         self,
-        model=LinearRegression,
-        scaler=preprocessing.StandardScaler,
+        model_class=LinearRegression,
+        scaler_class=preprocessing.StandardScaler,
         use_combiner: bool = False,
         lower_bound: float = 0.0,
         upper_bound: float = 1e6,
+        pca_n_components: float = 0.95,
         **kwargs,
     ):
         """
@@ -285,26 +304,26 @@ class sns_model:
             - scaler: the data rescaling method
             - use_combiner: combine the singles and non-single models using a third model
         """
-        self.model = model
+        self.model = model_class
 
-        self.scaler_ns = scaler()
-        self.model_ns = model(**kwargs)
-        self.pca_ns = PCA(n_components=0.95)
+        self.scaler_ns = scaler_class()
+        self.model_ns = model_class(**kwargs)
+        self.pca_ns = PCA(n_components=pca_n_components)
 
-        self.scaler_s = scaler()
-        self.model_s = model(**kwargs)
-        self.pca_s = PCA(n_components=0.95)
+        self.scaler_s = scaler_class()
+        self.model_s = model_class(**kwargs)
+        self.pca_s = PCA(n_components=pca_n_components)
 
         self.use_combiner = use_combiner
         if self.use_combiner:
-            self.model_combiner = model(**kwargs)
+            self.model_combiner = model_class(**kwargs)
 
         self.lb = lower_bound
         self.ub = upper_bound
 
     def split(self, X: np.ndarray, train_frac: float = 0.75, random_state: int = 42):
         """
-        Split the data into testing and training
+        Get indices that split the data into testing and training
 
         Args:
             - X: training data
@@ -432,8 +451,8 @@ class sns_model:
 
         Args:
             - data: a dictionary of the data with keywords: "features",
-              "completeness", "length". These are converted into X, y and
-              singles for the fit
+              "completeness", "length". These are converted into X, y, and
+              singles boolean for the fit
         """
         self.fit(data["features"], data["completeness"], data["length"] == 1)
 

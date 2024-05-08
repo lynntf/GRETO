@@ -10,7 +10,6 @@ import numpy as np
 
 import greto.physics as phys
 from greto.fast_features.event_level import event_level_values
-from greto.fom_tools import singles_depth_explicit
 from greto.utils import njit_norm
 
 
@@ -169,7 +168,7 @@ def single_values(
     compute_value(
         "interpolated_range",
         ["point_matrix", "energy_matrix"],
-        lambda: singles_depth_explicit(
+        lambda: phys.singles_depth_explicit(
             distance_to_inside, event_calc.energy_matrix[permutation[0]]
         ),
     )

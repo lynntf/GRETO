@@ -1200,6 +1200,61 @@ def KN_differential_cross(
                 out[i] = KN_differential_cross_single(E_imo[i], one_minus_cos_theta[i], None, None, relative, integrate)
     return out
 
+def singles_depth_explicit(
+    depth: float,
+    energy: float,
+    singles_penalty_min: float = 0.0,
+    singles_penalty_max: float = 1.85,
+) -> float:
+    """
+    # Reject singles based on their energy and depth
+
+    This is the default used in GRETINA tracking code. Approximately rejection
+    at 81%-83% or gamma-ray range. Data is from AFT tracking chat file and
+    indicates energy [MeV] and depth [cm].
+
+    ## Args:
+    - event: An Event object that represents the event to be evaluated
+    - permutation: An iterable of integers that represents a permutation of
+      the interactions in the event. For a single interaction event, this should
+      be an iterable with one element.
+    - singles_penalty_min: A float that indicates the minimum
+      value of the FOM. The default value is 0.0.
+    - singles_penalty_max: A float that indicates the scale factor
+      for the FOM, or the maximum value for indicator FOMs. The default value is
+      1.85.
+    - detector: configuration of the detector
+
+    ## Returns:
+    - A float that represents the FOM value for the single interaction
+    &gamma;-ray.
+    """
+    #  Energy [MeV], Depth [cm]
+    data = np.array(
+        [
+            [0.000, 0.59],
+            [0.080, 0.59],
+            [0.100, 0.62],
+            [0.150, 1.38],
+            [0.200, 2.07],
+            [0.300, 3.05],
+            [0.400, 3.69],
+            [0.500, 4.19],
+            [0.600, 4.62],
+            [0.800, 5.36],
+            [1.000, 6.01],
+            [1.250, 6.75],
+            [1.500, 7.40],
+            [2.000, 8.43],
+            [3.000, 9.77],
+            [4.000, 10.52],
+            [5.000, 10.91],
+            [16.383, 27.41],
+        ]
+    )
+    if depth > np.interp(energy, data[:, 0], data[:, 1]):
+        return singles_penalty_max
+    return singles_penalty_min
 
 # %% Old cross-sections
 # def make_sig_ray_l_interp():

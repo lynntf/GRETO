@@ -9,31 +9,58 @@ optimization process
 """
 
 from itertools import permutations
-from math import factorial
-from typing import Dict, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
 
-import greto as gr
+import greto.fast_features as ff
+from greto.cluster_tools import pack_and_smear_list
 from greto.event_class import Event
 from greto.event_tools import split_event_clusters
-from greto.fom_tools import get_all_features_cluster, individual_FOM_feature_names
-from greto.cluster_tools import pack_and_smear_list
 
 # from tqdm import tqdm
 
 
-feature_names = list(individual_FOM_feature_names().keys())
+feature_names = ff.all_feature_names
+order_feature_names = ff.order_feature_names
+order_feature_boolean_vectors = ff.convert_feature_names_to_boolean_vectors(
+    order_feature_names
+)
 
 m30_true_energies = {}  # true energies in MeV
 for idx in range(1, 31):
     m30_true_energies[idx] = 0.08 + 0.09 * (idx - 1)
 
 
-def get_fom_pieces(event: Event, cluster: List, **kwargs):
-    """Get the FOM values from the data"""
-    return list(get_all_features_cluster(event, cluster, **kwargs).values())
+# def get_fom_pieces(event: Event, cluster: List, **kwargs):
+#     """Get the FOM values from the data"""
+#     return list(get_all_features_cluster(event, cluster, **kwargs).values())
+
+
+def get_ordering_fom_pieces(
+    event: Event,
+    permutation: Iterable[int],
+    event_calc: ff.event_level_values = None,
+    start_point: int = 0,
+    start_energy: float = None,
+    Nmi: int = None,
+    bvs: ff.boolean_vectors = None,
+    trim_features: bool = False,
+    eres: float = 1e-3,
+):
+    """Get the FOM pieces that can be used for ordering"""
+    return ff.get_perm_features(
+        event,
+        event_calc,
+        permutation,
+        start_point,
+        start_energy,
+        Nmi,
+        bvs,
+        trim_features,
+        eres,
+    )
 
 
 def generate_semi_greedy_data(
@@ -42,10 +69,9 @@ def generate_semi_greedy_data(
     true_energies: Dict[int, float],
     tol: float = 1e-2,
     max_cluster_size: int = 7,
-    use_tango: bool = False,
     remove_pair_production: bool = True,
     width: int = 5,
-    **kwargs,
+    **kwargs,  # pylint: disable=unused-argument
 ) -> Tuple[List]:
     """
     Feature generation for single events. Get the features for the true order,
@@ -68,6 +94,8 @@ def generate_semi_greedy_data(
     first_int_good = []
     optimal_order = []
     cluster_count = 1
+
+    event_calc = ff.get_event_level_values(event)
     for cluster_id, cluster in true_clusters.items():
         if len(cluster) >= max_cluster_size or len(cluster) <= 1:
             continue
@@ -95,9 +123,10 @@ def generate_semi_greedy_data(
                 cluster_width = len(cluster)
         for pred_cluster in permutations(cluster, r=cluster_width):
             pred_cluster = list(pred_cluster)
-            new_features = get_fom_pieces(
-                event, pred_cluster, start_energy=energy_sum, **kwargs
-            )
+            # new_features = get_fom_pieces(
+            #     event, pred_cluster, start_energy=energy_sum, **kwargs
+            # )
+            new_features = get_ordering_fom_pieces(event, pred_cluster, event_calc)
             features.append(new_features)
             l += 1
             correct_solution_index.append(index1_start)
@@ -135,7 +164,10 @@ def generate_semi_greedy_data(
 
 
 def generate_semi_greedy_data_single_cluster(
-    event: Event, cluster: List, width: int = 5, **kwargs
+    event: Event,
+    cluster: List,
+    width: int = 5,
+    **kwargs,  # pylint: disable=unused-argument
 ) -> Tuple[List]:
     """
     Feature generation for single events. Get the features for the true order,
@@ -150,7 +182,8 @@ def generate_semi_greedy_data_single_cluster(
     optimal_order = []
     acceptable = []
     first_int_good = []
-    energy_sum = sum(event.points[i].e for i in cluster)
+    # energy_sum = sum(event.points[i].e for i in cluster)
+    event_calc = ff.get_event_level_values(event)
 
     num_perms = 0
 
@@ -163,9 +196,10 @@ def generate_semi_greedy_data_single_cluster(
     ordered = True
     for pred_cluster in permutations(cluster, r=cluster_width):
         num_perms += 1
-        new_features = get_fom_pieces(
-            event, pred_cluster, start_energy=energy_sum, **kwargs
-        )
+        # new_features = get_fom_pieces(
+        #     event, pred_cluster, start_energy=energy_sum, **kwargs
+        # )
+        new_features = get_ordering_fom_pieces(event, pred_cluster, event_calc)
         features.append(new_features)
         optimal_order.append(ordered)
         ordered = False
@@ -254,84 +288,86 @@ def build_data_single_rays(
     return ray_features, ray_ids, ray_ordered, ray_ordered_acceptable, ray_ordered_first
 
 
-def generate_all_data(
-    event: Event,
-    true_clusters: Dict[int, List],
-    true_energies: Dict[int, float],
-    tol: float = 1e-2,
-    max_cluster_size: int = 7,
-    use_tango: bool = False,
-    remove_pair_production: bool = True,
-    width: int = None,
-    **kwargs,
-) -> Tuple[List]:
-    """
-    Feature generation for single events. Get the features for the true order,
-    then all other orders, and concatenate each order with the true order.
+# def generate_all_data(
+#     event: Event,
+#     true_clusters: Dict[int, List],
+#     true_energies: Dict[int, float],
+#     tol: float = 1e-2,
+#     max_cluster_size: int = 7,
+#     use_tango: bool = False,
+#     remove_pair_production: bool = True,
+#     width: int = None,
+#     **kwargs,
+# ) -> Tuple[List]:
+#     """
+#     Feature generation for single events. Get the features for the true order,
+#     then all other orders, and concatenate each order with the true order.
 
-    Only creates data pairs between the true order and other orders
-    """
-    X = []
-    y = []
-    e = []
-    count = 0
-    correct_solution_index = []
-    index2 = []
-    lengths = []
-    cid = []
-    acceptable = []
-    optimal_order = []
-    c_count = 1
-    for cluster_id, cluster in true_clusters.items():
-        if len(cluster) >= max_cluster_size or len(cluster) <= 1:
-            continue
+#     Only creates data pairs between the true order and other orders
+#     """
+#     X = []
+#     y = []
+#     e = []
+#     count = 0
+#     correct_solution_index = []
+#     index2 = []
+#     lengths = []
+#     cid = []
+#     acceptable = []
+#     optimal_order = []
+#     c_count = 1
+#     event_calc = ff.get_event_level_values(event)
+#     for cluster_id, cluster in true_clusters.items():
+#         if len(cluster) >= max_cluster_size or len(cluster) <= 1:
+#             continue
 
-        if remove_pair_production:
-            # remove pair production interactions and others
-            if any(event.points[i].interaction_type > 2 for i in cluster):
-                continue
+#         if remove_pair_production:
+#             # remove pair production interactions and others
+#             if any(event.points[i].interaction_type > 2 for i in cluster):
+#                 continue
 
-        l = factorial(len(cluster))
-        energy_sum = sum(event.points[i].e for i in cluster)
-        complete = abs(energy_sum - true_energies[cluster_id]) < tol
-        ordered = True
-        optimal = True
+#         l = factorial(len(cluster))
+#         energy_sum = sum(event.points[i].e for i in cluster)
+#         complete = abs(energy_sum - true_energies[cluster_id]) < tol
+#         ordered = True
+#         optimal = True
 
-        # Loop over all possible orders
-        index1_start = count
-        for pred_cluster in permutations(cluster):
-            pred_cluster = list(pred_cluster)
-            new_X = get_fom_pieces(event, pred_cluster, **kwargs)
-            X.append(new_X)
-            lengths.append(l)
-            correct_solution_index.append(index1_start)
-            index2.append(count)
-            count += 1
-            y.append([not ordered, not complete, not (ordered and complete)])
-            optimal_order.append(optimal)
-            optimal = False
-            ordered = False
-            e.append(energy_sum)
-            cid.append(c_count)
-            if len(cluster) > 1:
-                acceptable.append(
-                    pred_cluster[0] == cluster[0] and pred_cluster[1] == cluster[1]
-                )
-            else:
-                acceptable.append(True)
-        c_count += 1
+#         # Loop over all possible orders
+#         index1_start = count
+#         for pred_cluster in permutations(cluster):
+#             pred_cluster = list(pred_cluster)
+#             # new_X = get_fom_pieces(event, pred_cluster, **kwargs)
+#             new_X = get_ordering_fom_pieces(event, pred_cluster, event_calc)
+#             X.append(new_X)
+#             lengths.append(l)
+#             correct_solution_index.append(index1_start)
+#             index2.append(count)
+#             count += 1
+#             y.append([not ordered, not complete, not (ordered and complete)])
+#             optimal_order.append(optimal)
+#             optimal = False
+#             ordered = False
+#             e.append(energy_sum)
+#             cid.append(c_count)
+#             if len(cluster) > 1:
+#                 acceptable.append(
+#                     pred_cluster[0] == cluster[0] and pred_cluster[1] == cluster[1]
+#                 )
+#             else:
+#                 acceptable.append(True)
+#         c_count += 1
 
-    return (
-        X,
-        y,
-        e,
-        lengths,
-        correct_solution_index,
-        index2,
-        cid,
-        acceptable,
-        optimal_order,
-    )
+#     return (
+#         X,
+#         y,
+#         e,
+#         lengths,
+#         correct_solution_index,
+#         index2,
+#         cid,
+#         acceptable,
+#         optimal_order,
+#     )
 
 
 def make_data(
@@ -339,15 +375,15 @@ def make_data(
     packed_clusters: List[Dict[int, List]],
     true_energies: Dict = None,
     max_cluster_size: int = 6,
-    seed: int = 42,
-    test_train_split: float = 0.33,
+    # seed: int = 42,
+    # test_train_split: float = 0.33,
     debug: bool = False,
     semi_greedy_width: int = None,
     remove_pair_production: bool = True,
     **kwargs,
 ) -> Tuple[np.ndarray]:
     """
-    Method for creating data for multiple events
+    Method for generating features for prepped events and clusters
 
     Repeatedly invokes `generate_all_data` and manages the indices coming from
     there.
@@ -449,7 +485,9 @@ def clean_residuals(r: np.ndarray, normalize: bool = True):
     """
     r = np.nan_to_num(r)
     if normalize:
-        r = r / np.linalg.norm(r, axis=1, keepdims=True)
+        mag_r = np.linalg.norm(r, axis=1, keepdims=True)
+        mag_r[mag_r == 0.0] = 1
+        r = r / mag_r
         r = np.nan_to_num(r)
     r[~np.isfinite(r)] = 0
     return r
@@ -600,6 +638,7 @@ def split_g_ray_events(
     clusters: list[dict],
     tol: float = 2e-2,
     true_energies: dict = None,
+    # include_pair_production: bool = False,
 ):
     """
     We want to split the events into individual pieces so we can balance the created data
@@ -608,6 +647,7 @@ def split_g_ray_events(
     - clusters: g-ray events clusters list of dicts
     - tol: energy tolerance for determining if the g-ray is a complete deposit
     - true_energies: true energy for each cluster/g-ray id
+    # - include_pair_production: include the pair-production g-rays
 
     Returns
     - ray_energies: list of energy sums from each cluster
@@ -639,6 +679,9 @@ def split_g_ray_events(
     for (event_id, event), cluster, complete, absorb, pair_prod in zip(
         enumerate(events), clusters, completes, absorbs, pair_prods
     ):
+        # if not include_pair_production:
+        #     if pair_prod:
+        #         continue
         energy_sums = event.energy_sums(cluster)
         ray_energies.extend(energy_sums.values())
         if isinstance(true_energies, dict):
@@ -704,82 +747,86 @@ rsl_columns_2v = [
 
 rsl_columns = rsl_columns_1 + rsl_columns_2 + rsl_columns_1v + rsl_columns_2v
 
-fast_columns = fastest_columns + rsl_columns + [
-    "c_penalty_sum_1",
-    "c_penalty_mean_1",
-    "c_penalty_ell_sum_1",
-    "c_penalty_ell_mean_1",
-    "c_penalty_ell_sum_2",
-    "c_penalty_ell_mean_2",
-    "rc_sum_1",
-    "rc_mean_1",
-    "rc_wmean_1v",
-    "rc_norm_2",
-    "rc_sum_2",
-    "rc_mean_2",
-    "rc_wmean_2v",
-    "rc_sum_1v",
-    "rc_mean_1v",
-    "rc_norm_2v",
-    "rc_sum_2v",
-    "rc_mean_2v",
-    "rc_cap_sum_1",
-    "rc_cap_mean_1",
-    "rc_cap_wmean_1v",
-    "rc_cap_norm_2",
-    "rc_cap_sum_2",
-    "rc_cap_mean_2",
-    "rc_cap_wmean_2v",
-    "rc_sum_1_penalty_removed",
-    "rc_mean_1_penalty_removed",
-    "rc_sum_2_penalty_removed",
-    "rc_mean_2_penalty_removed",
-    "rc_wmean_1v_penalty_removed",
-    "rc_wmean_2v_penalty_removed",
-    "rc_cap_sum_1v",
-    "rc_cap_mean_1v",
-    "rc_cap_norm_2v",
-    "rc_cap_sum_2v",
-    "rc_cap_mean_2v",
-    "rc_sum_1v_penalty_removed",
-    "rc_mean_1v_penalty_removed",
-    "rc_sum_2v_penalty_removed",
-    "rc_mean_2v_penalty_removed",
-    "rth_sum_1",
-    "rth_mean_1",
-    "rth_wmean_1v",
-    "rth_norm_2",
-    "rth_sum_2",
-    "rth_mean_2",
-    "rth_wmean_2v",
-    "rth_sum_1v",
-    "rth_mean_1v",
-    "rth_norm_2v",
-    "rth_sum_2v",
-    "rth_mean_2v",
-    "rth_cap_sum_1",
-    "rth_cap_mean_1",
-    "rth_cap_wmean_1v",
-    "rth_cap_norm_2",
-    "rth_cap_sum_2",
-    "rth_cap_mean_2",
-    "rth_cap_wmean_2v",
-    "rth_sum_1_penalty_removed",
-    "rth_mean_1_penalty_removed",
-    "rth_sum_2_penalty_removed",
-    "rth_mean_2_penalty_removed",
-    "rth_wmean_1v_penalty_removed",
-    "rth_wmean_2v_penalty_removed",
-    "rth_cap_sum_1v",
-    "rth_cap_mean_1v",
-    "rth_cap_norm_2v",
-    "rth_cap_sum_2v",
-    "rth_cap_mean_2v",
-    "rth_sum_1v_penalty_removed",
-    "rth_mean_1v_penalty_removed",
-    "rth_sum_2v_penalty_removed",
-    "rth_mean_2v_penalty_removed",
-]
+fast_columns = (
+    fastest_columns
+    + rsl_columns
+    + [
+        "c_penalty_sum_1",
+        "c_penalty_mean_1",
+        "c_penalty_ell_sum_1",
+        "c_penalty_ell_mean_1",
+        "c_penalty_ell_sum_2",
+        "c_penalty_ell_mean_2",
+        "rc_sum_1",
+        "rc_mean_1",
+        "rc_wmean_1v",
+        "rc_norm_2",
+        "rc_sum_2",
+        "rc_mean_2",
+        "rc_wmean_2v",
+        "rc_sum_1v",
+        "rc_mean_1v",
+        "rc_norm_2v",
+        "rc_sum_2v",
+        "rc_mean_2v",
+        "rc_cap_sum_1",
+        "rc_cap_mean_1",
+        "rc_cap_wmean_1v",
+        "rc_cap_norm_2",
+        "rc_cap_sum_2",
+        "rc_cap_mean_2",
+        "rc_cap_wmean_2v",
+        "rc_sum_1_penalty_removed",
+        "rc_mean_1_penalty_removed",
+        "rc_sum_2_penalty_removed",
+        "rc_mean_2_penalty_removed",
+        "rc_wmean_1v_penalty_removed",
+        "rc_wmean_2v_penalty_removed",
+        "rc_cap_sum_1v",
+        "rc_cap_mean_1v",
+        "rc_cap_norm_2v",
+        "rc_cap_sum_2v",
+        "rc_cap_mean_2v",
+        "rc_sum_1v_penalty_removed",
+        "rc_mean_1v_penalty_removed",
+        "rc_sum_2v_penalty_removed",
+        "rc_mean_2v_penalty_removed",
+        "rth_sum_1",
+        "rth_mean_1",
+        "rth_wmean_1v",
+        "rth_norm_2",
+        "rth_sum_2",
+        "rth_mean_2",
+        "rth_wmean_2v",
+        "rth_sum_1v",
+        "rth_mean_1v",
+        "rth_norm_2v",
+        "rth_sum_2v",
+        "rth_mean_2v",
+        "rth_cap_sum_1",
+        "rth_cap_mean_1",
+        "rth_cap_wmean_1v",
+        "rth_cap_norm_2",
+        "rth_cap_sum_2",
+        "rth_cap_mean_2",
+        "rth_cap_wmean_2v",
+        "rth_sum_1_penalty_removed",
+        "rth_mean_1_penalty_removed",
+        "rth_sum_2_penalty_removed",
+        "rth_mean_2_penalty_removed",
+        "rth_wmean_1v_penalty_removed",
+        "rth_wmean_2v_penalty_removed",
+        "rth_cap_sum_1v",
+        "rth_cap_mean_1v",
+        "rth_cap_norm_2v",
+        "rth_cap_sum_2v",
+        "rth_cap_mean_2v",
+        "rth_sum_1v_penalty_removed",
+        "rth_mean_1v_penalty_removed",
+        "rth_sum_2v_penalty_removed",
+        "rth_mean_2v_penalty_removed",
+    ]
+)
 fast_tango_columns = [
     "rsl_sum_1v_tango",
     "rsl_mean_1v_tango",
@@ -1259,14 +1306,7 @@ methods = {
     },
 }
 
-column_sets["all"] = list(
-    gr.fom_tools.cluster_FOM_features(
-        gr.default_event,
-        gr.default_clusters[1],
-        populate_empty_features=False,
-        return_columns=True
-    ).keys()
-)
+column_sets["all"] = ff.order_feature_names
 
 
 # %%
@@ -1285,6 +1325,8 @@ def create_data(
     remove_pair_production: bool = True,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
+    Create feature data from pristine events and clusters
+
     Args:
         - list_of_events: list of gamma-ray events
         - list_of_clusters: list of interaction cluster dictionaries
@@ -1368,9 +1410,7 @@ def create_data(
         remove_pair_production=remove_pair_production,
     )
 
-    df_X = pd.DataFrame(
-        data=features, columns=list(gr.fom_tools.default_ind_feature_names.keys())
-    )
+    df_X = pd.DataFrame(data=features, columns=ff.order_feature_names)
     df_Y = pd.DataFrame(
         data=np.vstack(
             (

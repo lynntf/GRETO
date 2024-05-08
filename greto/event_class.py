@@ -95,6 +95,11 @@ class Event:
         """Matrix of interaction point coordinates including the origin"""
         return np.vstack([p.x for p in self.points])
 
+    @cached_property
+    def radii(self) -> np.ndarray:
+        """Interaction point radius"""
+        return geo.radii(self.point_matrix)
+
     @property
     def crystal_hit_matrix(self) -> np.ndarray:
         """Matrix of interaction point coordinates in the crystal frame

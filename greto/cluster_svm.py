@@ -574,7 +574,8 @@ def weighted_svc(
     fit_intercept: bool = False,
     debug: bool = False,  # pylint: disable=unused-argument
     relaxation: bool = False,  # pylint: disable=unused-argument
-    mirror: bool = True,
+    mirror: bool = False,  # default to not doubling data size
+    randomize_mirror: bool = True,
     **SVCkwargs,
 ) -> None:
     """
@@ -637,9 +638,11 @@ def weighted_svc(
             else:
                 clf.fit(X_mirror, y_mirror)
         else:  # Introduce a second negative class by swapping some data to the other class
-            # y = np.random.choice([-1,1], size = (selected_X.shape[0],))
-            y = np.ones((selected_X.shape[0],))
-            y[: len(y) // 2] = -1
+            if randomize_mirror:
+                y = np.random.choice([-1,1], size = (selected_X.shape[0],))
+            else:
+                y = np.ones((selected_X.shape[0],))
+                y[: len(y) // 2] = -1
             if weighted:
                 clf.fit(y[:, np.newaxis] * selected_X, y, sample_weight=weights)
             else:
@@ -672,6 +675,7 @@ def weighted_lr(
     debug: bool = False,  # pylint: disable=unused-argument
     relaxation: bool = False,  # pylint: disable=unused-argument
     mirror: bool = True,
+    randomize_mirror:bool = True,
     **LRkwargs,
 ) -> None:
     """
@@ -740,9 +744,11 @@ def weighted_lr(
             else:
                 clf.fit(X_mirror, y_mirror)
         else:  # Introduce a second negative class by swapping some data to the other class
-            # y = np.random.choice([-1,1], size = (selected_X.shape[0],))
-            y = np.ones((selected_X.shape[0],))
-            y[: len(y) // 2] = -1
+            if randomize_mirror:
+                y = np.random.choice([-1,1], size = (selected_X.shape[0],))
+            else:
+                y = np.ones((selected_X.shape[0],))
+                y[: len(y) // 2] = -1
             if weighted:
                 clf.fit(y[:, np.newaxis] * selected_X, y, sample_weight=weights)
             else:

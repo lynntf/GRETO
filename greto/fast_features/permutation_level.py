@@ -8,14 +8,16 @@ Permutation level values
 from __future__ import annotations
 
 from collections import namedtuple
-from typing import Optional # Tuple
+from typing import Optional  # Tuple
 
 import numba
 import numpy as np
+from scipy import integrate
 
+import greto.geometry as geo
 import greto.physics as phys
+from greto.event_class import Event
 from greto.fast_features.event_level import event_level_values
-from greto.fom_tools import escape_probability as ft_escape_probability
 from greto.utils import cumsum, perm_to_transition, reverse_cumsum
 
 perm_level_values = namedtuple(
@@ -88,6 +90,84 @@ perm_level_values = namedtuple(
         "escape_probability",
     ],
 )
+
+@numba.njit
+def cone_pen_prob(
+    theta: np.ndarray,
+    point: np.ndarray,
+    direction: np.ndarray,
+    opening_angle: float,
+    detector_radius: float,
+    linear_attenuation: float,
+) -> np.ndarray:
+    """
+    Penetration probability for a cone ray with some linear attenuation
+
+    Args:
+        - theta: angle about cone axis
+        - point: cone apex
+        - direction: cone direction unit vector; direction of scatter axis
+          (previous point to current point)
+        - opening_angle: cone angle
+        - detector_radius: outer sphere radius [cm]
+        - linear_attenuation: attenuation [1/cm] coefficient of g-ray
+
+    Returns:
+        - probability of penetration for the distance from the cone apex to the
+          sphere at various angles theta
+    """
+    return np.exp(
+        -linear_attenuation
+        * geo.cone_ray_lengths(point, direction, opening_angle, theta, detector_radius)
+    ) / (2 * np.pi)
+
+
+def escape_probability_func(
+    penultimate_point: np.ndarray,
+    final_point: np.ndarray,
+    final_energy: float,
+    escaped_energy: float,
+    detector_radius: float,
+):
+    """
+    Args:
+        - penultimate_point: point location of point incoming final point before
+          scattering out
+        - final_point: point location of final point before scattering out
+        - final_energy: energy of final scatter interaction
+        - escaped_energy: assumed remaining energy (excess energy predicted by
+          TANGO or another method)
+        - detector_radius: radius of the detector sphere
+
+    Returns:
+        - average probability of escape (averaged across all scattering
+          directions with a fixed scattering angle)
+
+    """
+    if escaped_energy <= 0:
+        return 0.0
+    theor_cos = phys.njit_cos_theor(escaped_energy + final_energy, escaped_energy)
+    if theor_cos < -1:
+        return 0.0
+    point = final_point
+    direction = final_point - penultimate_point
+    direction = direction / np.sum(direction**2)
+    opening_angle = phys.theta_theor_single(
+        escaped_energy + final_energy, escaped_energy
+    )
+
+    linear_attenuation = phys.lin_att_total_fit(escaped_energy)
+
+    return (
+        integrate.quad(
+            cone_pen_prob,
+            0.0,
+            np.pi,
+            full_output=0,
+            args=(point, direction, opening_angle, detector_radius, linear_attenuation),
+        )[0]
+        * 2
+    )
 
 
 @numba.njit
@@ -227,7 +307,7 @@ def res_cos_cap_func(cos_act_perm, cos_theor_perm):
 
 def perm_atoms(
     permutation: tuple[int],
-    event_calc: event_level_values,
+    event_calc: event_level_values | Event,  # event_level_values is faster, but not by a lot
     start_point: int = 0,
     start_energy: float = None,
     use_threshold: bool = False,
@@ -887,7 +967,7 @@ def perm_atoms(
     escape_probability = compute_value(
         "escape_probability",
         ["energies_perm", "energy_sum"],
-        lambda: ft_escape_probability(
+        lambda: escape_probability_func(
             event_calc.point_matrix[permutation[-2]],
             event_calc.point_matrix[permutation[-1]],
             energies_perm[-1],

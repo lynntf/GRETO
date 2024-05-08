@@ -17,6 +17,7 @@ import numba
 import numpy as np
 from scipy import integrate
 
+import greto.fast_features as ff
 import greto.physics as phys
 from greto import default_config
 from greto.detector_config_class import DetectorConfig
@@ -38,22 +39,24 @@ class FOM_model:
         self,
         model_evaluation: Callable,
         columns: Optional[List[str]] = None,
-        columns_bool: Optional[List[str]] = None,
+        # columns_bool: Optional[List[str]] = None,
+        boolean_vectors: Optional[ff.boolean_vectors] = None,
         model: Optional[object] = None,
     ):
         """
         Args:
             - model_evaluation: how the model transforms input features to outputs
             - columns: the names of the input features used by the model
-            - columns_bool: the boolean values for the usage of columns
+            # - columns_bool: the boolean values for the usage of columns
+            - boolean_vectors: the boolean values for the usage of columns
             - model: the model object itself
         """
         self.predict = model_evaluation
-        if columns is not None and columns_bool is None:
+        if columns is not None and boolean_vectors is None:
             self.columns = columns
-            self.columns_bool = column_names_to_bool(columns=columns)
+            self.boolean_vectors = ff.convert_feature_names_to_boolean_vectors(columns)
         else:
-            self.columns_bool = columns_bool
+            self.boolean_vectors = boolean_vectors
         if model is not None:
             self.model = model
 
@@ -90,15 +93,23 @@ def cluster_model_FOM(
         FOM_kwargs: other keyword arguments for FOM computation
     """
     for s, cluster in clusters.items():
-        feats = cluster_FOM_features(
-            event, cluster, columns_bool=model.columns_bool, **FOM_kwargs
+        # feats = cluster_FOM_features(
+        #     # event, cluster, columns_bool=model.columns_bool, **FOM_kwargs
+        #     event, cluster, model_bvs=model.boolean_vectors, **FOM_kwargs
+        # )
+        feats = ff.get_all_features_cluster(
+            event, cluster, event, bvs=model.boolean_vectors, trim_features=True
         )
         print(s, cluster, feats.shape, np.sum(feats))
 
     return {
         s: model.predict(
-            cluster_FOM_features(
-                event, cluster, columns_bool=model.columns_bool, **FOM_kwargs
+            # cluster_FOM_features(
+            #     # event, cluster, columns_bool=model.columns_bool, **FOM_kwargs
+            #     event, cluster, model_bvs=model.boolean_vectors, **FOM_kwargs
+            # )
+            ff.get_all_features_cluster(
+                event, cluster, event, bvs=model.boolean_vectors, trim_features=True
             )
         )
         for (s, cluster) in clusters.items()
@@ -1075,63 +1086,7 @@ def singles_depth(
     interaction = event.points[permutation[0]]
     depth = np.linalg.norm(interaction.x) - detector.get_inner_radius()
     energy = interaction.e
-    singles_depth_explicit(depth, energy, singles_penalty_min, singles_penalty_max)
-
-def singles_depth_explicit(
-    depth: float,
-    energy: float,
-    singles_penalty_min: float = 0.0,
-    singles_penalty_max: float = 1.85,
-) -> float:
-    """
-    # Reject singles based on their energy and depth
-
-    This is the default used in GRETINA tracking code. Approximately rejection
-    at 81%-83% or gamma-ray range. Data is from AFT tracking chat file and
-    indicates energy [MeV] and depth [cm].
-
-    ## Args:
-    - event: An Event object that represents the event to be evaluated
-    - permutation: An iterable of integers that represents a permutation of
-      the interactions in the event. For a single interaction event, this should
-      be an iterable with one element.
-    - singles_penalty_min: A float that indicates the minimum
-      value of the FOM. The default value is 0.0.
-    - singles_penalty_max: A float that indicates the scale factor
-      for the FOM, or the maximum value for indicator FOMs. The default value is
-      1.85.
-    - detector: configuration of the detector
-
-    ## Returns:
-    - A float that represents the FOM value for the single interaction
-    &gamma;-ray.
-    """
-    #  Energy [MeV], Depth [cm]
-    data = np.array(
-        [
-            [0.000, 0.59],
-            [0.080, 0.59],
-            [0.100, 0.62],
-            [0.150, 1.38],
-            [0.200, 2.07],
-            [0.300, 3.05],
-            [0.400, 3.69],
-            [0.500, 4.19],
-            [0.600, 4.62],
-            [0.800, 5.36],
-            [1.000, 6.01],
-            [1.250, 6.75],
-            [1.500, 7.40],
-            [2.000, 8.43],
-            [3.000, 9.77],
-            [4.000, 10.52],
-            [5.000, 10.91],
-            [16.383, 27.41],
-        ]
-    )
-    if depth > np.interp(energy, data[:, 0], data[:, 1]):
-        return singles_penalty_max
-    return singles_penalty_min
+    phys.singles_depth_explicit(depth, energy, singles_penalty_min, singles_penalty_max)
 
 
 # %% Ordering routines
@@ -1277,7 +1232,8 @@ def semi_greedy_batch(
     debug: bool = False,
     model: FOM_model = None,
     model_columns: Optional[List[str]] = None,
-    model_columns_bool: Optional[Tuple[np.ndarray]] = None,
+    # model_columns_bool: Optional[Tuple[np.ndarray]] = None,
+    model_bvs: Optional[ff.boolean_vectors] = None,
     minimize: bool = True,
     batch_size: int = 1,
     **FOM_kwargs,
@@ -1351,10 +1307,21 @@ def semi_greedy_batch(
     # if model_columns is None:
     #     model_columns = model.columns
 
-    if model_columns_bool is None:
-        model_columns_bool = model.columns_bool
-    if model_columns_bool is None:
-        model_columns_bool = column_names_to_bool(model_columns)
+    # if model_columns_bool is None:
+    #     model_columns_bool = model.columns_bool
+    # if model_columns_bool is None:
+    #     model_columns_bool = column_names_to_bool(model_columns)
+
+    if model_bvs is None:
+        model_bvs = model.boolean_vectors
+    if model_bvs is None:  # if still None
+        model_bvs = ff.convert_feature_names_to_boolean_vectors(model_columns)
+    num_features = int(
+        np.sum(model_bvs.feature_boolean_vector)
+        + np.sum(model_bvs.feature_boolean_vector_tango)
+    )
+
+    event_calc = ff.get_event_level_values(event, model_bvs)
 
     if direction == "forward":
         curr_e = sum(event.points[i].e for i in cluster)  # Current energy
@@ -1405,19 +1372,28 @@ def semi_greedy_batch(
                     n_perms -= batch_size
 
                 # Allocate the features array
-                num_features = int(sum(np.sum(b) for b in model_columns_bool))
+                # num_features = int(sum(np.sum(b) for b in model_columns_bool))
                 features = np.empty((len(perms), num_features))
 
                 # Loop over permutations and generate features for each
                 # TODO - potential problem with the order of the features
                 for i, perm in enumerate(perms):
-                    features[i, :] = cluster_FOM_features(
-                        event=event,
-                        permutation=tuple(order + list(perm)),
-                        start_point=start_point,
-                        start_energy=curr_e,
-                        Nmi=len(cluster),
-                        columns_bool=model_columns_bool,
+                    # features[i, :] = cluster_FOM_features(
+                    #     event=event,
+                    #     permutation=tuple(order + list(perm)),
+                    #     start_point=start_point,
+                    #     start_energy=curr_e,
+                    #     Nmi=len(cluster),
+                    #     columns_bool=model_columns_bool,
+                    # )
+                    features[i, :] = ff.get_perm_features(
+                        event,
+                        event_calc,
+                        perm,
+                        start_point,
+                        curr_e,
+                        len(cluster),
+                        model_bvs,
                     )
 
                     # Get the FOM values for each set of features
@@ -1530,6 +1506,10 @@ def semi_greedy(
     if len(cluster) > max_cluster_size:
         if return_score:
             return (tuple(cluster), FOM(event, cluster, **FOM_kwargs))
+        return cluster
+    if len(cluster) <= 1:
+        if return_score:
+            return (tuple(cluster), 0.0)
         return cluster
     if direction == "forward":
         curr_e = sum(event.points[i].e for i in cluster)
@@ -1981,25 +1961,25 @@ default_clusters = {1: [1, 2, 3], 2: [4, 5, 6], 3: [7], 4: [8, 9]}
 # %% Features
 
 
-def individual_FOM_feature_names():
-    """
-    Generate an empty FOM feature dictionary for a single cluster
-    """
-    # from greto.cluster_tools import cluster_properties
-    # feature_names = list(FOM_features(default_event, default_clusters[1]).keys())
-    # feature_names.extend([name + '_tango' for name in feature_names])
+# def individual_FOM_feature_names():
+#     """
+#     Generate an empty FOM feature dictionary for a single cluster
+#     """
+#     # from greto.cluster_tools import cluster_properties
+#     # feature_names = list(FOM_features(default_event, default_clusters[1]).keys())
+#     # feature_names.extend([name + '_tango' for name in feature_names])
 
-    # feature_names.append("escape_probability_tango")
-    # feature_names.append("-log_escape_probability_tango")
-    # feature_names.extend(single_FOM_features(default_event, default_clusters[3]).keys())
-    # feature_names.extend(cluster_properties(default_event, default_clusters[1]).features.keys())
-    feature_names = list(
-        cluster_FOM_features(
-            default_event, default_clusters[1], return_columns=True
-        ).keys()
-    )
-    feature_dict = {key: 0.0 for key in feature_names}
-    return feature_dict
+#     # feature_names.append("escape_probability_tango")
+#     # feature_names.append("-log_escape_probability_tango")
+#     # feature_names.extend(single_FOM_features(default_event, default_clusters[3]).keys())
+#     # feature_names.extend(cluster_properties(default_event, default_clusters[1]).features.keys())
+#     feature_names = list(
+#         cluster_FOM_features(
+#             default_event, default_clusters[1], return_columns=True
+#         ).keys()
+#     )
+#     feature_dict = {key: 0.0 for key in feature_names}
+#     return feature_dict
 
 
 def multiple_FOM_feature_names():
@@ -2620,24 +2600,24 @@ def all_column_names():
     )
 
 
-def permute_column_names(columns: List[str]):
-    """
-    Takes a list of column names and spits out the permutation that is necessary
-    to sort them in the right order
-    """
-    feature_lists = all_column_names()
-    feature_list = []
-    for features in feature_lists:
-        feature_list.extend(features)
-    permutation = [0] * len(columns)
+# def permute_column_names(columns: List[str]):
+#     """
+#     Takes a list of column names and spits out the permutation that is necessary
+#     to sort them in the right order
+#     """
+#     feature_lists = all_column_names()
+#     feature_list = []
+#     for features in feature_lists:
+#         feature_list.extend(features)
+#     permutation = [0] * len(columns)
 
-    num_columns_processed = 0
-    for feature in feature_list:
-        for column_index, column in enumerate(columns):
-            if feature == column:
-                permutation[column_index] = num_columns_processed
-                num_columns_processed += 1
-    return permutation
+#     num_columns_processed = 0
+#     for feature in feature_list:
+#         for column_index, column in enumerate(columns):
+#             if feature == column:
+#                 permutation[column_index] = num_columns_processed
+#                 num_columns_processed += 1
+#     return permutation
 
 
 def column_names_to_bool(columns: List[str], all_columns: bool = False):
@@ -5746,6 +5726,8 @@ def cluster_FOM_features(
     detector: DetectorConfig = default_config,
     columns: Optional[List[str]] = None,
     columns_bool: Optional[Tuple[np.ndarray]] = None,
+    event_calc: Optional[ff.event_level_values] = None,
+    model_bvs: Optional[ff.boolean_vectors] = None,
     populate_empty_features: bool = False,
     return_columns: bool = False,
     all_columns: bool = False,
@@ -5760,6 +5742,31 @@ def cluster_FOM_features(
 
     Want the same output structure regardless if it is single or a full cluster
     """
+    if event_calc is None:
+        event_calc = event
+    if columns is not None and model_bvs is None:
+        model_bvs = ff.convert_feature_names_to_boolean_vectors(columns)
+
+    # perm_features = ff.get_perm_features(
+    #     event,
+    #     event_calc,
+    #     permutation,
+    #     start_point,
+    #     start_energy,
+    #     Nmi,
+    #     model_bvs,
+    #     trim_features,
+    # )
+    # single_features = ff.get_single_features(
+    #     event, event_calc, permutation, model_bvs, trim_features
+    # )
+    # cluster_features = ff.get_cluster_features(
+    #     event_calc, permutation, Nmi, model_bvs, trim_features
+    # )
+    
+    return ff.get_all_features_cluster(event, permutation, event_calc, start_point, start_energy, Nmi, model_bvs, not populate_empty_features)
+    # TODO - finish rewriting this to use new code
+
     from greto.cluster_tools import cluster_properties_features
 
     # Logic to use boolean indices for the features if provided
@@ -6049,8 +6056,9 @@ def clusters_FOM_features(
     return features
 
 
-default_ind_feature_names = individual_FOM_feature_names()
-default_mul_feature_names = multiple_FOM_feature_names()
+# default_ind_feature_names = individual_FOM_feature_names()
+default_ind_feature_names = ff.all_feature_names
+# default_mul_feature_names = multiple_FOM_feature_names() # TODO - fix this thing
 
 
 def get_all_features_cluster(

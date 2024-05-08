@@ -9,12 +9,58 @@ from __future__ import annotations
 
 from typing import Iterable, Optional
 
-# import numba # TODO - are there good opportunities for JIT here?
+import numba  # TODO - are there good opportunities for JIT here?
 import numpy as np
 
 from greto.fast_features.permutation_level import perm_level_values
 from greto.physics import RANGE_PROCESS
 from greto.utils import njit_any, njit_max, njit_mean, njit_min, njit_norm, njit_sum
+
+
+@numba.njit
+def rc_wmean_1v_penalty_removed_func(compton_penalty, res_cos_v, res_cos_sigma):
+    """Need to check if all values are removed by penalty"""
+    if not (max(compton_penalty.shape) - njit_sum(compton_penalty)) < 1:
+        return njit_sum(res_cos_v * (1.0 - compton_penalty)) / njit_sum(
+            1.0 / res_cos_sigma * (1.0 - compton_penalty)
+        )
+    return 0.0
+
+
+@numba.njit
+def rc_wmean_2v_penalty_removed_func(compton_penalty, res_cos_v, res_cos_sigma):
+    """Need to check if all values are removed by penalty"""
+    if not (max(compton_penalty.shape) - njit_sum(compton_penalty)) < 1:
+        return njit_sum(res_cos_v**2 * (1.0 - compton_penalty)) / njit_sum(
+            (1.0 / res_cos_sigma * (1.0 - compton_penalty)) ** 2
+        )
+    return 0.0
+
+
+@numba.njit
+def rth_wmean_1v_penalty_removed_func(compton_penalty, res_theta_v, res_theta_sigma):
+    if not (max(compton_penalty.shape) - njit_sum(compton_penalty)) < 1:  # zeroed:
+        denom = njit_sum((1 / res_theta_sigma) * (1.0 - compton_penalty))
+        if denom > 0:
+            return njit_sum(res_theta_v * (1.0 - compton_penalty)) / denom
+    return 0.0
+
+
+@numba.njit
+def rth_wmean_2v_penalty_removed_func(compton_penalty, res_theta_v, res_theta_sigma):
+    if not (max(compton_penalty.shape) - njit_sum(compton_penalty)) < 1:  # zeroed:
+        denom = njit_sum(((1 / res_theta_sigma) * (1.0 - compton_penalty)) ** 2)
+        if denom > 0:
+            return njit_sum(res_theta_v**2 * (1.0 - compton_penalty)) / denom
+    return 0.0
+
+@numba.njit
+def wmean_1v_func(stdev_weighted_value, stdev):
+    return njit_sum(stdev_weighted_value) / njit_sum(1 / stdev)
+
+@numba.njit
+def wmean_2v_func(stdev_weighted_value, stdev):
+    return njit_sum(stdev_weighted_value **2) / njit_sum(1 / stdev **2)
 
 
 def feature_values(
@@ -131,8 +177,8 @@ def feature_values(
             compute_value(
                 "rsg_wmean_1v",
                 ["res_sum_geo_v", "res_sum_geo_sigma"],
-                lambda: njit_sum(perm_calc.res_sum_geo_v)
-                / njit_sum(1.0 / perm_calc.res_sum_geo_sigma),
+                # lambda: njit_sum(perm_calc.res_sum_geo_v) / njit_sum(1.0 / perm_calc.res_sum_geo_sigma),
+                lambda: wmean_1v_func(perm_calc.res_sum_geo_v, perm_calc.res_sum_geo_sigma),
             )
             index += 1
 
@@ -181,8 +227,8 @@ def feature_values(
             compute_value(
                 "rsg_wmean_2v",
                 ["res_sum_geo_v", "res_sum_geo_sigma"],
-                lambda: njit_sum(perm_calc.res_sum_geo_v**2)
-                / njit_sum((1.0 / perm_calc.res_sum_geo_sigma) ** 2),
+                # lambda: njit_sum(perm_calc.res_sum_geo_v**2) / njit_sum((1.0 / perm_calc.res_sum_geo_sigma) ** 2),
+                lambda: wmean_2v_func(perm_calc.res_sum_geo_v, perm_calc.res_sum_geo_sigma),
             )
             index += 1
 
@@ -330,16 +376,16 @@ def feature_values(
             compute_value(
                 "rsl_wmean_2v",
                 ["res_sum_loc_v", "res_sum_loc_sigma"],
-                lambda: njit_sum(perm_calc.res_sum_loc_v**2)
-                / njit_sum((1.0 / perm_calc.res_sum_loc_sigma) ** 2),
+                # lambda: njit_sum(perm_calc.res_sum_loc_v**2) / njit_sum((1.0 / perm_calc.res_sum_loc_sigma) ** 2),
+                lambda: wmean_2v_func(perm_calc.res_sum_loc_v, perm_calc.res_sum_loc_sigma),
             )
             index += 1
 
             compute_value(
                 "rsl_wmean_1v",
                 ["res_sum_loc_v", "res_sum_loc_sigma"],
-                lambda: njit_sum(perm_calc.res_sum_loc_v)
-                / njit_sum(1.0 / perm_calc.res_sum_loc_sigma),
+                # lambda: njit_sum(perm_calc.res_sum_loc_v) / njit_sum(1.0 / perm_calc.res_sum_loc_sigma),
+                lambda: wmean_1v_func(perm_calc.res_sum_loc_v, perm_calc.res_sum_loc_sigma),
             )
             index += 1
 
@@ -404,8 +450,8 @@ def feature_values(
             compute_value(
                 "rlg_wmean_1v",
                 ["res_loc_geo_v", "res_loc_geo_sigma"],
-                lambda: njit_sum(perm_calc.res_loc_geo_v)
-                / njit_sum(1.0 / perm_calc.res_loc_geo_sigma),
+                # lambda: njit_sum(perm_calc.res_loc_geo_v) / njit_sum(1.0 / perm_calc.res_loc_geo_sigma),
+                lambda: wmean_1v_func(perm_calc.res_loc_geo_v, perm_calc.res_loc_geo_sigma),
             )
             index += 1
 
@@ -424,8 +470,8 @@ def feature_values(
             compute_value(
                 "rlg_wmean_2v",
                 ["res_loc_geo_v", "res_loc_geo_sigma"],
-                lambda: njit_sum(perm_calc.res_loc_geo_v**2)
-                / njit_sum((1.0 / perm_calc.res_loc_geo_sigma) ** 2),
+                # lambda: njit_sum(perm_calc.res_loc_geo_v**2) / njit_sum((1.0 / perm_calc.res_loc_geo_sigma) ** 2),
+                lambda: wmean_2v_func(perm_calc.res_loc_geo_v, perm_calc.res_loc_geo_sigma),
             )
             index += 1
 
@@ -544,16 +590,16 @@ def feature_values(
             compute_value(
                 "rc_wmean_1v",
                 ["res_cos_v", "res_cos_sigma"],
-                lambda: njit_sum(perm_calc.res_cos_v)
-                / njit_sum(1.0 / perm_calc.res_cos_sigma),
+                # lambda: njit_sum(perm_calc.res_cos_v) / njit_sum(1.0 / perm_calc.res_cos_sigma),
+                lambda: wmean_1v_func(perm_calc.res_cos_v, perm_calc.res_cos_sigma),
             )
             index += 1
 
             compute_value(
                 "rc_wmean_2v",
                 ["res_cos_v", "res_cos_sigma"],
-                lambda: njit_sum(perm_calc.res_cos_v**2)
-                / njit_sum((1.0 / perm_calc.res_cos_sigma) ** 2),
+                # lambda: njit_sum(perm_calc.res_cos_v**2) / njit_sum((1.0 / perm_calc.res_cos_sigma) ** 2),
+                lambda: wmean_2v_func(perm_calc.res_cos_v, perm_calc.res_cos_sigma),
             )
             index += 1
 
@@ -584,16 +630,6 @@ def feature_values(
             )
             index += 1
 
-            def rc_wmean_1v_penalty_removed_func(
-                compton_penalty, res_cos_v, res_cos_sigma
-            ):
-                """Need to check if all values are removed by penalty"""
-                if not (max(compton_penalty.shape) - njit_sum(compton_penalty)) < 1:
-                    return njit_sum(res_cos_v * (1.0 - compton_penalty)) / njit_sum(
-                        1.0 / res_cos_sigma * (1.0 - compton_penalty)
-                    )
-                return 0.0
-
             compute_value(
                 "rc_wmean_1v_penalty_removed",
                 ["compton_penalty", "res_cos_v", "res_cos_sigma"],
@@ -604,16 +640,6 @@ def feature_values(
                 ),
             )
             index += 1
-
-            def rc_wmean_2v_penalty_removed_func(
-                compton_penalty, res_cos_v, res_cos_sigma
-            ):
-                """Need to check if all values are removed by penalty"""
-                if not (max(compton_penalty.shape) - njit_sum(compton_penalty)) < 1:
-                    return njit_sum(
-                        res_cos_v**2 * (1.0 - compton_penalty)
-                    ) / njit_sum((1.0 / res_cos_sigma * (1.0 - compton_penalty)) ** 2)
-                return 0.0
 
             compute_value(
                 "rc_wmean_2v_penalty_removed",
@@ -703,16 +729,16 @@ def feature_values(
             compute_value(
                 "rc_cap_wmean_1v",
                 ["res_cos_cap_v", "res_cos_sigma"],
-                lambda: njit_sum(perm_calc.res_cos_cap_v)
-                / njit_sum(1.0 / perm_calc.res_cos_sigma),
+                # lambda: njit_sum(perm_calc.res_cos_cap_v) / njit_sum(1.0 / perm_calc.res_cos_sigma),
+                lambda: wmean_1v_func(perm_calc.res_cos_cap_v, perm_calc.res_cos_sigma),
             )
             index += 1
 
             compute_value(
                 "rc_cap_wmean_2v",
                 ["res_cos_cap_v", "res_cos_sigma"],
-                lambda: njit_sum(perm_calc.res_cos_cap_v**2)
-                / njit_sum((1.0 / perm_calc.res_cos_sigma) ** 2),
+                # lambda: njit_sum(perm_calc.res_cos_cap_v**2) / njit_sum((1.0 / perm_calc.res_cos_sigma) ** 2),
+                lambda: wmean_2v_func(perm_calc.res_cos_cap_v, perm_calc.res_cos_sigma),
             )
             index += 1
 
@@ -822,16 +848,16 @@ def feature_values(
             compute_value(
                 "rth_wmean_1v",
                 ["res_theta_v", "res_theta_sigma"],
-                lambda: njit_sum(perm_calc.res_theta_v)
-                / njit_sum(1.0 / perm_calc.res_theta_sigma),
+                # lambda: njit_sum(perm_calc.res_theta_v) / njit_sum(1.0 / perm_calc.res_theta_sigma),
+                lambda: wmean_1v_func(perm_calc.res_theta_v, perm_calc.res_theta_sigma),
             )
             index += 1
 
             compute_value(
                 "rth_wmean_2v",
                 ["res_theta_v", "res_theta_sigma"],
-                lambda: njit_sum(perm_calc.res_theta_v**2)
-                / njit_sum((1.0 / perm_calc.res_theta_sigma) ** 2),
+                # lambda: njit_sum(perm_calc.res_theta_v**2) / njit_sum((1.0 / perm_calc.res_theta_sigma) ** 2),
+                lambda: wmean_2v_func(perm_calc.res_theta_v, perm_calc.res_theta_sigma),
             )
             index += 1
 
@@ -902,48 +928,24 @@ def feature_values(
             )
             index += 1
 
-            def rth_wmean_1v_penalty_removed_func(
-                compton_penalty, res_theta_v, res_theta
-            ):
-                if (
-                    not (max(compton_penalty.shape) - njit_sum(compton_penalty)) < 1
-                ):  # zeroed:
-                    return njit_sum(res_theta_v * (1.0 - compton_penalty)) / njit_sum(
-                        res_theta_v / res_theta * (1.0 - compton_penalty)
-                    )
-                return 0.0
-
             compute_value(
                 "rth_wmean_1v_penalty_removed",
-                ["compton_penalty", "res_theta_v", "res_theta"],
+                ["compton_penalty", "res_theta_v", "res_theta_sigma"],
                 lambda: rth_wmean_1v_penalty_removed_func(
                     perm_calc.compton_penalty,
                     perm_calc.res_theta_v,
-                    perm_calc.res_theta,
+                    perm_calc.res_theta_sigma,
                 ),
             )
             index += 1
 
-            def rth_wmean_2v_penalty_removed_func(
-                compton_penalty, res_theta_v, res_theta
-            ):
-                if (
-                    not (max(compton_penalty.shape) - njit_sum(compton_penalty)) < 1
-                ):  # zeroed:
-                    return njit_sum(
-                        res_theta_v**2 * (1.0 - compton_penalty)
-                    ) / njit_sum(
-                        (res_theta_v / res_theta * (1.0 - compton_penalty)) ** 2
-                    )
-                return 0.0
-
             compute_value(
                 "rth_wmean_2v_penalty_removed",
-                ["compton_penalty", "res_theta_v", "res_theta"],
+                ["compton_penalty", "res_theta_v", "res_theta_sigma"],
                 lambda: rth_wmean_2v_penalty_removed_func(
                     perm_calc.compton_penalty,
                     perm_calc.res_theta_v,
-                    perm_calc.res_theta,
+                    perm_calc.res_theta_sigma,
                 ),
             )
             index += 1
@@ -990,17 +992,19 @@ def feature_values(
 
             compute_value(
                 "rth_cap_wmean_1v",
-                ["res_theta_cap_v", "res_theta_cap"],
-                lambda: njit_sum(perm_calc.res_theta_cap_v)
-                / njit_sum(perm_calc.res_theta_cap_v / perm_calc.res_theta_cap),
+                ["res_theta_cap_v", "res_theta_sigma"],
+                lambda: wmean_1v_func(
+                    perm_calc.res_theta_cap_v, perm_calc.res_theta_sigma
+                ),
             )
             index += 1
 
             compute_value(
                 "rth_cap_wmean_2v",
-                ["res_theta_cap_v", "res_theta_cap"],
-                lambda: njit_sum(perm_calc.res_theta_cap_v**2)
-                / njit_sum((perm_calc.res_theta_cap_v / perm_calc.res_theta_cap) ** 2),
+                ["res_theta_cap_v", "res_theta_sigma"],
+                lambda: wmean_2v_func(
+                    perm_calc.res_theta_cap_v, perm_calc.res_theta_sigma
+                ),
             )
             index += 1
 
