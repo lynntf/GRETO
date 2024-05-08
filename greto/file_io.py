@@ -1051,14 +1051,17 @@ def mode1_extended_data(
             else 0
         )
 
-        mode1_output += struct.pack(
-            gamma_info_format,
-            mode1["esum"],
-            int(mode1["ndet"]),
-            mode1["fom"],
-            mode1["tracked"],
-            int(mode1["timestamp"]),
-        )
+        try:
+            mode1_output += struct.pack(
+                gamma_info_format,
+                mode1["esum"],
+                int(mode1["ndet"]),
+                mode1["fom"],
+                mode1["tracked"],
+                int(mode1["timestamp"]),
+            )
+        except struct.error:
+            print(f"format {gamma_info_format}, esum {mode1["esum"]}, ndet {int(mode1["ndet"])}, fom {mode1["fom"]}, tracked {mode1["tracked"]}, timestamp {int(mode1["timestamp"])}")
         for interaction in mode1["interactions"]:
             mode1_output += struct.pack(interaction_format, *interaction)
         mode1_output += struct.pack(
