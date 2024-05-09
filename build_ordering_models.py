@@ -137,7 +137,7 @@ for column_set_name, columns in fo.column_sets.items():
     print(f"training acc = {solved / (solved + unsolved)}")
 
     ranker_fname = (
-        f"models/N{N}_{sol_method}_C{C_xgb}_cols-{column_set_name}_width{width}.json"
+        f"models/N{N}_{sol_method}_C{C_xgb}_cols-{column_set_name}_width{width}.ubj"
     )
 
     models.save_xgbranker_model(ranker, ranker_fname)

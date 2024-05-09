@@ -201,7 +201,9 @@ class xgbranker_FOM_model:
         Returns:
             - ranker inferred scores
         """
-        return self.model.predict(X[:, self.permutation])
+        # perm_X = np.copy(X[:, self.permutation])
+        return self.model.get_booster().inplace_predict(X[:, self.permutation])
+        # return self.model.predict(perm_X)
 
 
 def save_xgbranker_model(
@@ -215,9 +217,10 @@ def save_xgbranker_model(
         - ranker: trained XGBoost Ranker model
         - filename: filename for saved model [`.json` or `.ubj` (binary)]
     """
-    d = json.loads(ranker.get_booster().save_raw("json"))  # Model as dict
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(d, f)
+    # d = json.loads(ranker.get_booster().save_raw("json"))  # Model as dict
+    # with open(filename, "w", encoding="utf-8") as f:
+    #     json.dump(d, f)
+    ranker.save_model(filename)
 
 
 def load_xgbranker_model(filename: str) -> xgb.XGBRanker:
@@ -229,6 +232,7 @@ def load_xgbranker_model(filename: str) -> xgb.XGBRanker:
     """
     ranker = xgb.XGBRanker()
     ranker.load_model(filename)
+    ranker.get_booster().set_param({"device": "cpu", "nthread" : 1})
     return ranker
 
 
@@ -251,6 +255,9 @@ def load_FOM_model(filename: str) -> FOM_model:
     Args:
         - filename: filename for saved model [`.json`]
     """
+    if filename.endswith(".ubj"):
+        print(f"Model {filename} is assumed to be XGB Ranker")
+        return load_xgbranker_FOM_model(filename)
     with open(filename, "r", encoding="utf-8") as f:
         d = json.load(f)
     if d.get("model") == "linear":
