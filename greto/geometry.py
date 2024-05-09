@@ -215,6 +215,43 @@ def err_cos_vec(
     return err_cos_vec_precalc(distances, cos_ijk, position_err)
 
 @numba.njit
+def partial_err_theta_vec_precalc_single_err(
+    distances: np.ndarray[float],
+    cos_ijk: np.ndarray[float],
+    position_err: float = 0.5,
+) -> Tuple[np.ndarray[float]]:
+    """
+    # Partial error propagation in the computation of the theta.
+
+    From the definition of the dot product:
+    cos(theta) = dot((b-a), (c-b))/(norm(b-a)*norm(c-b))
+
+    ## Args:
+        - `distances` : Distances (Euclidean) between interaction points
+        - `position_err`: Error in position values [cm] (AGATA is 8mm,
+            GRETA/GRETINA is 5mm)
+    ## Returns:
+        - Errors as a separate function of the three positions involved in the
+          computation
+    """
+    for i in range(distances.shape[0]):
+        for j in range(distances.shape[1]):
+            if distances[i,j] <= 0:
+                distances[i,j] = 1.0
+    rab = distances[:, :, np.newaxis]
+    rbc = distances[np.newaxis, :, :]
+    # rab = np.copy(distances[:, :, np.newaxis])
+    # rbc = np.copy(distances[np.newaxis, :, :])
+    # rab[rab <= 0.0] = 1
+    # rbc[rbc <= 0.0] = 1
+    sigma_squared_a = np.zeros(cos_ijk.shape)
+    sq_position_err = position_err**2
+    sigma_squared_a = 2 * sq_position_err / (rab**2)
+    sigma_squared_b = 2 * sq_position_err * cos_ijk / (rab * rbc)
+    sigma_squared_c = 2 * sq_position_err / (rbc**2)
+    return (sigma_squared_a, sigma_squared_b, sigma_squared_c)
+
+@numba.njit
 def partial_err_theta_vec_precalc(
     distances: np.ndarray[float],
     cos_ijk: np.ndarray[float],
@@ -246,22 +283,17 @@ def partial_err_theta_vec_precalc(
     # rbc[rbc <= 0.0] = 1
     sigma_squared_a = np.zeros(cos_ijk.shape)
     sq_position_err = position_err**2
-    if isinstance(sq_position_err, float):
-        sigma_squared_a = 2 * sq_position_err / (rab**2)
-        sigma_squared_b = 2 * sq_position_err * cos_ijk / (rab * rbc)
-        sigma_squared_c = 2 * sq_position_err / (rbc**2)
-    else:
-        sigma_squared_a = (
-            sq_position_err[:, np.newaxis, np.newaxis]
-            + sq_position_err[np.newaxis, :, np.newaxis]
-        ) / (rab**2)
-        sigma_squared_b = (
-            2 * sq_position_err[np.newaxis, :, np.newaxis] * (cos_ijk) / (rab * rbc)
-        )
-        sigma_squared_c = (
-            sq_position_err[np.newaxis, :, np.newaxis]
-            + sq_position_err[np.newaxis, np.newaxis, :]
-        ) / (rbc**2)
+    sigma_squared_a = (
+        sq_position_err[:, np.newaxis, np.newaxis]
+        + sq_position_err[np.newaxis, :, np.newaxis]
+    ) / (rab**2)
+    sigma_squared_b = (
+        2 * sq_position_err[np.newaxis, :, np.newaxis] * (cos_ijk) / (rab * rbc)
+    )
+    sigma_squared_c = (
+        sq_position_err[np.newaxis, :, np.newaxis]
+        + sq_position_err[np.newaxis, np.newaxis, :]
+    ) / (rbc**2)
     return (sigma_squared_a, sigma_squared_b, sigma_squared_c)
 
 @numba.njit
