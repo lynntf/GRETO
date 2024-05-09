@@ -89,13 +89,14 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
     print(f'[{start.strftime("%H:%M:%S")}] Start')
 
     chunk_size = options["NUM_PROCESSES"] * 100
+    # chunk_size = options["NUM_PROCESSES"] * 1
     chunks = max(n_data_points // chunk_size, 1)
     chunk = 0
     num_events = 1
     previous_position = 1
 
-    if options["VERBOSITY"] >= 3:
-        progress_bar = tqdm(total=final_position, unit="bytes", unit_scale=True)
+    # if options["VERBOSITY"] >= 3:
+    #     progress_bar = tqdm(total=final_position, unit="bytes", unit_scale=True)
 
     if options["NUM_PROCESSES"] > 1:
         with mp.Pool(options["NUM_PROCESSES"]) as pool:  # pylint: disable=E1102
@@ -164,8 +165,8 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                         else:
                             output_file.write(outputs)
                     tracking_processes = []
-                    if options["VERBOSITY"] >= 3:
-                        progress_bar.update(position - previous_position)
+                    # if options["VERBOSITY"] >= 3:
+                    #     progress_bar.update(position - previous_position)
                     previous_position = position
                     if position >= final_position:
                         break
@@ -182,10 +183,11 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
             monitor_progress=False,
             global_coords=options["GLOBAL_COORDS"],
         )
+        outputs = []
         for num_events, coincidence_event in enumerate(mode2_data):
             if coincidence_event is not None:
                 coincidence_event = remove_zero_energy_interactions(coincidence_event)
-                outputs = track_and_get_energy(
+                outputs.append(track_and_get_energy(
                         coincidence_event,
                         options["MONSTER_SIZE"],
                         options["SECONDARY_ORDER"],
@@ -196,7 +198,9 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                         secondary_order_FOM_kwargs,
                         options["SAVE_INTERMEDIATE"],
                         options["SAVE_EXTENDED_MODE1"],
-                    )
+                    ))
+            if options["VERBOSITY"] >= 4:
+                print(coincidence_event)
             position = mode2file.tell()
             if (
                 position // (chunk_size * GEB_EVENT_SIZE) > chunk
@@ -223,9 +227,11 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                         "  Est. time remaining:      "
                         + f"{elapsed_time*(final_position/previous_position - 1)}"
                     )
-                output_file.write(outputs)
-                if options["VERBOSITY"] >= 3:
-                    progress_bar.update(position - previous_position)
+                for output in outputs:
+                    output_file.write(output)
+                outputs = []
+                # if options["VERBOSITY"] >= 3:
+                #     progress_bar.update(position - previous_position)
                 previous_position = position
                 if position >= final_position:
                     break
@@ -265,8 +271,8 @@ def track_simulated(events: List[Event], output_file: BinaryIO, options: Dict):
     chunk = 0
     num_events = 1
 
-    if options["VERBOSITY"] >= 3:
-        progress_bar = tqdm(total=n_data_points, unit="Events", unit_scale=True)
+    # if options["VERBOSITY"] >= 3:
+    #     progress_bar = tqdm(total=n_data_points, unit="Events", unit_scale=True)
     with mp.Pool(options["NUM_PROCESSES"]) as pool:  # pylint: disable=E1102
         tracking_processes = []
         for num_events, coincidence_event in enumerate(events):
@@ -323,8 +329,8 @@ def track_simulated(events: List[Event], output_file: BinaryIO, options: Dict):
                     else:
                         output_file.write(outputs)
                 tracking_processes = []
-                if options["VERBOSITY"] >= 3:
-                    progress_bar.update(chunk_size)
+                # if options["VERBOSITY"] >= 3:
+                #     progress_bar.update(chunk_size)
     print(f'[{datetime.now().strftime("%H:%M:%S")}] Completed')
     print(f"[Total time : {datetime.now() - start}].")
     print(
@@ -429,7 +435,7 @@ def solve_clusters(
             clu = list(clusters.values())[0]
             if order_FOM_kwargs.get("model", None) is not None:
                 ordered_clusters.append(
-                    {1: semi_greedy_batch(ev, clu, **order_FOM_kwargs)}
+                    {1: semi_greedy_batch(ev, clu, batch_size=1000, **order_FOM_kwargs)}
                 )
             else:
                 ordered_clusters.append({1: semi_greedy(ev, clu, **order_FOM_kwargs)})
