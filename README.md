@@ -349,7 +349,7 @@ This software is licensed using the GNU GPL 2.0 license.
 
 ## Copyright
 
-Copyright (C) 2023 Argonne National Laboratory
+Copyright (C) 2024 Argonne National Laboratory
 
 ## Project status
 

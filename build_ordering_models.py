@@ -1,5 +1,5 @@
 """
-Copyright (C) 2023 Argonne National Laboratory
+Copyright (C) 2024 Argonne National Laboratory
 This software is provided without warranty and is licensed under the GNU GPL 2.0 license
 
 Script to build and save models
@@ -20,7 +20,7 @@ from greto import fom_optimization_data as fo
 print("Loading events")
 events, clusters = gr_file_io.load_m30()
 
-N = 200  # number of events to include in training
+N = 2000  # number of events to include in training
 width = 5
 
 print("Creating training data")
@@ -66,6 +66,7 @@ for column_set_name, columns in fo.column_sets.items():
 
         # Loop over solution methods
         for sol_method in ["lr", "svm", "lp", "milp"]:
+        # for sol_method in []:
 
             report = csvm.column_generation(
                 r,
@@ -87,7 +88,7 @@ for column_set_name, columns in fo.column_sets.items():
             column_names = list(np.array(columns)[np.abs(w) > 0.0])
 
             fname = (
-                f"models/test_N{N}_{sol_method}_nonneg{non_neg}_C{C}"
+                f"models/ordering/N{N}_{sol_method}_nonneg{non_neg}_C{C}"
                 + f"_cols-{column_set_name}_width{width}.json"
             )
 
@@ -137,7 +138,7 @@ for column_set_name, columns in fo.column_sets.items():
     print(f"training acc = {solved / (solved + unsolved)}")
 
     ranker_fname = (
-        f"models/N{N}_{sol_method}_C{C_xgb}_cols-{column_set_name}_width{width}.ubj"
+        f"models/ordering/N{N}_{sol_method}_C{C_xgb}_cols-{column_set_name}_width{width}.ubj"
     )
 
     models.save_xgbranker_model(ranker, ranker_fname)
