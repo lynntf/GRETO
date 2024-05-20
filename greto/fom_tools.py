@@ -92,15 +92,15 @@ def cluster_model_FOM(
         model: FOM computing model
         FOM_kwargs: other keyword arguments for FOM computation
     """
-    for s, cluster in clusters.items():
-        # feats = cluster_FOM_features(
-        #     # event, cluster, columns_bool=model.columns_bool, **FOM_kwargs
-        #     event, cluster, model_bvs=model.boolean_vectors, **FOM_kwargs
-        # )
-        feats = ff.get_all_features_cluster(
-            event, cluster, event, bvs=model.boolean_vectors, trim_features=True
-        )
-        print(s, cluster, feats.shape, np.sum(feats))
+    # for s, cluster in clusters.items():
+    #     # feats = cluster_FOM_features(
+    #     #     # event, cluster, columns_bool=model.columns_bool, **FOM_kwargs
+    #     #     event, cluster, model_bvs=model.boolean_vectors, **FOM_kwargs
+    #     # )
+    #     feats = ff.get_all_features_cluster(
+    #         event, cluster, event, bvs=model.boolean_vectors, trim_features=True
+    #     )
+    #     print(s, cluster, feats.shape, np.sum(feats))
 
     return {
         s: model.predict(

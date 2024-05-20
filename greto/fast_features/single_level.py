@@ -77,7 +77,7 @@ def single_values(
             dependencies_dict[name] = dependencies
 
     if compute_mode:
-        print(permutation)
+        # print(permutation)
         linear_attenuation = phys.lin_att_total_fit(
             event_calc.energy_matrix[permutation[0]]
         )

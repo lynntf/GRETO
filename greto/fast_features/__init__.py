@@ -384,6 +384,7 @@ def get_perm_features(
     else:
         features = np.zeros((number_of_feature_values,))
 
+    # TANGO values
     if (
         bvs is not None
         and njit_any(bvs.perm_boolean_vector_tango)

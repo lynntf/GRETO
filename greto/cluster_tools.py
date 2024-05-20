@@ -22,6 +22,7 @@ from greto.interaction_class import Interaction
 
 num_property_features = 16
 
+
 def remove_interactions(
     event: Event,
     removal_indices: List[int],
@@ -354,7 +355,12 @@ def split_event(event: Event, clusters: Dict):
     """
     new_events, new_clusters = [], []
     for i, cluster in clusters.items():
-        new_events.append(Event((event.id, i, tuple(event.points[cluster[0]].x)), [event.points[j] for j in cluster]))
+        new_events.append(
+            Event(
+                (event.id, i, tuple(event.points[cluster[0]].x)),
+                [event.points[j] for j in cluster],
+            )
+        )
         new_clusters.append({i: tuple(range(1, len(cluster) + 1))})
     return new_events, new_clusters
 
@@ -1749,3 +1755,86 @@ def pack_list(
         p_events.append(single_p_event)
         p_clusters.append(single_p_clusters)
     return p_events, p_clusters
+
+
+def true_clusters_captured(clusters_true: Dict, clusters_pred: Dict):
+    """Determine if true clusters have been split into multiple other predicted
+    clusters, joined with other true clusters, or both (or neither: correctly
+    captured).
+
+    Args:
+        - clusters_true: the clusters to check if split or joined
+        - clusters_pred: the clusters that are possible split/joined true
+          clusters
+
+    Note: swapping clusters_true and clusters_pred will possibly change some
+    labels for clusters, but in general represents the same type of information
+    (split true clusters -> joined predicted clusters going the other way)
+
+    Returns:
+        - Dict indicating if the cluster with true cluster_ID was tuple(correct,
+          split, joined)
+    """
+    labels_pred = invert_clusters(clusters_pred)
+    labels_true = invert_clusters(clusters_true)
+    cluster_evaluation = {}
+    for cluster_ID, cluster_true in clusters_true.items():
+        # Count the number of different clusters used in the predicted data
+        # Count if the predicted cluster contains all the elements of the true cluster
+        # Count if the predicted cluster contains elements of other true clusters
+        # Are all true indices inside the cluster?
+        # Are there other indices inside the cluster?
+        used_labels = set()
+        for index in cluster_true:
+            used_labels.add(labels_pred[index])
+            split_up_flag = len(used_labels) > 1
+            joined_flag = False
+            for label in used_labels:
+                for j in clusters_pred[label]:
+                    if labels_true[j] != cluster_ID:
+                        joined_flag = True
+                        break
+            correct_flag = False
+            if not split_up_flag and not joined_flag:
+                correct_flag = True
+        cluster_evaluation[cluster_ID] = [correct_flag, split_up_flag, joined_flag]
+        # correct += correct_flag
+        # split_up += split_up_flag
+        # joined += joined_flag
+    # return correct, split_up, joined, num_clusters
+    return cluster_evaluation
+
+
+def compare_clusterings(list_of_true_clusters, list_of_test_clusters):
+    """Evaluate if the test_clusters match the true_clusters."""
+    evaluations = []
+    for true_clusters, test_clusters in zip(
+        list_of_true_clusters, list_of_test_clusters
+    ):
+        # Note order here: evaluating the test_clusters
+        evaluations.append(true_clusters_captured(test_clusters, true_clusters))
+    return evaluations
+
+
+def cluster_mappings(clusters_true: Dict, clusters_pred: Dict):
+    """Determine which clusters map to each other from either direction
+
+    Args:
+        - clusters_true: the clusters to map to clusters_pred
+        - clusters_pred: the clusters to map to clusters_true
+
+    Returns:
+        - true_to_pred: dict with true keys and values: keys in predicted clustering
+        - pred_to_true: dict with predicted keys and values: keys in true clustering
+    """
+    labels_pred = invert_clusters(clusters_pred)
+    labels_true = invert_clusters(clusters_true)
+    true_to_pred = {
+        cluster_ID: tuple(set(labels_pred[i] for i in cluster))
+        for cluster_ID, cluster in clusters_true.items()
+    }
+    pred_to_true = {
+        cluster_ID: tuple(set(labels_true[i] for i in cluster))
+        for cluster_ID, cluster in clusters_pred.items()
+    }
+    return true_to_pred, pred_to_true

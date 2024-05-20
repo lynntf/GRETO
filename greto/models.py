@@ -232,7 +232,7 @@ def load_xgbranker_model(filename: str) -> xgb.XGBRanker:
     """
     ranker = xgb.XGBRanker()
     ranker.load_model(filename)
-    ranker.get_booster().set_param({"device": "cpu", "nthread" : 1})
+    ranker.get_booster().set_param({"device": "cpu", "nthread": 1})
     return ranker
 
 
@@ -275,12 +275,12 @@ class sns_model:
     Maintains two separate models, one for singles data, one for non-singles.
     Fits and predicts separately using these models and then combines them for a
     final combined model.
-    
+
     Q: Why might we want separate models for singles and non-singles?
     A: Data imbalance. Different behaviors. Inability to capture either
     independently in a single model. Additional model flexibility. Independent
     feature scaling (keeping zero features changes scaling).
-    
+
     In general, we should not expect that a model need to be trained on singles
     and non-singles separately. Having zero value features for the irrelevant
     values should be sufficient. However, it seems that performance is better
@@ -328,6 +328,7 @@ class sns_model:
         self.lb = lower_bound
         self.ub = upper_bound
 
+    @classmethod
     def split(self, X: np.ndarray, train_frac: float = 0.75, random_state: int = 42):
         """
         Get indices that split the data into testing and training
@@ -390,17 +391,25 @@ class sns_model:
             # models, generate the predictions from the models
             if self.model is LogisticRegression:
                 pred_ns = self.model_ns.predict_proba(
-                    self.scaler_ns.transform(np.clip(X[~singles], self.lb, self.ub))
+                    self.pca_ns.transform(
+                        self.scaler_ns.transform(np.clip(X[~singles], self.lb, self.ub))
+                    )
                 )[:, 1]
                 pred_s = self.model_s.predict_proba(
-                    self.scaler_s.transform(np.clip(X[singles], self.lb, self.ub))
+                    self.pca_s.transform(
+                        self.scaler_s.transform(np.clip(X[singles], self.lb, self.ub))
+                    )
                 )[:, 1]
             else:
                 pred_ns = self.model_ns.predict(
-                    self.scaler_ns.transform(np.clip(X[~singles], self.lb, self.ub))
+                    self.pca_ns.transform(
+                        self.scaler_ns.transform(np.clip(X[~singles], self.lb, self.ub))
+                    )
                 )
                 pred_s = self.model_s.predict(
-                    self.scaler_s.transform(np.clip(X[singles], self.lb, self.ub))
+                    self.pca_s.transform(
+                        self.scaler_s.transform(np.clip(X[singles], self.lb, self.ub))
+                    )
                 )
 
             # Join the predictions from both models

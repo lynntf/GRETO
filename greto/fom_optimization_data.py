@@ -9,13 +9,15 @@ optimization process
 """
 
 from itertools import permutations
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 import greto.fast_features as ff
-from greto.cluster_tools import pack_and_smear_list
+from greto.fom_tools import semi_greedy, semi_greedy_batch
+from greto.cluster_tools import pack_and_smear_list, cluster_mappings, cluster_linkage
 from greto.event_class import Event
 from greto.event_tools import split_event_clusters
 
@@ -161,6 +163,161 @@ def generate_semi_greedy_data(
         acceptable,
         true_cluster_ids,
     )
+
+
+def singles_nonsingles_data_creation(
+    events: List[Event],
+    ordered_clusters_dict: List[Dict],
+    debug: bool = True,
+    true_energies: Optional[Dict] = None,
+    tol: float = 2e-2,
+):
+    """
+    Generate a dictionary of data from ordered clusters for training a
+    singles/non-singles classification model.
+
+    Splits the g-ray events into single g-rays. Then generates features for each
+    ordered cluster. Clusters should be ordered before being passed to this function.
+    """
+    if debug:
+        print("splitting rays")
+    (
+        ray_energies,
+        ray_true_energy,
+        ray_completeness,
+        ray_absorption,
+        ray_pair_production,
+        ray_events,
+        ray_clusters,
+        ray_cluster_id,
+        ray_event_id,
+        ray_length,
+    ) = split_g_ray_events(
+        events, ordered_clusters_dict, tol=tol, true_energies=true_energies
+    )
+
+    data = {
+        "energy": ray_energies,
+        "true_energy": ray_true_energy,
+        "completeness": ray_completeness,
+        "absorption": ray_absorption,
+        "pair_production": ray_pair_production,
+        "events": ray_events,
+        "clusters": ray_clusters,
+        "cluster_ids": ray_cluster_id,
+        "event_ids": ray_event_id,
+        "length": ray_length,
+        "feature_names": ff.all_feature_names,
+    }
+
+    if debug:
+        print("generating features")
+    features = []
+    for event, clu in zip(ray_events, ray_clusters):
+        event_calc = ff.get_event_level_values(event, None)
+        for cluster in clu.values():
+            perm_features = ff.get_perm_features(
+                event, event_calc, cluster, 0, None, None, None, False
+            )
+            single_features = ff.get_single_features(
+                event, event_calc, cluster, None, False
+            )
+            cluster_features = ff.get_cluster_features(
+                event_calc, cluster, None, None, False
+            )
+            features.append(
+                np.concatenate(
+                    (perm_features, single_features, cluster_features), axis=0
+                )
+            )
+    features = np.array(features)
+
+    features[np.isnan(features)] = 0.0
+    features[~np.isfinite(features)] = 0.0
+
+    data["features"] = features
+
+    return data
+
+
+# def generate_single_order_data(
+#     event: Event,
+#     true_clusters: Dict[int, List],
+#     true_energies: Dict[int, float],
+#     tol: float = 1e-2,
+#     max_cluster_size: int = 7,
+#     remove_pair_production: bool = True,
+#     width: int = 5,
+#     **kwargs,  # pylint: disable=unused-argument
+# ) -> Tuple[List]:
+#     """
+#     Feature generation for single events. Get the features for the true order,
+#     then all other orders, and concatenate each order with the true order.
+
+#     Only creates data pairs between the true order and other orders.
+#     Does partial orders that would be used by a semi-greedy method.
+#     """
+#     features = []
+#     # y = []
+#     complete_energy = []
+#     energy_sums = []
+#     count = 0
+#     correct_solution_index = []
+#     other_solution_index = []
+#     lengths = []
+#     cluster_ids = []
+#     true_cluster_ids = []
+#     acceptable = []
+#     first_int_good = []
+#     optimal_order = []
+#     cluster_count = 1
+
+#     event_calc = ff.get_event_level_values(event)
+#     for cluster_id, cluster in true_clusters.items():
+#         if len(cluster) >= max_cluster_size:
+#             continue
+#         if remove_pair_production:
+#             # remove pair production interactions and others; ordering doesn't make sense here
+#             if any(event.points[i].interaction_type > 2 for i in cluster):
+#                 continue
+
+#         if len(cluster) <= 1:
+#             single_features = ff.get_single_features(
+#                 event, event_calc, cluster, None, False
+#             )
+#             perm_features = np.zeros((ff.number_of_feature_values,))
+#         else:
+#             single_features = np.zeros((ff.number_of_single_feature_values,))
+#             perm_features = ff.get_perm_features(
+#                 event, event_calc, cluster, 0, None, None, None, False
+#             )
+
+#         energy_sum = sum(event.points[i].e for i in cluster)
+#         complete = abs(energy_sum - true_energies[cluster_id]) < tol
+#         ordered = True
+
+#         features.append(np.concatenate((perm_features, single_features), axis=0))
+#         # y.append([not ordered, not complete, not(ordered and complete)])
+#         complete_energy.append(complete)
+#         optimal_order.append(ordered)
+#         energy_sums.append(energy_sum)
+#         cluster_ids.append(cluster_count)
+#         true_cluster_ids.append(cluster_id)
+#         lengths.extend(l * [l])
+#         cluster_count += 1
+
+#     return (
+#         features,
+#         optimal_order,
+#         complete_energy,
+#         energy_sums,
+#         lengths,
+#         correct_solution_index,
+#         other_solution_index,
+#         cluster_ids,
+#         acceptable,
+#         true_cluster_ids,
+#     )
 
 
 def generate_semi_greedy_data_single_cluster(
@@ -367,6 +524,115 @@ def build_data_single_rays(
 #         cid,
 #         acceptable,
 #         optimal_order,
+#     )
+
+
+# def make_classification_data(
+#     packed_smeared_events: List[Event],
+#     packed_clusters: List[Dict[int, List]],
+#     true_energies: Dict = None,
+#     max_cluster_size: int = 6,
+#     # seed: int = 42,
+#     # test_train_split: float = 0.33,
+#     debug: bool = False,
+#     semi_greedy_width: int = None,
+#     remove_pair_production: bool = True,
+#     **kwargs,
+# ) -> Tuple[np.ndarray]:
+#     """
+#     Method for generating features for prepped events and clusters
+
+#     Repeatedly invokes `generate_all_data` and manages the indices coming from
+#     there.
+
+#     Returns:
+#     - features
+#     - ordered
+#     - complete
+#     - energy_sums
+#     - lengths
+#     - opt_index
+#     - other_index
+#     - cluster_ids
+#     - acceptable
+#     - event_ids
+#     - true_cluster_ids
+#     """
+#     if true_energies is None:
+#         true_energies = m30_true_energies
+#     features = []
+#     ordered = []
+#     complete = []
+#     energy_sums = []
+#     lengths = []
+#     opt_index = []
+#     other_index = []
+#     cluster_ids = []
+#     true_cluster_ids = []
+#     event_ids = []
+#     # train_label = []
+#     acceptable = []
+#     num_clusters = 0
+#     count = 0
+
+#     # rng = np.random.RandomState(seed)  # RNG for test-train split
+
+#     for (event_id, event), cluster in zip(
+#         enumerate(packed_smeared_events), packed_clusters
+#     ):
+#         x, order, comp, e, l, i1, i2, cid, acc, t_cid = generate_semi_greedy_data(
+#             event,
+#             cluster,
+#             true_energies=true_energies,
+#             max_cluster_size=max_cluster_size,
+#             width=semi_greedy_width,
+#             remove_pair_production=remove_pair_production,
+#             **kwargs,
+#         )
+#         if len(x) > 0:
+#             opt_index.extend([len(features) + i for i in i1])
+#             other_index.extend([len(features) + i for i in i2])
+#             features.extend(x)
+#             ordered.extend(order)
+#             complete.extend(comp)
+#             energy_sums.extend(e)
+#             lengths.extend(l)
+#             cluster_ids.extend([i + num_clusters for i in cid])
+#             num_clusters += cid[-1]
+#             count += 1
+#             # Randomly assign testing and training data
+#             # train_label.extend([rng.uniform() < 1 - test_train_split]*len(x))
+#             acceptable.extend(acc)
+#             event_ids.extend([event_id] * len(x))
+#             true_cluster_ids.extend(t_cid)
+
+#     features = np.array(features)
+#     ordered = np.array(ordered)
+#     complete = np.array(complete)
+#     energy_sums = np.array(energy_sums)
+#     lengths = np.array(lengths)
+#     opt_index = np.array(opt_index)
+#     other_index = np.array(other_index)
+#     cluster_ids = np.array(cluster_ids)
+#     # train_label = np.array(train_label)
+#     acceptable = np.array(acceptable)
+#     event_ids = np.array(event_ids)
+#     true_cluster_ids = np.array(true_cluster_ids)
+#     if debug:
+#         print(f"Generated data for {len(np.unique(cluster_ids))} clusters")
+
+#     return (
+#         features,
+#         ordered,
+#         complete,
+#         energy_sums,
+#         lengths,
+#         opt_index,
+#         other_index,
+#         cluster_ids,
+#         acceptable,
+#         event_ids,
+#         true_cluster_ids,
 #     )
 
 
@@ -609,7 +875,7 @@ def cluster_eval(
         for cluster_id, cluster_energy_sum in energy_sum.items():
             if isinstance(true_energies, dict):
                 complete[cluster_id] = (
-                    np.abs(true_energies[cluster_id] - cluster_energy_sum) < tol
+                    np.abs(true_energies.get(cluster_id, -10) - cluster_energy_sum) < tol
                 )
             elif use_list:
                 complete[cluster_id] = (
@@ -685,7 +951,108 @@ def split_g_ray_events(
         energy_sums = event.energy_sums(cluster)
         ray_energies.extend(energy_sums.values())
         if isinstance(true_energies, dict):
-            ray_true_energies.extend([true_energies[k] for k in cluster.keys()])
+            ray_true_energies.extend([true_energies.get(k, -10.0) for k in cluster.keys()])
+        else:
+            ray_true_energies.extend([0] * len(cluster))
+        ray_completeness.extend(complete.values())
+        ray_absorption.extend(absorb.values())
+        ray_pair_production.extend(pair_prod.values())
+        new_events, new_clusters = split_event_clusters(event, cluster)
+        ray_events.extend(new_events)
+        ray_clusters.extend(new_clusters)
+        ray_cluster_id.extend(cluster.keys())
+        ray_event_id.extend([event_id] * len(cluster.keys()))
+        ray_length.extend([len(a) for a in cluster.values()])
+    return (
+        np.array(ray_energies),
+        np.array(ray_true_energies),
+        np.array(ray_completeness),
+        np.array(ray_absorption),
+        np.array(ray_pair_production),
+        np.array(ray_events),
+        np.array(ray_clusters),
+        np.array(ray_cluster_id),
+        np.array(ray_event_id),
+        np.array(ray_length),
+    )
+
+
+def split_g_ray_events_reclustered(
+    events: list[Event],
+    predicted_clusters: list[dict],
+    true_clusters: list[dict],
+    tol: float = 2e-2,
+    true_energies: dict = None,
+    # include_pair_production: bool = False,
+):
+    """
+    We want to split the events into individual pieces so we can balance the created data
+
+    - events: g-ray events list
+    - clusters: g-ray events clusters list of dicts
+    - tol: energy tolerance for determining if the g-ray is a complete deposit
+    - true_energies: true energy for each cluster/g-ray id
+    # - include_pair_production: include the pair-production g-rays
+
+    Returns
+    - ray_energies: list of energy sums from each cluster
+    - ray_true_energy: list of true emitted energy from each cluster
+    - ray_completeness: list of booleans indicating if the energy deposit is complete
+    - ray_absorption: list of booleans indicating if the g-ray ends in absorption
+    - ray_pair_production: list of booleans indicating if the g-ray undergoes pair production
+    - ray_events: list of events containing just one g-ray
+    - ray_clusters: list of clustering dictionaries with just one g-ray
+    - ray_cluster_id: list of original cluster ids
+    - ray_event_id: list of original event ids
+    - ray_length: list of cluster lengths for each g-ray
+    """
+    if true_energies is None:
+        true_energies = m30_true_energies
+    true_completes, true_absorbs, _ = cluster_eval(
+        events, true_clusters, tol=tol, true_energies=true_energies
+    )
+
+    _, _, pair_prods = cluster_eval(
+        events, predicted_clusters, tol=tol, true_energies=true_energies
+    )
+
+    completes = []
+    absorbs = []
+
+    for true_clustering, pred_clustering, true_complete, true_absorb in zip(
+        true_clusters, predicted_clusters, true_completes, true_absorbs
+    ):
+        true_to_pred, pred_to_true = cluster_mappings(true_clustering, pred_clustering)
+        complete = {cluster_ID: False for cluster_ID in pred_clustering}
+        absorb = {cluster_ID: False for cluster_ID in pred_clustering}
+        for cluster_ID in true_clustering:
+            if len(true_to_pred[cluster_ID]) == 1:
+                if len(pred_to_true[true_to_pred[cluster_ID][0]]) == 1:
+                    complete[true_to_pred[cluster_ID][0]] = true_complete[cluster_ID]
+                    absorb[true_to_pred[cluster_ID][0]] = true_absorb[cluster_ID]
+        completes.append(complete)
+        absorbs.append(absorb)
+
+    ray_energies = []
+    ray_true_energies = []
+    ray_completeness = []
+    ray_absorption = []
+    ray_pair_production = []
+    ray_events = []
+    ray_clusters = []
+    ray_cluster_id = []
+    ray_event_id = []
+    ray_length = []
+    for (event_id, event), cluster, complete, absorb, pair_prod in zip(
+        enumerate(events), predicted_clusters, completes, absorbs, pair_prods
+    ):
+        # if not include_pair_production:
+        #     if pair_prod:
+        #         continue
+        energy_sums = event.energy_sums(cluster)
+        ray_energies.extend(energy_sums.values())
+        if isinstance(true_energies, dict):
+            ray_true_energies.extend([true_energies.get(k, -10.0) for k in cluster.keys()])
         else:
             ray_true_energies.extend([0] * len(cluster))
         ray_completeness.extend(complete.values())
@@ -1437,6 +1804,363 @@ def create_data(
             "acceptable",
             "event_ids",
             "true_cluster_ids",
+        ],
+    )
+    return df_X, df_Y
+
+
+def create_classification_data(
+    list_of_events: List[Event],
+    list_of_clusters: List[Dict],
+    tol: float = 0.02,
+    true_energies: dict = None,
+    max_clusters_size: int = 6,
+    seed: int = 42,
+    packing_distance: float = 0.6,
+    energy_threshold: float = 0.005,
+    use_true: bool = False,
+    **order_FOM_kwargs,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Create feature data from pristine events and clusters
+
+    Args:
+        - list_of_events: list of gamma-ray events
+        - list_of_clusters: list of interaction cluster dictionaries
+        - tol: energy tolerance for determining if the g-ray is a full energy
+          deposit
+        - true_energies: dictionary of the true energies corresponding to each
+          cluster_id
+        - max_clusters_size: maximum cluster size; larger clusters not processed
+        - semi_greedy_width: width of permutation used to generate data
+          (complete enumeration for all shorter clusters)
+        - seed: random number generator seed
+        - packing_distance: interactions closer than this distance [cm] are combined
+        - energy_threshold: interactions with energies below this value are deleted
+
+    Returns:
+        - df_X: pandas dataframe with features
+        - df_Y: pandas dataframe with descriptors of data
+    """
+    if true_energies is None:
+        true_energies = m30_true_energies
+
+    # Split events into individual g-rays
+    print("Splitting gamma-rays")
+    (
+        _,  # energies
+        _,  # true_energies,
+        completeness,  # completeness
+        _,  # absorption
+        _,  # pair_production
+        list_of_events,
+        list_of_clusters,
+        _,  # cluster_id
+        _,  # event_id
+        _,  # length
+    ) = split_g_ray_events(
+        list_of_events,
+        list_of_clusters,
+        true_energies=true_energies,
+        tol=tol,
+    )
+
+    # pack and smear each individual g-ray
+    print("Packing and smearing gamma-rays")
+    list_of_events, list_of_clusters = pack_and_smear_list(
+        list_of_events,
+        list_of_clusters,
+        packing_distance=packing_distance,
+        energy_threshold=energy_threshold,
+        seed=seed,
+    )
+
+    # reevaluate the individual g-rays
+    print("Re-splitting gamma-rays")
+    (
+        _,  # energies
+        _,  # true_energies,
+        _,  # completeness
+        _,  # absorption
+        _,  # pair_production
+        list_of_events,
+        list_of_clusters,
+        _,  # cluster_id
+        _,  # event_id
+        _,  # length
+    ) = split_g_ray_events(
+        list_of_events, list_of_clusters, true_energies=true_energies, tol=tol
+    )
+
+    # Order the clusters
+    ordered_list_of_clusters = []
+    first_one = []
+    first_two = []
+    ordered = []
+
+    print("Ordering clusters")
+    for clu, ev in zip(tqdm(list_of_clusters), list_of_events):
+        ordered_clusters = {}
+        for cluster_id, cluster in clu.items():
+            if len(cluster) > 1 and not use_true:
+                if order_FOM_kwargs.get("model", None) is not None:
+                    ordered_cluster = semi_greedy_batch(
+                        ev,
+                        cluster,
+                        max_cluster_size=max_clusters_size,
+                        **order_FOM_kwargs,
+                    )
+                else:
+                    ordered_cluster = semi_greedy(
+                        ev,
+                        cluster,
+                        max_cluster_size=max_clusters_size,
+                        **order_FOM_kwargs,
+                    )
+
+                ordered_clusters[cluster_id] = ordered_cluster
+                if cluster[0] == ordered_cluster[0]:
+                    first_one.append(True)
+                    if cluster[1] == ordered_cluster[1]:
+                        first_two.append(True)
+                    else:
+                        first_two.append(False)
+                else:
+                    first_one.append(False)
+                    first_two.append(False)
+                ordered.append(
+                    all(
+                        ind == ordered_ind
+                        for ind, ordered_ind in zip(cluster, ordered_cluster)
+                    )
+                )
+            else:
+                ordered_clusters[cluster_id] = cluster
+                first_one.append(True)
+                first_two.append(True)
+                ordered.append(True)
+        ordered_list_of_clusters.append(ordered_clusters)
+
+    print("Creating features")
+    data_dict = singles_nonsingles_data_creation(
+        list_of_events, ordered_list_of_clusters, true_energies=true_energies
+    )
+
+    print("Building dataframes")
+    df_X = pd.DataFrame(data=data_dict["features"], columns=data_dict["feature_names"])
+    df_Y = pd.DataFrame(
+        data=np.vstack(
+            (
+                data_dict["energy"],
+                data_dict["true_energy"],
+                data_dict["completeness"],
+                data_dict["absorption"],
+                data_dict["pair_production"],
+                data_dict["cluster_ids"],
+                data_dict["event_ids"],
+                data_dict["length"],
+                first_one,
+                first_two,
+                ordered,
+            )
+        ).transpose(),
+        columns=[
+            "energy_sums",
+            "true_energy",
+            "complete",
+            "absorption",
+            "pair_production",
+            "cluster_ids",
+            "event_ids",
+            "lengths",
+            "first_one",
+            "first_two",
+            "ordered",
+        ],
+    )
+    return df_X, df_Y
+
+def create_classification_data_with_clustering(
+    list_of_events: List[Event],
+    list_of_clusters: List[Dict],
+    tol: float = 0.02,
+    true_energies: dict = None,
+    max_clusters_size: int = 6,
+    seed: int = 42,
+    packing_distance: float = 0.6,
+    energy_threshold: float = 0.005,
+    use_true: bool = False,
+    alpha_degrees: float = 13.0,
+    **order_FOM_kwargs,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Create feature data from pristine events and clusters
+
+    Args:
+        - list_of_events: list of gamma-ray events
+        - list_of_clusters: list of interaction cluster dictionaries
+        - tol: energy tolerance for determining if the g-ray is a full energy
+          deposit
+        - true_energies: dictionary of the true energies corresponding to each
+          cluster_id
+        - max_clusters_size: maximum cluster size; larger clusters not processed
+        - semi_greedy_width: width of permutation used to generate data
+          (complete enumeration for all shorter clusters)
+        - seed: random number generator seed
+        - packing_distance: interactions closer than this distance [cm] are combined
+        - energy_threshold: interactions with energies below this value are deleted
+
+    Returns:
+        - df_X: pandas dataframe with features
+        - df_Y: pandas dataframe with descriptors of data
+    """
+    if true_energies is None:
+        true_energies = m30_true_energies
+
+    print(f"Reclustering events using alpha_degrees = {alpha_degrees}")
+    predicted_clusters = []
+    for event in list_of_events:
+        predicted_clusters.append(cluster_linkage(event, alpha_degrees=alpha_degrees))
+
+    # Split events into individual g-rays
+    print("Splitting gamma-rays")
+    (
+        _,  # energies
+        _,  # true_energies,
+        completeness,  # completeness
+        _,  # absorption
+        _,  # pair_production
+        list_of_events,
+        list_of_clusters,
+        _,  # cluster_id
+        _,  # event_id
+        _,  # length
+    ) = split_g_ray_events_reclustered(
+        list_of_events,
+        predicted_clusters,
+        list_of_clusters,
+        true_energies=true_energies,
+        tol=tol,
+    )
+    
+    # print(f"{len(list_of_events)} g-rays and {len(completeness)} complete values")
+
+    # pack and smear each individual g-ray
+    print("Packing and smearing gamma-rays")
+    list_of_events, list_of_clusters = pack_and_smear_list(
+        list_of_events,
+        list_of_clusters,
+        packing_distance=packing_distance,
+        energy_threshold=energy_threshold,
+        seed=seed,
+    )
+    
+    # print(f"{len(list_of_events)} g-rays and {len(completeness)} complete values")
+
+    # reevaluate the individual g-rays
+    print("Re-splitting gamma-rays")
+    (
+        _,  # energies
+        _,  # true_energies,
+        _,  # completeness
+        _,  # absorption
+        _,  # pair_production
+        list_of_events,
+        list_of_clusters,
+        _,  # cluster_id
+        _,  # event_id
+        _,  # length
+    ) = split_g_ray_events(
+        list_of_events, list_of_clusters, true_energies=true_energies, tol=tol
+    )
+    
+    # print(f"{len(list_of_events)} g-rays and {len(completeness)} complete values")
+
+    # Order the clusters
+    ordered_list_of_clusters = []
+    first_one = []
+    first_two = []
+    ordered = []
+
+    print("Ordering clusters")
+    for clu, ev in zip(tqdm(list_of_clusters), list_of_events):
+        ordered_clusters = {}
+        for cluster_id, cluster in clu.items():
+            if len(cluster) > 1 and not use_true:
+                if order_FOM_kwargs.get("model", None) is not None:
+                    ordered_cluster = semi_greedy_batch(
+                        ev,
+                        cluster,
+                        max_cluster_size=max_clusters_size,
+                        **order_FOM_kwargs,
+                    )
+                else:
+                    ordered_cluster = semi_greedy(
+                        ev,
+                        cluster,
+                        max_cluster_size=max_clusters_size,
+                        **order_FOM_kwargs,
+                    )
+
+                ordered_clusters[cluster_id] = ordered_cluster
+                if cluster[0] == ordered_cluster[0]:
+                    first_one.append(True)
+                    if cluster[1] == ordered_cluster[1]:
+                        first_two.append(True)
+                    else:
+                        first_two.append(False)
+                else:
+                    first_one.append(False)
+                    first_two.append(False)
+                ordered.append(
+                    all(
+                        ind == ordered_ind
+                        for ind, ordered_ind in zip(cluster, ordered_cluster)
+                    )
+                )
+            else:
+                ordered_clusters[cluster_id] = cluster
+                first_one.append(True)
+                first_two.append(True)
+                ordered.append(True)
+        ordered_list_of_clusters.append(ordered_clusters)
+
+    print("Creating features")
+    data_dict = singles_nonsingles_data_creation(
+        list_of_events, ordered_list_of_clusters, true_energies=true_energies
+    )
+
+    print("Building dataframes")
+    df_X = pd.DataFrame(data=data_dict["features"], columns=data_dict["feature_names"])
+    df_Y = pd.DataFrame(
+        data=np.vstack(
+            (
+                data_dict["energy"],
+                # data_dict["true_energy"],
+                completeness,
+                # data_dict["completeness"],
+                data_dict["absorption"],
+                data_dict["pair_production"],
+                data_dict["cluster_ids"],
+                data_dict["event_ids"],
+                data_dict["length"],
+                first_one,
+                first_two,
+                ordered,
+            )
+        ).transpose(),
+        columns=[
+            "energy_sums",
+            # "true_energy",
+            "complete",
+            "absorption",
+            "pair_production",
+            "cluster_ids",
+            "event_ids",
+            "lengths",
+            "first_one",
+            "first_two",
+            "ordered",
         ],
     )
     return df_X, df_Y

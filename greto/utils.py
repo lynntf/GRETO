@@ -113,7 +113,9 @@ def njit_sum(a):
 @numba.njit
 def njit_mean(a):
     """mean of a vector"""
-    return np.sum(a) / len(a)
+    if len(a) > 0:
+        return np.sum(a) / len(a)
+    return np.sum(a)
 
 @numba.njit
 def njit_any(a):
