@@ -37,7 +37,7 @@ from greto.fom_tools import (
     cluster_model_FOM,
 )
 from greto.utils import get_file_size
-from greto.models import load_FOM_model
+from greto.models import load_order_FOM_model
 
 
 def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
@@ -61,7 +61,7 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
     order_model = None
     if order_FOM_kwargs.get("fom_method") == "model":
         if order_FOM_kwargs.get("model_filename") is not None:
-            order_model = load_FOM_model(order_FOM_kwargs.get("model_filename"))
+            order_model = load_order_FOM_model(order_FOM_kwargs.get("model_filename"))
         else:
             raise ValueError("Provide model filename for ordering")
     order_FOM_kwargs["model"] = order_model
@@ -69,7 +69,7 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
     secondary_order_model = None
     if secondary_order_FOM_kwargs.get("fom_method") == "model":
         if secondary_order_FOM_kwargs.get("model_filename") is not None:
-            secondary_order_model = load_FOM_model(
+            secondary_order_model = load_order_FOM_model(
                 order_FOM_kwargs.get("model_filename")
             )
         else:

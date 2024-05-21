@@ -8,6 +8,7 @@ TODO: Scikit-learn integration?
 """
 
 import json
+import pickle as pkl
 import warnings
 from typing import Dict, Iterable, Optional
 
@@ -18,7 +19,9 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 import greto.fast_features as ff
-from greto.fom_tools import FOM_model  # , column_names_to_bool, permute_column_names
+from greto.fom_tools import FOM_model
+
+# , column_names_to_bool, permute_column_names
 
 
 class LinearModel:
@@ -206,9 +209,10 @@ class xgbranker_FOM_model:
         # return self.model.predict(perm_X)
 
 
-def save_xgbranker_model(
-    ranker: xgb.XGBRanker,
+def save_xgb_model(
+    model: xgb.XGBRanker | xgb.XGBClassifier,
     filename: str,
+    columns:list[str] = None,
 ) -> None:
     """
     Save a XGBoost Ranker model (feature scaling is not used)
@@ -220,7 +224,9 @@ def save_xgbranker_model(
     # d = json.loads(ranker.get_booster().save_raw("json"))  # Model as dict
     # with open(filename, "w", encoding="utf-8") as f:
     #     json.dump(d, f)
-    ranker.save_model(filename)
+    if columns is not None:
+        model.get_booster().feature_names = columns
+    model.save_model(filename)
 
 
 def load_xgbranker_model(filename: str) -> xgb.XGBRanker:
@@ -247,13 +253,13 @@ def load_xgbranker_FOM_model(filename: str) -> FOM_model:
     return xgbranker_FOM_model(ranker)
 
 
-def load_FOM_model(filename: str) -> FOM_model:
+def load_order_FOM_model(filename: str) -> FOM_model:
     """
     Load a FOM_model using data inside the saved model to determine the model
     type
 
     Args:
-        - filename: filename for saved model [`.json`]
+        - filename: filename for saved model [`.ubj` or `.json`]
     """
     if filename.endswith(".ubj"):
         print(f"Model {filename} is assumed to be XGB Ranker")
@@ -266,6 +272,40 @@ def load_FOM_model(filename: str) -> FOM_model:
     else:
         print(f"Model {filename} is assumed to be XGB Ranker")
         return load_xgbranker_FOM_model(filename)
+
+
+def load_xgbclassifier_FOM_model(filename):
+    """Load an XGBoost classifier"""
+    lb = 0
+    ub = 1e16
+    classifier = xgb.XGBClassifier()
+    classifier.load_model(filename)
+    columns = classifier.get_booster().feature_names
+    if columns is None:
+        columns = ff.all_feature_names
+    return FOM_model(
+        lambda X: classifier.predict_proba(np.clip(X, lb, ub))[:, 0],
+        columns,
+        None,
+        classifier,
+    )
+
+
+def load_suppression_FOM_model(filename: str) -> FOM_model:
+    """
+    Load a FOM_model using data inside the saved model to determine the model
+    type
+
+    Args:
+        - filename: filename for saved model [`.pkl` or `.ubj`]
+    """
+    if filename.endswith(".ubj"):
+        print(f"Model {filename} is assumed to be XGB Ranker")
+        return load_xgbclassifier_FOM_model(filename)
+    if filename.endswith(".pkl"):
+        with open(filename, "rb") as f:
+            model = pkl.load(f)
+            return FOM_model(model.predict, ff.all_feature_names, None, model)
 
 
 class sns_model:
@@ -301,6 +341,7 @@ class sns_model:
         lower_bound: float = 0.0,
         upper_bound: float = 1e6,
         pca_n_components: float = 0.95,
+        columns: list[str] = None,
         **kwargs,
     ):
         """
@@ -312,6 +353,10 @@ class sns_model:
             - use_combiner: combine the singles and non-single models using a third model
         """
         self.model = model_class
+
+        self.columns = columns
+        if self.columns is None:
+            self.columns = ff.all_feature_names
 
         self.scaler_ns = scaler_class()
         self.model_ns = model_class(**kwargs)

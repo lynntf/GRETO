@@ -141,4 +141,4 @@ for column_set_name, columns in fo.column_sets.items():
         f"models/ordering/N{N}_{sol_method}_C{C_xgb}_cols-{column_set_name}_width{width}.ubj"
     )
 
-    models.save_xgbranker_model(ranker, ranker_fname)
+    models.save_xgb_model(ranker, ranker_fname)
