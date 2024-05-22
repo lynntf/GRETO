@@ -74,6 +74,8 @@ def cluster_FOM(
             this event.
         FOM_kwargs (Dict): kwargs for the FOM to be used
     """
+    if FOM_kwargs.get("model", None) is not None:
+        return cluster_model_FOM(event, clusters, **FOM_kwargs)
     return {s: FOM(event, cluster, **FOM_kwargs) for (s, cluster) in clusters.items()}
 
 
@@ -81,6 +83,7 @@ def cluster_model_FOM(
     event: Event,
     clusters: Dict[Hashable, Iterable[int]],
     model: FOM_model,
+    split_event: bool = True,
     **FOM_kwargs,
 ) -> Dict[int, float]:
     """
@@ -92,28 +95,33 @@ def cluster_model_FOM(
         model: FOM computing model
         FOM_kwargs: other keyword arguments for FOM computation
     """
-    # for s, cluster in clusters.items():
-    #     # feats = cluster_FOM_features(
-    #     #     # event, cluster, columns_bool=model.columns_bool, **FOM_kwargs
-    #     #     event, cluster, model_bvs=model.boolean_vectors, **FOM_kwargs
-    #     # )
-    #     feats = ff.get_all_features_cluster(
-    #         event, cluster, event, bvs=model.boolean_vectors, trim_features=True
-    #     )
-    #     print(s, cluster, feats.shape, np.sum(feats))
+    if not split_event:
+        return {
+            s: model.predict(
+                np.reshape(ff.get_all_features_cluster(
+                    event, cluster, event, bvs=model.boolean_vectors, trim_features=True
+                ), (1,-1))
+            )[0]
+            for (s, cluster) in clusters.items()
+        }
 
-    return {
-        s: model.predict(
-            # cluster_FOM_features(
-            #     # event, cluster, columns_bool=model.columns_bool, **FOM_kwargs
-            #     event, cluster, model_bvs=model.boolean_vectors, **FOM_kwargs
-            # )
-            ff.get_all_features_cluster(
-                event, cluster, event, bvs=model.boolean_vectors, trim_features=True
-            )
-        )
-        for (s, cluster) in clusters.items()
-    }
+    foms = {}
+    s_events, s_clusters = split_event_clusters(event, clusters)
+    for ev, clu in zip(s_events, s_clusters):
+        for cluster_id, cluster in clu.items():
+            feats = ff.get_all_features_cluster(
+                    ev, cluster, ev, bvs=model.boolean_vectors, trim_features=True
+                )
+            if np.sum(np.isnan(feats)) > 0:
+                for feat, feat_name in zip(feats, ff.all_feature_names):
+                    # if np.isnan(feat):
+                    print(feat_name, feat)
+            foms[cluster_id] = model.predict(
+                np.reshape(ff.get_all_features_cluster(
+                    ev, cluster, ev, bvs=model.boolean_vectors, trim_features=True
+                ), (1,-1))
+            )[0]
+    return foms
 
 
 # %% FOM backbone
@@ -1086,7 +1094,9 @@ def singles_depth(
     interaction = event.points[permutation[0]]
     depth = np.linalg.norm(interaction.x) - detector.get_inner_radius()
     energy = interaction.e
-    return phys.singles_depth_explicit(depth, energy, singles_penalty_min, singles_penalty_max)
+    return phys.singles_depth_explicit(
+        depth, energy, singles_penalty_min, singles_penalty_max
+    )
 
 
 # %% Ordering routines
@@ -5763,8 +5773,17 @@ def cluster_FOM_features(
     # cluster_features = ff.get_cluster_features(
     #     event_calc, permutation, Nmi, model_bvs, trim_features
     # )
-    
-    return ff.get_all_features_cluster(event, permutation, event_calc, start_point, start_energy, Nmi, model_bvs, not populate_empty_features)
+
+    return ff.get_all_features_cluster(
+        event,
+        permutation,
+        event_calc,
+        start_point,
+        start_energy,
+        Nmi,
+        model_bvs,
+        not populate_empty_features,
+    )
     # TODO - finish rewriting this to use new code
 
     from greto.cluster_tools import cluster_properties_features

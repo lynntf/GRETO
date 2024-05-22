@@ -212,7 +212,7 @@ class xgbranker_FOM_model:
 def save_xgb_model(
     model: xgb.XGBRanker | xgb.XGBClassifier,
     filename: str,
-    columns:list[str] = None,
+    columns: list[str] = None,
 ) -> None:
     """
     Save a XGBoost Ranker model (feature scaling is not used)
@@ -300,7 +300,7 @@ def load_suppression_FOM_model(filename: str) -> FOM_model:
         - filename: filename for saved model [`.pkl` or `.ubj`]
     """
     if filename.endswith(".ubj"):
-        print(f"Model {filename} is assumed to be XGB Ranker")
+        print(f"Model {filename} is assumed to be XGB Classifier")
         return load_xgbclassifier_FOM_model(filename)
     if filename.endswith(".pkl"):
         with open(filename, "rb") as f:
@@ -357,6 +357,8 @@ class sns_model:
         self.columns = columns
         if self.columns is None:
             self.columns = ff.all_feature_names
+
+        self.single_index = self.single_indicator_index
 
         self.scaler_ns = scaler_class()
         self.model_ns = model_class(**kwargs)
@@ -517,10 +519,18 @@ class sns_model:
         """
         self.fit(data["features"], data["completeness"], data["length"] == 1)
 
+    @property
+    def single_indicator_index(self):
+        """Get a column index that can be used to determine if data is coming
+        from a single interaction if a singles array is not provided"""
+        for i, column in enumerate(self.columns):
+            if column in ff.single_feature_names:
+                return i
+
     def predict(
         self,
         X: np.ndarray,
-        singles: np.ndarray,
+        singles: np.ndarray = None,
         weights: list = None,
         bias: list = None,
     ) -> np.ndarray:
@@ -533,6 +543,9 @@ class sns_model:
             - weights: a vector with index [0] for weighting non-singles, [1] for singles
             - bias: a vector with index [0] for biasing non-singles, [1] for singles
         """
+        if singles is None:
+            singles = X[:,self.single_index] > 0.0
+
         if self.use_combiner:
             pred = np.zeros((singles.shape[0], 2))
 

@@ -875,7 +875,8 @@ def cluster_eval(
         for cluster_id, cluster_energy_sum in energy_sum.items():
             if isinstance(true_energies, dict):
                 complete[cluster_id] = (
-                    np.abs(true_energies.get(cluster_id, -10) - cluster_energy_sum) < tol
+                    np.abs(true_energies.get(cluster_id, -10) - cluster_energy_sum)
+                    < tol
                 )
             elif use_list:
                 complete[cluster_id] = (
@@ -905,6 +906,7 @@ def split_g_ray_events(
     tol: float = 2e-2,
     true_energies: dict = None,
     # include_pair_production: bool = False,
+    debug: bool = False,
 ):
     """
     We want to split the events into individual pieces so we can balance the created data
@@ -932,6 +934,12 @@ def split_g_ray_events(
     completes, absorbs, pair_prods = cluster_eval(
         events, clusters, tol=tol, true_energies=true_energies
     )
+    if debug:
+        print(
+            f"In split_g_ray_events: num events = {len(events)},"
+            + f" num clusters = {len(clusters)}, num completes = {len(completes)}, num absorbs = {len(absorbs)},"
+            + f" num pair_prods = {len(pair_prods)}"
+        )
     ray_energies = []
     ray_true_energies = []
     ray_completeness = []
@@ -951,7 +959,9 @@ def split_g_ray_events(
         energy_sums = event.energy_sums(cluster)
         ray_energies.extend(energy_sums.values())
         if isinstance(true_energies, dict):
-            ray_true_energies.extend([true_energies.get(k, -10.0) for k in cluster.keys()])
+            ray_true_energies.extend(
+                [true_energies.get(k, -10.0) for k in cluster.keys()]
+            )
         else:
             ray_true_energies.extend([0] * len(cluster))
         ray_completeness.extend(complete.values())
@@ -963,6 +973,14 @@ def split_g_ray_events(
         ray_cluster_id.extend(cluster.keys())
         ray_event_id.extend([event_id] * len(cluster.keys()))
         ray_length.extend([len(a) for a in cluster.values()])
+
+    if debug:
+        print(
+            f"In split_g_ray_events: num events = {len(ray_events)},"
+            + f" num completes = {len(completes)},"
+            + f" num new completes = {len(ray_completeness)}"
+        )
+
     return (
         np.array(ray_energies),
         np.array(ray_true_energies),
@@ -1052,7 +1070,9 @@ def split_g_ray_events_reclustered(
         energy_sums = event.energy_sums(cluster)
         ray_energies.extend(energy_sums.values())
         if isinstance(true_energies, dict):
-            ray_true_energies.extend([true_energies.get(k, -10.0) for k in cluster.keys()])
+            ray_true_energies.extend(
+                [true_energies.get(k, -10.0) for k in cluster.keys()]
+            )
         else:
             ray_true_energies.extend([0] * len(cluster))
         ray_completeness.extend(complete.values())
@@ -1980,6 +2000,7 @@ def create_classification_data(
     )
     return df_X, df_Y
 
+
 def create_classification_data_with_clustering(
     list_of_events: List[Event],
     list_of_clusters: List[Dict],
@@ -2042,7 +2063,7 @@ def create_classification_data_with_clustering(
         true_energies=true_energies,
         tol=tol,
     )
-    
+
     # print(f"{len(list_of_events)} g-rays and {len(completeness)} complete values")
 
     # pack and smear each individual g-ray
@@ -2053,9 +2074,23 @@ def create_classification_data_with_clustering(
         packing_distance=packing_distance,
         energy_threshold=energy_threshold,
         seed=seed,
+        keep_empties=True,
     )
-    
-    # print(f"{len(list_of_events)} g-rays and {len(completeness)} complete values")
+
+    # Make sure we don't have empty events/clusters
+    new_list_of_events = []
+    new_list_of_clusters = []
+    new_completeness = []
+    for event, cluster, complete in zip(list_of_events, list_of_clusters, completeness):
+        if len(event.points) > 1:
+            new_list_of_events.append(event)
+            new_list_of_clusters.append(cluster)
+            new_completeness.append(complete)
+    list_of_events = new_list_of_events
+    list_of_clusters = new_list_of_clusters
+    completeness = new_completeness
+
+    print(f"{len(list_of_events)} g-rays and {len(completeness)} complete values")
 
     # reevaluate the individual g-rays
     print("Re-splitting gamma-rays")
@@ -2073,8 +2108,8 @@ def create_classification_data_with_clustering(
     ) = split_g_ray_events(
         list_of_events, list_of_clusters, true_energies=true_energies, tol=tol
     )
-    
-    # print(f"{len(list_of_events)} g-rays and {len(completeness)} complete values")
+
+    print(f"{len(list_of_events)} g-rays and {len(completeness)} complete values")
 
     # Order the clusters
     ordered_list_of_clusters = []

@@ -1621,6 +1621,7 @@ def pack_and_smear(
     use_agata_model: bool = True,
     seed: int = None,
     respect_clusters: bool = False,
+    keep_empties: bool = False,
 ) -> Union[Event, Tuple[Event, Dict]]:
     """
     Apply the packing and smearing methods to the event and clusters. Any
@@ -1652,7 +1653,9 @@ def pack_and_smear(
 
         # Remove zero energy smeared interactions
         threshold_event = remove_zero_energy_interactions(
-            packed_and_smeared_event, energy_threshold=energy_threshold
+            packed_and_smeared_event,
+            energy_threshold=energy_threshold,
+            keep_empties=keep_empties,
         )
         return threshold_event
         # return packed_and_smeared_event
@@ -1667,8 +1670,12 @@ def pack_and_smear(
         packed_and_smeared_event = apply_agata_error_model(packed_event, seed=seed)
     else:
         packed_and_smeared_event = apply_error_model(packed_event, seed=seed)
+    # return packed_and_smeared_event, packed_clusters
     threshold_event, threshold_clusters = remove_zero_energy_interactions(
-        packed_and_smeared_event, packed_clusters, energy_threshold=energy_threshold
+        packed_and_smeared_event,
+        packed_clusters,
+        energy_threshold=energy_threshold,
+        keep_empties=keep_empties,
     )
     return threshold_event, threshold_clusters
     # return packed_and_smeared_event, packed_clusters
@@ -1682,6 +1689,7 @@ def pack_and_smear_list(
     use_agata_model: bool = True,
     seed: int = None,
     respect_clusters: bool = False,
+    keep_empties: bool = False,
 ) -> List[Event] | Tuple[List[Event], List[Dict]]:
     """
     Apply the packing and smearing methods to a list of events and clusters
@@ -1713,6 +1721,7 @@ def pack_and_smear_list(
                     use_agata_model=use_agata_model,
                     seed=seed,
                     respect_clusters=respect_clusters,
+                    keep_empties=keep_empties,
                 )
             )
         return ps_events
@@ -1726,6 +1735,7 @@ def pack_and_smear_list(
             packing_distance=packing_distance,
             energy_threshold=energy_threshold,
             seed=seed,
+            keep_empties=keep_empties,
         )
         ps_events.append(single_ps_event)
         ps_clusters.append(single_ps_clusters)

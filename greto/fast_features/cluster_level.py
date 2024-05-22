@@ -41,11 +41,16 @@ def length_width_func(
     """Basically does PCA on cluster, getting the eigenvalues of the covariance
     matrix"""
     if len(transition_1D) > 1:
-        return np.sqrt(
+        out = np.sqrt(
             np.linalg.eigvalsh(
                 np.cov(point_matrix[transition_1D] - centroid, rowvar=False)
             )
         )
+        # Catch NaN values
+        for i in numba.prange(3):
+            if np.isnan(out[i]):
+                out[i] = eres
+        return out
     return eres * np.ones((3,))
 
 
@@ -57,6 +62,7 @@ def cluster_atoms(
     dependency_mode: bool = False,
     all_computations: bool = False,
     boolean_vector: np.ndarray = None,
+    eres: float = 1e-3,
 ):
     """
     Inputs are general computational atoms
@@ -119,7 +125,9 @@ def cluster_atoms(
     length_width = compute_value(
         "length_width",
         ["point_matrix", "centroid"],
-        lambda: length_width_func(event_calc.point_matrix, transition_1D, centroid),
+        lambda: length_width_func(
+            event_calc.point_matrix, transition_1D, centroid, eres
+        ),
     )
     index += 1
 
@@ -127,7 +135,9 @@ def cluster_atoms(
     index += 1
 
     width = compute_value(
-        "width", ["length_width"], lambda: np.sqrt(length_width[0] * length_width[1])
+        "width",
+        ["length_width"],
+        lambda: np.sqrt(length_width[0] * length_width[1]),
     )
     index += 1
 

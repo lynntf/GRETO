@@ -1067,14 +1067,13 @@ def mode1_extended_data(
                 int(mode1["timestamp"]),
             )
         except struct.error as e:
-            print('Stuct packing error: got an unexpected value:\n'
+            print(
+                "Stuct packing error: got an unexpected value:\n"
                 + f'format {gamma_info_format}, esum {mode1["esum"]},'
                 + f' ndet {int(mode1["ndet"])}, fom {mode1["fom"]},'
                 + f' tracked {mode1["tracked"]}, timestamp {int(mode1["timestamp"])}'
             )
-            
-            print("foms", foms)
-            raise e
+
             print("foms", foms)
             raise e
         for interaction in mode1["interactions"]:
@@ -1996,4 +1995,31 @@ def convert_mode1_extended(input_mode1x_file: BinaryIO, output_mode1_file: Binar
                 mode1["TANGO"],
                 mode1["TANGO_fom"],
             )
+        output_mode1_file.write(mode1_output)
+
+
+def mode1x_new_fom(
+    input_mode1x_file: BinaryIO,
+    output_mode1_file: BinaryIO,
+    save_extended: bool = True,
+    **FOM_kwargs,
+):
+    """
+    Evaluate the provided FOM for the mode1x file and save a new mode1(x) file
+    """
+    mode1x = GEBdata_file(input_mode1x_file)
+
+    while True:
+        # Read in the event as an Event and clustering Dict
+        try:
+            event, clusters = mode1x.read(use_interaction_class=True, as_gr_event=True)
+        except TypeError:
+            return
+        if event is None:
+            return
+        foms = cluster_FOM(event, clusters, **FOM_kwargs)
+        if not save_extended:
+            mode1_output = mode1_data(event, clusters, foms=foms)
+        else:
+            mode1_output = mode1_extended_data(event, clusters, foms=foms)
         output_mode1_file.write(mode1_output)
