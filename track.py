@@ -1,4 +1,7 @@
 """
+Copyright (C) 2024 Argonne National Laboratory
+This software is provided without warranty and is licensed under the GNU GPL 2.0 license
+
 Script for streamlined tracking.
 """
 import argparse
