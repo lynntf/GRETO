@@ -1,0 +1,6 @@
+save_extended: true             # Save the output as an extended mode1 file (produces another mode1x file) if true
+reevaluate_FOM: true            # Reevaluate the FOM values according to the eval_FOM_kwargs
+eval_FOM_kwargs:                # What FOM should be recorded in mode1
+  fom_method: angle             # FOM method for recording in mode1
+  singles_method: depth         # Singles method for recording in mode1; Available methods are "depth" (identical to AFT treatment), "range" (similar to AFT treatment using a continuous function to determine ranges), "probability" (range probability is returned), "continuous" (linear attenuation * distance)
+  max_cluster_size: 8           # Maximum cluster size for tracking, determines if the gamma ray is considered tracked or not (should match the tracking options)
