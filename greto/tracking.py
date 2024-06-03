@@ -622,18 +622,20 @@ def load_and_track_simulated(
         track_simulated(events, mode1file, options)
 
 
-def load_tracked_and_evaluate(
-    tracked_data_filename: str, mode1_filename: str, options_filename: str
+def evaluate_mode1x(
+    tracked_data_filename: str, output_filename: str, options_filename: str
 ):
     """
     Load previously tracked data and apply a validation FOM for suppression
     using the specified options
+
+    TODO - fix the generator, it's using pickle...
     """
     options = load_options(options_filename)
     print(f"Loading the previously tracked data from {tracked_data_filename}")
     with open(tracked_data_filename, "rb") as tracked_file:
-        print(f"Saving evaluation data to mode1 file {mode1_filename}")
-        with open(mode1_filename, "wb") as mode1file:
+        print(f"Saving evaluation data to output file {output_filename}")
+        with open(output_filename, "wb") as mode1file:
             print(f"Using evaluation FOM: {options.eval_FOM_kwargs}")
             for event, clusters in tracked_generator(tracked_file):
                 mode1file.write(mode1_data(event, clusters, **options.eval_FOM_kwargs))

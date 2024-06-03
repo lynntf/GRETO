@@ -35,15 +35,15 @@ def convert_with_args():
     else:
         loaded_options = {}
 
-    reevaluate_FOM = loaded_options.get("reevaluate_FOM", False)  # Default to just conversion
-    save_extended = loaded_options.get("save_extended", True)
+    REEVALUATE_FOM = loaded_options.get("REEVALUATE_FOM", False)  # Default to just conversion
+    SAVE_EXTENDED_MODE1 = loaded_options.get("SAVE_EXTENDED_MODE1", True)
     eval_FOM_kwargs = loaded_options.get("eval_FOM_kwargs", {})
 
     with open(args.mode1x_in_filename, "rb") as input_file:
         with open(args.mode1x_out_filename, "rb") as output_file:
-            if reevaluate_FOM:
+            if REEVALUATE_FOM:
                 mode1x_new_fom(
-                    input_file, output_file, save_extended=save_extended, **eval_FOM_kwargs
+                    input_file, output_file, save_extended=SAVE_EXTENDED_MODE1, **eval_FOM_kwargs
                 )
             else:
                 convert_mode1_extended(input_file, output_file)

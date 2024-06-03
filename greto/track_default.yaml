@@ -1,32 +1,35 @@
 ---
-# Settings for gamma-ray tracking
+# Default settings for gamma-ray tracking
 
 DETECTOR: gretina               # Available detectors are "GRETINA", "GRETA" (identical to "GRETINA"), and "AGATA"
 COINCIDENCE_TIME_GAP: &tg 40    # Units of 10 ns; Used for grouping recorded crystal events in time
 NUM_PROCESSES: 3                # Number of processors to use for multi-processing (should be changed depending on the machine)
-SECONDARY_ORDER: true           # Track twice; Used for ensuring comparison between the same data
-VERBOSITY: 2                    # Level of console output
+SECONDARY_ORDER: false          # USE FOR DATA COMPARISONS ONLY; Track twice; Used for ensuring comparison between the the same data tracked two different ways (only differs in order)
+VERBOSITY: 2                    # Level of console output;
 TIMEOUT_SECONDS: 15             # Timeout limit in seconds for multiprocessing processes
-MAX_HIT_POINTS: 100             # Maximum number of hit points for constructed events (experiment/data dependent)
-GLOBAL_COORDS: false            # If the data is provided with global coordinates already, skip the transformation from crystal coordinates to global
+MAX_HIT_POINTS: 300             # Maximum number of hit points for constructed events (experiment/data dependent)
+GLOBAL_COORDS: false            # USE FOR SIMULATED DATA ONLY; If the data is provided with global coordinates already, skip the transformation from crystal coordinates to global
 MONSTER_SIZE: &monster 8        # Maximum size of a cluster; clusters larger than the "monster" size are not tracked
-PARTIAL_TRACK: false            # Should tracking bail after determining the first interaction points? (Possibly useful when performing double tracking because only the first interactions are recorded in mode1 data)
-SAVE_INTERMEDIATE: false        # Save an intermediate file format instead of mode1 (events and clusters stored by pickle)
+PARTIAL_TRACK: false            # DO NOT USE; Should tracking bail after determining the first interaction points? (Possibly useful when performing double tracking because only the first interactions are recorded in mode1 data)
+SAVE_INTERMEDIATE: false        # DO NOT USE; Save an intermediate file format instead of mode1 (events and clusters stored by pickle)
 SAVE_EXTENDED_MODE1: false      # Save a mode1 file with all interactions recorded
 order_FOM_kwargs:               # Arguments for ordering interactions (recorded in mode1)
-  fom_method: selected          # FOM method for ordering; Available methods are "oft"/"agata", "aft"/"angle", "selected" (ML optimized for ordering)
+  fom_method: selected          # FOM method for ordering; Available methods are "oft"/"agata", "aft"/"angle", "selected" (ML optimized for ordering), "model"
+  model: null                   # Filename of the model
   singles_method: depth         # How to handle single interactions for ordering (not ordered)
   width: 5                      # How many interactions to consider in the forward direction in the enumeration of possible tracks
   stride: 2                     # How many interactions to accept after each enumeration step
   max_cluster_size: *monster    # Maximum cluster size for tracking (should be the same as the monster size, but can be different)
 secondary_order_FOM_kwargs:     # If ordering twice (double tracking), reorder the data for recording a FOM as if ordered in this way in mode1
   fom_method: angle             # FOM method for ordering
+  model: null                   # Filename of the model
   singles_method: depth         # How to handle single interactions for ordering (not ordered)
   width: 5                      # How many interactions to consider in the forward direction in the enumeration of possible tracks
   stride: 2                     # How many interactions to accept after each enumeration step
   max_cluster_size: *monster    # Maximum cluster size for tracking (should be the same as the monster size, but can be different)
 eval_FOM_kwargs:                # What FOM should be recorded in mode1
   fom_method: angle             # FOM method for recording in mode1
+  model: null                   # Filename of the model
   singles_method: depth         # Singles method for recording in mode1; Available methods are "depth" (identical to AFT treatment), "range" (similar to AFT treatment using a continuous function to determine ranges), "probability" (range probability is returned), "continuous" (linear attenuation * distance)
 cluster_kwargs:                 # How should clustering of interaction points be accomplished?
   alpha_degrees: 20             # Cone clustering alpha in degrees
