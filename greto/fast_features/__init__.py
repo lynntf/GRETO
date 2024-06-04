@@ -574,6 +574,7 @@ def get_all_features_cluster(
     bvs: boolean_vectors = all_features_bvs,
     trim_features: bool = False,
     eres: float = 1e-3,
+    remove_NaN: bool = True,
 ):
     """
     Get all of the features for a cluster/permutation
@@ -601,4 +602,9 @@ def get_all_features_cluster(
         event_calc, permutation, Nmi, bvs, trim_features
     )
 
+    if remove_NaN:
+        return np.nan_to_num(
+            np.concatenate((perm_features, single_features, cluster_features)),
+            copy=False,
+        )
     return np.concatenate((perm_features, single_features, cluster_features))

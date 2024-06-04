@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.resources
 import json
+import yaml
 import struct
 
 import numpy as np
@@ -82,13 +83,14 @@ class DetectorConfig:
     def __init__(
         self,
         detector: str = "agata",
-        config_file="detector_config.json",
+        config_file="detector_config.yaml",
         position_error_model: str = "siciliano",
     ):
         with importlib.resources.open_text(
             __name__, config_file, encoding="utf-8"
         ) as f:
-            config = json.load(f)
+            # config = json.load(f)
+            config = yaml.safe_load(f)
         self.agata_inner_radius = config["AGATA_INNER_RADIUS_cm"]
         self.agata_outer_radius = config["AGATA_OUTER_RADIUS_cm"]
         self.greta_inner_radius = config["GRETA_INNER_RADIUS_cm"]

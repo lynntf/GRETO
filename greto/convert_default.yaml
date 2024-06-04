@@ -1,0 +1,12 @@
+---
+# Default options for conversion of mode1x
+
+DETECTOR: gretina               # Available detectors are "GRETINA", "GRETA" (identical to "GRETINA"), and "AGATA"
+MONSTER_SIZE: &monster 8        # Maximum size of a cluster; clusters larger than the "monster" size are not tracked
+SAVE_EXTENDED_MODE1: false      # Save the output as an extended mode1 file (produces another mode1x file) if true; otherwise saves as a mode1 file
+REEVALUATE_FOM: false           # Reevaluate the FOM values according to the eval_FOM_kwargs
+eval_FOM_kwargs:                # What FOM should be recorded in mode1
+  fom_method: angle             # FOM method for recording in mode1
+  model_filename: null          # Filename of the model
+  singles_method: depth         # Singles method for recording in mode1; Available methods are "depth" (identical to AFT treatment), "range" (similar to AFT treatment using a continuous function to determine ranges), "probability" (range probability is returned), "continuous" (linear attenuation * distance)
+  max_cluster_size: *monster    # Maximum cluster size for tracking, determines if the gamma ray is considered tracked or not (should match the tracking options)

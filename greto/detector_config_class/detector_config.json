@@ -2,7 +2,7 @@
     "AGATA_INNER_RADIUS_cm": 23.5,
     "AGATA_OUTER_RADIUS_cm": 32.5,
     "GRETA_INNER_RADIUS_cm": 18.5,
-    "GRETA_OUTER_RADIUS_cm": 27.5,
+    "GRETA_OUTER_RADIUS_cm": 27.8,
     "AGATA_CRMAT": "GANIL_AGATA_crmat.dat",
     "GRETA_CRMAT": "crmat.LINUX",
     "POSITION_ERROR_W0_cm": 0.463,

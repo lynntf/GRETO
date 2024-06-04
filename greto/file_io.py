@@ -103,7 +103,8 @@ class GEBdata_file:
         print_formatted: bool = False,
         as_gr_event: bool = False,
         use_interaction_class: bool = True,
-    ) -> Dict:
+        detector_name: str = "gretina",
+    ) -> Dict | Tuple[Event, Dict]:
         """
         # Read the next event in the GEB data file
 
@@ -164,6 +165,7 @@ class GEBdata_file:
                     print_formatted=print_formatted,
                     as_gr_event=as_gr_event,
                     use_interaction_class=use_interaction_class,
+                    detector_name=detector_name,
                 )
             except struct.error:
                 return
@@ -175,6 +177,7 @@ class GEBdata_file:
                     print_formatted=print_formatted,
                     as_gr_event=as_gr_event,
                     use_interaction_class=use_interaction_class,
+                    detector_name=detector_name,
                 )
             except struct.error:
                 return
@@ -365,6 +368,7 @@ class GEBdata_file:
         print_formatted: bool = False,
         as_gr_event: bool = False,
         use_interaction_class: bool = True,
+        detector_name: str = "gretina",
     ) -> Dict:
         """
         # Read in an event from a MODE1 data file
@@ -514,7 +518,7 @@ class GEBdata_file:
                     range(int_count + 1, int_count + 2 + (events[i]["ndet"] > 1))
                 )
                 int_count += len(clusters[i])
-            return Event(ts, points), clusters
+            return Event(ts, points, detector=detector_name), clusters
         return events
 
     def read_extended_mode1(
@@ -522,6 +526,7 @@ class GEBdata_file:
         print_formatted: bool = False,
         as_gr_event: bool = False,
         use_interaction_class: bool = True,
+        detector_name: str = "gretina",
     ) -> Dict:
         """
         # Read in a full event from an extended MODE1 data file
@@ -696,7 +701,7 @@ class GEBdata_file:
                     range(int_count + 1, int_count + 1 + len(events[i]["interactions"]))
                 )
                 int_count += len(events[i]["interactions"])
-            return Event(ts, points), clusters
+            return Event(ts, points, detector=detector_name), clusters
         return events
 
     def read_simulated_data(self, print_formatted: bool = False):
@@ -2002,6 +2007,9 @@ def mode1x_new_fom(
     input_mode1x_file: BinaryIO,
     output_mode1_file: BinaryIO,
     save_extended: bool = True,
+    detector_name: str = "gretina",
+    monster_size: int = 8,
+    debug: bool = False,
     **FOM_kwargs,
 ):
     """
@@ -2012,14 +2020,26 @@ def mode1x_new_fom(
     while True:
         # Read in the event as an Event and clustering Dict
         try:
-            event, clusters = mode1x.read(use_interaction_class=True, as_gr_event=True)
+            event, clusters = mode1x.read(
+                use_interaction_class=True,
+                as_gr_event=True,
+                detector_name=detector_name,
+            )
         except TypeError:
             return
+        if debug:
+            print(f"Loaded event {event.id} with {len(event.hit_points)} interactions and {len(clusters)} g-rays")
+            print(f"Event has detector set to {event.detector_config.detector}")
+            print(f"{event.detector_config}")
         if event is None:
             return
         foms = cluster_FOM(event, clusters, **FOM_kwargs)
+        if debug:
+            print(f"Got foms:\n{foms}")
         if not save_extended:
-            mode1_output = mode1_data(event, clusters, foms=foms)
+            mode1_output = mode1_data(
+                event, clusters, foms=foms, monster_size=monster_size
+            )
         else:
             mode1_output = mode1_extended_data(event, clusters, foms=foms)
         output_mode1_file.write(mode1_output)

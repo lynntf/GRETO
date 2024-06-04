@@ -13,7 +13,7 @@ import numba
 import numpy as np
 
 import greto.geometry as geo
-from greto.utils import njit_norm, njit_mean
+from greto.utils import njit_norm, njit_mean, EPS
 from greto.fast_features.event_level import event_level_values
 
 cluster_level_values = namedtuple(
@@ -29,7 +29,6 @@ cluster_level_values = namedtuple(
         "aspect_ratio",
     ],
 )
-
 
 @numba.njit
 def length_width_func(
@@ -142,7 +141,7 @@ def cluster_atoms(
     index += 1
 
     aspect_ratio = compute_value(
-        "aspect_ratio", ["length", "width"], lambda: length / width
+        "aspect_ratio", ["length", "width"], lambda: length / max(width, EPS)
     )
     index += 1
 

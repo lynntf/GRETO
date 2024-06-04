@@ -20,8 +20,8 @@ from greto.cluster_tools import (
 )
 from greto.detector_config_class import default_config
 from greto.event_class import Event
-from greto.file_io import load_options  # write_event_cluster,
 from greto.file_io import (
+    load_options,
     mode1_data,
     mode1_extended_data,
     mode2_loader,
@@ -30,14 +30,14 @@ from greto.file_io import (
 )
 from greto.fom_tools import (
     cluster_FOM,
+    cluster_model_FOM,
     semi_greedy,
-    semi_greedy_clusters,
     semi_greedy_batch,
     semi_greedy_batch_clusters,
-    cluster_model_FOM,
+    semi_greedy_clusters,
 )
+from greto.models import load_order_FOM_model, load_suppression_FOM_model
 from greto.utils import get_file_size
-from greto.models import load_order_FOM_model
 
 
 def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
@@ -76,6 +76,16 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
             raise ValueError("Provide model filename for secondary ordering")
     secondary_order_FOM_kwargs["model"] = secondary_order_model
 
+    eval_model = None
+    if eval_FOM_kwargs.get("fom_method") == "model":
+        if eval_FOM_kwargs.get("model_filename") is not None:
+            eval_model = load_suppression_FOM_model(
+                eval_FOM_kwargs.get("model_filename")
+            )
+        else:
+            raise ValueError("Provide model filename for evaluation")
+    eval_FOM_kwargs["model"] = eval_model
+
     GEB_EVENT_SIZE = 480
     filesize = get_file_size(mode2file)
     n_data_points = filesize // GEB_EVENT_SIZE
@@ -109,7 +119,9 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
             tracking_processes = []
             for num_events, coincidence_event in enumerate(mode2_data):
                 if coincidence_event is not None:
-                    coincidence_event = remove_zero_energy_interactions(coincidence_event)
+                    coincidence_event = remove_zero_energy_interactions(
+                        coincidence_event
+                    )
                     tracking_processes.append(
                         pool.apply_async(
                             track_and_get_energy,
@@ -187,7 +199,8 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
         for num_events, coincidence_event in enumerate(mode2_data):
             if coincidence_event is not None:
                 coincidence_event = remove_zero_energy_interactions(coincidence_event)
-                outputs.append(track_and_get_energy(
+                outputs.append(
+                    track_and_get_energy(
                         coincidence_event,
                         options["MONSTER_SIZE"],
                         options["SECONDARY_ORDER"],
@@ -198,7 +211,8 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                         secondary_order_FOM_kwargs,
                         options["SAVE_INTERMEDIATE"],
                         options["SAVE_EXTENDED_MODE1"],
-                    ))
+                    )
+                )
             if options["VERBOSITY"] >= 4:
                 print(coincidence_event)
             position = mode2file.tell()

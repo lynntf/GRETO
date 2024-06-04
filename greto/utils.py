@@ -14,6 +14,7 @@ import numba
 import numpy as np
 from scipy.interpolate import interp1d
 
+EPS = 1e-8  # divide by zero avoidance
 
 @lru_cache(maxsize=100)
 def perm_to_transition(

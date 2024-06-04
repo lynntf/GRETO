@@ -10,7 +10,7 @@ import numpy as np
 
 import greto.physics as phys
 from greto.fast_features.event_level import event_level_values
-from greto.utils import njit_norm
+from greto.utils import njit_norm, EPS
 
 
 def single_values(
@@ -85,6 +85,10 @@ def single_values(
         distance_to_inside = (
             njit_norm(event_calc.point_matrix[permutation[0]]) - inner_radius
         )
+        if distance_to_inside < EPS:
+            print(f"Negative distance to the inside of the detector {distance_to_inside}, inner radius {inner_radius}")
+            distance_to_inside = EPS
+            # raise ValueError
         distance_to_outside = outer_radius - inner_radius - distance_to_inside
 
     compute_value("penetration_cm", ["point_matrix"], lambda: distance_to_inside)
