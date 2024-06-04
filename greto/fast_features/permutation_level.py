@@ -151,7 +151,7 @@ def escape_probability_func(
         return 0.0
     point = final_point
     direction = final_point - penultimate_point
-    direction = direction / np.sum(direction**2)
+    direction = direction / np.linalg.norm(direction)
     opening_angle = phys.theta_theor_single(
         escaped_energy + final_energy, escaped_energy
     )
