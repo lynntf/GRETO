@@ -86,6 +86,7 @@ for column_set_name, columns in fo.column_sets.items():
             w = np.array(report["w"])  # weights on scaled (dimensionless) features
             weights = list(w[np.abs(w) > 0.0])  # eliminate zero weight features
             column_names = list(np.array(columns)[np.abs(w) > 0.0])
+            scales = list(scaler.scale_[np.abs(w) > 0.0])
 
             fname = (
                 f"models/ordering/N{N}_{sol_method}_nonneg{non_neg}_C{C}"
@@ -93,7 +94,7 @@ for column_set_name, columns in fo.column_sets.items():
             )
 
             models.save_linear_model(
-                weights, scale=list(scaler.scale_), columns=column_names, filename=fname
+                weights, scale=scales, columns=column_names, filename=fname
             )
 
             solved, unsolved = csvm.check_solutions_general(

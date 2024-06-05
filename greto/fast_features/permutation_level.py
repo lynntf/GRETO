@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections import namedtuple
 from typing import Optional  # Tuple
+import warnings
 
 import numba
 import numpy as np
@@ -91,6 +92,7 @@ perm_level_values = namedtuple(
     ],
 )
 
+
 @numba.njit
 def cone_pen_prob(
     theta: np.ndarray,
@@ -146,6 +148,14 @@ def escape_probability_func(
     """
     if escaped_energy <= 0:
         return 0.0
+    if np.linalg.norm(final_point) > detector_radius:
+        warnings.warn(
+            "greto.fast_features.permutation_level.escape_probability_func:\n"
+            + f"Final_point (radius = {np.linalg.norm(final_point)}) is outside"
+            + f" of the detector (radius = {detector_radius}).\n"
+            + "Returning probability 1. Assumed to escape with high probability."
+        )
+        return 1.0
     theor_cos = phys.njit_cos_theor(escaped_energy + final_energy, escaped_energy)
     if theor_cos < -1:
         return 0.0
@@ -158,7 +168,7 @@ def escape_probability_func(
 
     linear_attenuation = phys.lin_att_total_fit(escaped_energy)
 
-    return (
+    out = (
         integrate.quad(
             cone_pen_prob,
             0.0,
@@ -168,6 +178,20 @@ def escape_probability_func(
         )[0]
         * 2
     )
+
+    if out != out:
+        print("Problem with integration:")
+        print(f"direction normalized = {direction}")
+        print(f"direction unnormalized = {final_point - penultimate_point}")
+        print(f"detector_radius = {detector_radius}")
+        print(f"escaped_energy = {escaped_energy}")
+        print(f"final_energy = {final_energy}")
+        print(f"final_point = {final_point}")
+        print(f"final_point radius = {np.linalg.norm(final_point)}")
+        print(f"penultimate_point = {penultimate_point}")
+        print(f"penultimate_point radius = {np.linalg.norm(penultimate_point)}")
+
+    return out
 
 
 @numba.njit
@@ -307,7 +331,9 @@ def res_cos_cap_func(cos_act_perm, cos_theor_perm):
 
 def perm_atoms(
     permutation: tuple[int],
-    event_calc: event_level_values | Event,  # event_level_values is faster, but not by a lot
+    event_calc: (
+        event_level_values | Event
+    ),  # event_level_values is faster, but not by a lot
     start_point: int = 0,
     start_energy: float = None,
     use_threshold: bool = False,
@@ -1078,7 +1104,7 @@ def perm_atoms(
 # ):
 #     """
 #     Inputs are general computational atoms
-    
+
 #     Outputs are permuted computational atoms
 #     """
 #     if Nmi is None:
