@@ -1,1 +1,1 @@
-{"model": "linear", "weights": [0.47902118444753206, 4.197343288750101, 0.9972497139067273], "bias": null, "columns": ["distances_mean", "ge_distances_mean", "first_is_not_largest"]}
+{"model": "linear", "weights": [0.7669023218659202, 1.7739651797684672, 4.284750060946789, 0.9370860634711862, 0.5389916066957546], "scale": [0.7871009719888403, 5.3131816655420545, 1.7329180221000564, 0.42992406377658965, 0.42992406377658954], "bias": null, "columns": ["tango_sigma", "distances_mean", "ge_distances_mean", "first_is_not_largest", "first_is_not_closest"]}

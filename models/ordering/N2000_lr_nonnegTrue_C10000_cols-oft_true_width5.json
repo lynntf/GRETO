@@ -1,1 +1,1 @@
-{"model": "linear", "weights": [0.0008105603142491824, 0.0013624132206796792, 0.06268005910225512, 0.003353598776655176, 0.02382834785345011], "bias": null, "columns": ["rsg_sum_2v", "rsg_sum_2v_first", "cross_compt_ge_dist_sum_nonfinal", "cross_abs_ge_dist_final", "-log_p_abs_final"]}
+{"model": "linear", "weights": [63.823354657750805, 62.769464369598644, 0.8671947943734057], "scale": [155383.850037125, 53502.88413678559, 4110.831970396861], "bias": null, "columns": ["rsg_sum_2v", "rsg_sum_2v_first", "cross_abs_ge_dist_final"]}
