@@ -62,6 +62,7 @@ class LinearModel:
         self.bias = bias
         if scale is None:
             scale = np.ones(self.weights.shape)
+        scale = np.array(scale)
         self.scale = scale[self.permutation]
         self.columns = np.array(columns)[self.permutation]
 
