@@ -47,24 +47,24 @@ class LinearModel:
             - scale: scale factor for features; computed by division: features / scale
             - columns: feature names
         """
-        # Feature names may not be provided in the order that they are created by other code
-        # This maps weights (etc.) to an order that matches features
-        # self.permutation = permute_column_names(columns)
-        self.permutation = ff.permute_column_names(columns)
-        self.weights = np.array(weights)[self.permutation]
-
-        # Get only the weights that exceed the threshold
-        self.weight_threshold = weight_threshold
-        self.weight_indicator = np.abs(self.weights) > self.weight_threshold
-
         if bias is None:
             bias = 0.0
         self.bias = bias
         if scale is None:
             scale = np.ones(self.weights.shape)
-        scale = np.array(scale)
-        self.scale = scale[self.permutation]
+
+        # Feature names may not be provided in the order that they are created by other code
+        # This maps weights (etc.) to an order that matches features
+        # self.permutation = permute_column_names(columns)
+        self.permutation = ff.permute_column_names(columns)
+
+        self.weights = np.array(weights)[self.permutation]
+        self.scale = np.array(scale)[self.permutation]
         self.columns = np.array(columns)[self.permutation]
+
+        # Get only the weights that exceed the threshold
+        self.weight_threshold = weight_threshold
+        self.weight_indicator = np.abs(self.weights) > self.weight_threshold
 
         # select down weights, scale, and columns to only those that exceed the threshold
         self.weights_thresholded = self.weights[self.weight_indicator]

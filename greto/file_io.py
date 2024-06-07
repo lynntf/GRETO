@@ -17,6 +17,7 @@ import numpy as np
 import pkg_resources
 import yaml
 from scipy.spatial.distance import pdist, squareform
+from tqdm import tqdm
 
 from greto import default_config
 from greto.detector_config_class import DetectorConfig
@@ -1943,7 +1944,7 @@ def read_events_clusters(
 # %% Convert between the extended mode1 and the standard mode1
 
 
-def convert_mode1_extended(input_mode1x_file: BinaryIO, output_mode1_file: BinaryIO):
+def convert_mode1_extended(input_mode1x_file: BinaryIO, output_mode1_file: BinaryIO, debug:bool = False):
     """
     Convert from the extended mode1 to the standard mode1
     """
@@ -1954,12 +1955,19 @@ def convert_mode1_extended(input_mode1x_file: BinaryIO, output_mode1_file: Binar
     tracked_gamma_hit_format = "ii"
     mode1_format = "fifiqffffffffh"
     extra_data_format = "hee"  # Extra bytes
+    if debug:
+        progress_bar = tqdm()
+        n = 0
     while True:
         event = mode1x.read(use_interaction_class=False)
         try:
             ngam = event["ngam"]
         except TypeError:
             return
+
+        if debug:
+            n += 1
+            progress_bar.update(n)
 
         mode1_output = struct.pack(
             GEBHeader_format,
