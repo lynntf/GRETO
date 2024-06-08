@@ -116,6 +116,7 @@ def save_linear_model(
     scale: Optional[Iterable[float]] = None,
     bias: Optional[float] = None,
     columns: Optional[Iterable[str]] = None,
+    scaled_weights: Optional[Iterable[str]] = None,
     filename: Optional[str] = None,
 ) -> Dict:
     """
@@ -133,6 +134,7 @@ def save_linear_model(
         "weights": list(w),
         "scale": list(scale),
         "bias": bias,
+        "scaled_weights" : list(scaled_weights),
         "columns": list(columns) if columns is not None else None,
     }
 

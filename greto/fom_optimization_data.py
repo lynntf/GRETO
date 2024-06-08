@@ -1706,7 +1706,7 @@ def create_data(
     true_energies: dict = None,
     max_clusters_size: int = 6,
     semi_greedy_width: int = 5,
-    seed: int = 42,
+    seed: int = None,
     packing_distance: float = 0.6,
     energy_threshold: float = 0.005,
     remove_pair_production: bool = True,
@@ -1751,6 +1751,8 @@ def create_data(
         list_of_events, list_of_clusters, true_energies=true_energies, tol=tol
     )
 
+    rng = np.random.RandomState(seed=seed)
+
     # pack and smear each individual g-ray
     list_of_events, list_of_clusters = pack_and_smear_list(
         list_of_events,
@@ -1758,6 +1760,7 @@ def create_data(
         packing_distance=packing_distance,
         energy_threshold=energy_threshold,
         seed=seed,
+        rng=rng,
     )
 
     # reevaluate the individual g-rays
