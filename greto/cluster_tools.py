@@ -226,7 +226,7 @@ def pack_interactions(
     return Event(event.id, points, flat=event.flat, detector=event.detector_config)
 
 
-def apply_agata_error_model(event: Event, seed: int = None) -> Event:
+def apply_agata_error_model(event: Event, seed: int = 42, rng=None) -> Event:
     """
     Applies the AGATA error model to the positions and energies.
     This applies a gaussian error which is dependent on the energy
@@ -239,7 +239,8 @@ def apply_agata_error_model(event: Event, seed: int = None) -> Event:
 
     TODO - add support for subsets?
     """
-    rng = np.random.RandomState(seed=seed)  # pylint: disable=no-member
+    if rng is None:
+        rng = np.random.RandomState(seed=seed)  # pylint: disable=no-member
     hit_points = deepcopy(event.hit_points)
     for p in hit_points:
         pos_std = (0.5 * np.sqrt(0.1 / p.e)) / 2.3548
@@ -259,7 +260,7 @@ def apply_agata_error_model(event: Event, seed: int = None) -> Event:
     )
 
 
-def apply_error_model(event: Event, seed: int = None) -> Event:
+def apply_error_model(event: Event, seed: int = None, rng=None) -> Event:
     """
     Applies error model to the positions and energies.
     This applies a gaussian error which is dependent on the energy
@@ -270,7 +271,8 @@ def apply_error_model(event: Event, seed: int = None) -> Event:
         event: g-ray event
         seed: random seed
     """
-    rng = np.random.RandomState(seed=seed)  # pylint: disable=no-member
+    if rng is None:
+        rng = np.random.RandomState(seed=seed)  # pylint: disable=no-member
     hit_points = deepcopy(event.hit_points)
     for i, p in enumerate(hit_points):
         pos_std = event.position_uncertainty[i + 1]
@@ -1620,6 +1622,7 @@ def pack_and_smear(
     energy_threshold: float = 0.0,
     use_agata_model: bool = True,
     seed: int = None,
+    rng=None,
     respect_clusters: bool = False,
     keep_empties: bool = False,
 ) -> Union[Event, Tuple[Event, Dict]]:
@@ -1647,9 +1650,13 @@ def pack_and_smear(
     if clusters is None:
         packed_event = pack_interactions(event, packing_distance=packing_distance)
         if use_agata_model:
-            packed_and_smeared_event = apply_agata_error_model(packed_event)
+            packed_and_smeared_event = apply_agata_error_model(
+                packed_event, seed=seed, rng=rng
+            )
         else:
-            packed_and_smeared_event = apply_error_model(packed_event)
+            packed_and_smeared_event = apply_error_model(
+                packed_event, seed=seed, rng=rng
+            )
 
         # Remove zero energy smeared interactions
         threshold_event = remove_zero_energy_interactions(
@@ -1667,9 +1674,11 @@ def pack_and_smear(
         respect_clusters=respect_clusters,
     )
     if use_agata_model:
-        packed_and_smeared_event = apply_agata_error_model(packed_event, seed=seed)
+        packed_and_smeared_event = apply_agata_error_model(
+            packed_event, seed=seed, rng=rng
+        )
     else:
-        packed_and_smeared_event = apply_error_model(packed_event, seed=seed)
+        packed_and_smeared_event = apply_error_model(packed_event, seed=seed, rng=rng)
     # return packed_and_smeared_event, packed_clusters
     threshold_event, threshold_clusters = remove_zero_energy_interactions(
         packed_and_smeared_event,
@@ -1688,6 +1697,7 @@ def pack_and_smear_list(
     energy_threshold=0.005,
     use_agata_model: bool = True,
     seed: int = None,
+    rng=None,
     respect_clusters: bool = False,
     keep_empties: bool = False,
 ) -> List[Event] | Tuple[List[Event], List[Dict]]:
@@ -1720,6 +1730,7 @@ def pack_and_smear_list(
                     energy_threshold=energy_threshold,
                     use_agata_model=use_agata_model,
                     seed=seed,
+                    rng=rng,
                     respect_clusters=respect_clusters,
                     keep_empties=keep_empties,
                 )
