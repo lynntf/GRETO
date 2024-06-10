@@ -1888,6 +1888,8 @@ def create_classification_data(
         tol=tol,
     )
 
+    rng = np.random.RandomState(seed=seed)
+
     # pack and smear each individual g-ray
     print("Packing and smearing gamma-rays")
     list_of_events, list_of_clusters = pack_and_smear_list(
@@ -1896,6 +1898,7 @@ def create_classification_data(
         packing_distance=packing_distance,
         energy_threshold=energy_threshold,
         seed=seed,
+        rng=rng,
     )
 
     # reevaluate the individual g-rays
@@ -2069,6 +2072,8 @@ def create_classification_data_with_clustering(
 
     # print(f"{len(list_of_events)} g-rays and {len(completeness)} complete values")
 
+    rng = np.random.RandomState(seed=seed)
+
     # pack and smear each individual g-ray
     print("Packing and smearing gamma-rays")
     list_of_events, list_of_clusters = pack_and_smear_list(
@@ -2077,6 +2082,7 @@ def create_classification_data_with_clustering(
         packing_distance=packing_distance,
         energy_threshold=energy_threshold,
         seed=seed,
+        rng=rng,
         keep_empties=True,
     )
 
