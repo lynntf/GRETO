@@ -353,8 +353,8 @@ classifier.save_model("models/suppression/N10000_XGBClassifier_order-model.ubj")
 
 classifier = xgb.XGBClassifier()
 classifier.fit(
-    np.clip(X_re_dropped.to_numpy()[train_indices], 0, 1e16),
-    1 - Y_model["complete"].to_numpy()[train_indices] < 0.5,
+    np.clip(X_re_dropped.to_numpy()[train_indices_re], 0, 1e16),
+    1 - Y_re["complete"].to_numpy()[train_indices_re] < 0.5,
 )
 classifier.get_booster().feature_names = list(X_re_dropped.columns)
 classifier.save_model(
@@ -363,7 +363,7 @@ classifier.save_model(
 
 classifier = xgb.XGBClassifier()
 classifier.fit(
-    np.clip(X_re_dropped.to_numpy(), 0, 1e16), 1 - Y_model["complete"].to_numpy() < 0.5
+    np.clip(X_re_dropped.to_numpy(), 0, 1e16), 1 - Y_re["complete"].to_numpy() < 0.5
 )
 classifier.get_booster().feature_names = list(X_re_dropped.columns)
 classifier.save_model(
