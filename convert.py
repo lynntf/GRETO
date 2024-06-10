@@ -68,8 +68,7 @@ def convert_with_args():
     with open(args.mode1x_in_filename, "rb") as input_file:
         with open(args.mode1x_out_filename, "wb") as output_file:
             if REEVALUATE_FOM:
-                print(f"New FOM for detector {DETECTOR.capitalize()}.")
-                print(f"Applying new FOM evaluation using: {eval_FOM_kwargs}")
+                print(f"Applying new FOM evaluation to data from detector:{DETECTOR.capitalize()} using: {eval_FOM_kwargs}")
                 mode1x_new_fom(
                     input_file,
                     output_file,
@@ -81,7 +80,8 @@ def convert_with_args():
                 )
             elif not SAVE_EXTENDED_MODE1:
                 print("Converting mode1x to mode1.")
-                convert_mode1_extended(input_file, output_file)
+                convert_mode1_extended(input_file, output_file, debug=False)
+                print("Conversion complete.")
             else:
                 print(
                     "Saving extended mode1 without evaluating a new FOM will produce an identical mode1x. Conversion no performed."

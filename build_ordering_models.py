@@ -22,11 +22,14 @@ events, clusters = gr_file_io.load_m30()
 
 N = 2000  # number of events to include in training
 width = 5
+seed = 42  # RNG seed for reproducibility
 
 print("Creating training data")
 
 training_events, training_clusters = events[:N], clusters[:N]
-X, Y = fo.create_data(training_events, training_clusters, semi_greedy_width=width)
+X, Y = fo.create_data(
+    training_events, training_clusters, semi_greedy_width=width, seed=seed
+)
 
 for column_set_name, columns in fo.column_sets.items():
     print(f"Beginning column set: {column_set_name}")
@@ -66,7 +69,7 @@ for column_set_name, columns in fo.column_sets.items():
 
         # Loop over solution methods
         for sol_method in ["lr", "svm", "lp", "milp"]:
-        # for sol_method in []:
+            # for sol_method in []:
 
             report = csvm.column_generation(
                 r,
@@ -82,9 +85,10 @@ for column_set_name, columns in fo.column_sets.items():
                 mirror=False,
             )
 
-            # w = np.array(report["w"] / scaler.scale_)  # move scale from X to w
+            scaled_w = np.array(report["w"] / scaler.scale_)  # move scale from X to w
             w = np.array(report["w"])  # weights on scaled (dimensionless) features
             weights = list(w[np.abs(w) > 0.0])  # eliminate zero weight features
+            scaled_weights = list(scaled_w[np.abs(scaled_w) > 0.0])
             column_names = list(np.array(columns)[np.abs(w) > 0.0])
             scales = list(scaler.scale_[np.abs(w) > 0.0])
 
@@ -94,7 +98,11 @@ for column_set_name, columns in fo.column_sets.items():
             )
 
             models.save_linear_model(
-                weights, scale=scales, columns=column_names, filename=fname
+                weights,
+                scale=scales,
+                columns=column_names,
+                scaled_weights=scaled_weights,
+                filename=fname,
             )
 
             solved, unsolved = csvm.check_solutions_general(
@@ -138,8 +146,6 @@ for column_set_name, columns in fo.column_sets.items():
 
     print(f"training acc = {solved / (solved + unsolved)}")
 
-    ranker_fname = (
-        f"models/ordering/N{N}_{sol_method}_C{C_xgb}_cols-{column_set_name}_width{width}.ubj"
-    )
+    ranker_fname = f"models/ordering/N{N}_{sol_method}_C{C_xgb}_cols-{column_set_name}_width{width}.ubj"
 
     models.save_xgb_model(ranker, ranker_fname)

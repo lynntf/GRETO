@@ -1,1 +1,1 @@
-{"model": "linear", "weights": [0.3435973774582284, 0.4525667667815841], "scale": [4.923794892770277, 11.755027968701482], "bias": null, "columns": ["rth_cap_sum_2", "c_penalty_ell_sum_1"]}
+{"model": "linear", "weights": [0.3435974011072231, 0.4525667346190971], "scale": [4.923794892770277, 11.755027968701482], "bias": null, "scaled_weights": [0.06978304510850668, 0.03849984328613127], "columns": ["rth_cap_sum_2", "c_penalty_ell_sum_1"]}
