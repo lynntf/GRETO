@@ -134,9 +134,23 @@ python -u track.py input.mode2 output.mode1 example_options.yaml > track.log
 
 Order, suppress, and output `mode1x` (`SAVE_EXTENDED_MODE1` is set to `true`)
 ```bash
-python -u track.py input.mode2 output.mode1x example_options.yaml > track.log
+python -u track.py input.mode2 output.mode1x different_options.yaml > track.log
 ```
 `output.mode1x` can now be re-evaluated (`REEVALUATE_FOM` is set to `true`)
 ```bash
 python -u convert.py output.mode1x output.mode1 new_example_options.yaml > convert.log
 ```
+
+## Re-building the machine learning models
+Ordering models
+```bash
+python -u build_ordering_models.py > build_models.log
+```
+There are a variety of options within the `build_ordering_models.py` script that dictate how the models are put together.
+
+Suppression models (requires one of the ordering models to run)
+```bash
+python -u build_classification_models.py > build_models.log
+```
+
+The suppression models require ordering &gamma;-rays using an ordering model. This is because we want the suppression model to be trained on the expected output of ordering
