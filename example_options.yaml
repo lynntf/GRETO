@@ -1,0 +1,32 @@
+---
+# Example settings for gamma-ray tracking
+# There are more options available, but not necessarily useful to tracking.
+# See greto/track_default.yaml for full options file
+
+DETECTOR: gretina               # Available detectors are "GRETINA", "GRETA" (identical to "GRETINA"), and "AGATA"
+COINCIDENCE_TIME_GAP: &tg 40    # Units of 10 ns; Used for grouping recorded crystal events in time
+NUM_PROCESSES: 3                # Number of processors to use for multi-processing (should be changed depending on the machine)
+VERBOSITY: 2                    # Level of console output;
+TIMEOUT_SECONDS: 15             # Timeout limit in seconds for multiprocessing processes
+MAX_HIT_POINTS: 300             # Maximum number of hit points for constructed events (experiment/data dependent)
+MONSTER_SIZE: &monster 8        # Maximum size of a cluster; clusters larger than the "monster" size are not tracked
+SAVE_EXTENDED_MODE1: false      # Save a mode1 file with all interactions recorded
+REEVALUATE_FOM: false           # Reevaluate the FOM values according to the eval_FOM_kwargs; Used in conversion, not used for tracking
+order_FOM_kwargs:               # Arguments for ordering interactions (recorded in mode1)
+  # fom_method: selected          # FOM method for ordering; Available methods are "oft"/"agata", "aft"/"angle", "selected" (ML optimized for ordering), "model"
+  # model_filename: null          # Filename of the model
+  fom_method: model
+  model_filename: models/ordering/N2000_lp_nonnegFalse_C10000_cols-oft_fast_tango_width5.json
+  width: 5                      # How many interactions to consider in the forward direction in the enumeration of possible tracks
+  stride: 2                     # How many interactions to accept after each enumeration step
+  max_cluster_size: *monster    # Maximum cluster size for tracking (should be the same as the monster size, but can be different)
+eval_FOM_kwargs:                # What FOM should be recorded in mode1
+  # fom_method: angle             # FOM method for recording in mode1
+  # model_filename: null          # Filename of the model
+  # singles_method: depth         # Singles method for recording in mode1; Available methods are "depth" (identical to AFT treatment), "range" (similar to AFT treatment using a continuous function to determine ranges), "probability" (range probability is returned), "continuous" (linear attenuation * distance)
+  fom_method: model
+  model_filename: models/suppression/N10000_sns-logistic_pca-0.95_order-model.pkl
+  max_cluster_size: *monster    # Maximum cluster size for tracking, determines if the gamma ray is considered tracked or not (should match the tracking options)
+cluster_kwargs:                 # How should interactions be clustered?
+  alpha_degrees: 20             # Cone clustering alpha in degrees
+  time_gap: *tg                 # Time gap for clustering; interactions with timestamps differing by more than the time gap have the distance between them set to infinity (can still be clustered together if there is an interaction bridging the time gap)

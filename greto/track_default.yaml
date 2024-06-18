@@ -28,10 +28,11 @@ secondary_order_FOM_kwargs:     # If ordering twice (double tracking), reorder t
   width: 5                      # How many interactions to consider in the forward direction in the enumeration of possible tracks
   stride: 2                     # How many interactions to accept after each enumeration step
   max_cluster_size: *monster    # Maximum cluster size for tracking (should be the same as the monster size, but can be different)
-eval_FOM_kwargs:                # What FOM should be recorded in mode1
+eval_FOM_kwargs:                # Suppression FOM. What FOM should be recorded in mode1? Not used if double tracking.
   fom_method: angle             # FOM method for recording in mode1
   model_filename: null          # Filename of the model
   singles_method: depth         # Singles method for recording in mode1; Available methods are "depth" (identical to AFT treatment), "range" (similar to AFT treatment using a continuous function to determine ranges), "probability" (range probability is returned), "continuous" (linear attenuation * distance)
-cluster_kwargs:                 # How should clustering of interaction points be accomplished?
+  max_cluster_size: *monster    # Maximum cluster size for tracking, determines if the gamma ray is considered tracked or not (should match the tracking options)
+cluster_kwargs:                 # How should interactions be clustered?
   alpha_degrees: 20             # Cone clustering alpha in degrees
-  time_gap: *tg                 # Time gap for clustering; interactions with timestamps differing by more than the time gap will (usually) not be clustered together
+  time_gap: *tg                 # Time gap for clustering; interactions with timestamps differing by more than the time gap have the distance between them set to infinity (can still be clustered together if there is an interaction bridging the time gap)
