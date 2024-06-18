@@ -5,11 +5,11 @@ multiprocess
 tqdm
 pyyaml
 xgboost
+scikit-learn
 matplotlib
 seaborn
 plotly
 cartopy
 pandas
 cvxpy
-scikit-learn
 pyomo

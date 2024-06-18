@@ -5,3 +5,4 @@ multiprocess
 tqdm
 pyyaml
 xgboost
+scikit-learn
