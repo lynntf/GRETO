@@ -1,4 +1,9 @@
-"""Build classification models"""
+"""
+Copyright (C) 2024 Argonne National Laboratory
+This software is provided without warranty and is licensed under the GNU GPL 2.0 license
+
+Script to build and save classification (suppression) models
+"""
 
 import pickle as pkl
 
