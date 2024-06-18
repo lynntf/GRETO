@@ -27,7 +27,7 @@
 ### Tracking
 Tracking is done using the script `track.py` that takes in some command line arguments for input, output, and options:
 ```bash
-python -u track.py input.mode2 output.mode1 options.yaml > track.log
+python -u track.py input.mode2 output.mode1 example_options.yaml > track.log
 ```
 The option `-u` specifies that the output from python is un-buffered (writes to `track.log` immediately).
 
@@ -93,7 +93,7 @@ Default options are used for any options that are not provided. Default options 
 
 Converting from `mode1x` to `mode1` is handled by the `convert.py` script that takes similar command line arguments as the `track.py` script. It can also be used to reevaluate the reported FOM and save as a `mode1` or `mode1x` again. This conversion step can be skipped in general by providing the desired output FOM (`eval_FOM_kwargs`) to the tracking script, but outputting a `mode1x` allows for the suppression FOM to be changed later without tracking again.
 ```bash
-python -u convert.py input.mode1x output.mode1 options.yaml > convert.log
+python -u convert.py input.mode1x output.mode1 example_options.yaml > convert.log
 ```
 or without any reevaluation
 ```bash
@@ -129,14 +129,14 @@ Some other warnings seem to be typical. Warnings about divide by zero when compu
 ## Example usage
 Order, suppress, and output `mode1` (`SAVE_EXTENDED_MODE1` is set to `false`)
 ```bash
-python -u track.py input.mode2 output.mode1 options.yaml > track.log
+python -u track.py input.mode2 output.mode1 example_options.yaml > track.log
 ```
 
 Order, suppress, and output `mode1x` (`SAVE_EXTENDED_MODE1` is set to `true`)
 ```bash
-python -u track.py input.mode2 output.mode1x options.yaml > track.log
+python -u track.py input.mode2 output.mode1x example_options.yaml > track.log
 ```
 `output.mode1x` can now be re-evaluated (`REEVALUATE_FOM` is set to `true`)
 ```bash
-python -u convert.py output.mode1x output.mode1 new_options.yaml > convert.log
+python -u convert.py output.mode1x output.mode1 new_example_options.yaml > convert.log
 ```
