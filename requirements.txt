@@ -4,7 +4,6 @@ numba
 multiprocess
 tqdm
 pyyaml
-json
 xgboost
 matplotlib
 seaborn
