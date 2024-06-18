@@ -1,0 +1,8 @@
+scipy
+numpy
+numba
+multiprocess
+tqdm
+pyyaml
+json
+xgboost
