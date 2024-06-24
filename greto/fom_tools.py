@@ -37,11 +37,12 @@ class FOM_model:
 
     def __init__(
         self,
-        model_evaluation: Callable,
+        predict: Callable,
         columns: Optional[List[str]] = None,
         # columns_bool: Optional[List[str]] = None,
         boolean_vectors: Optional[ff.boolean_vectors] = None,
         model: Optional[object] = None,
+        single_predict: Callable = None,
     ):
         """
         Args:
@@ -51,7 +52,7 @@ class FOM_model:
             - boolean_vectors: the boolean values for the usage of columns
             - model: the model object itself
         """
-        self.predict = model_evaluation
+        self.predict = predict
         if columns is not None and boolean_vectors is None:
             self.columns = columns
             self.boolean_vectors = ff.convert_feature_names_to_boolean_vectors(columns)
@@ -59,6 +60,13 @@ class FOM_model:
             self.boolean_vectors = boolean_vectors
         if model is not None:
             self.model = model
+        if single_predict is not None:
+            self.single_predict = single_predict
+        elif single_predict is None and model is not None:
+            if hasattr(model, "single_predict"):
+                self.single_predict = model.single_predict
+            else:
+                self.single_predict = model.predict
 
 
 # %% Clustered FOM
@@ -96,31 +104,73 @@ def cluster_model_FOM(
         FOM_kwargs: other keyword arguments for FOM computation
     """
     if not split_event:
-        return {
-            s: model.predict(
-                np.reshape(ff.get_all_features_cluster(
-                    event, cluster, event, bvs=model.boolean_vectors, trim_features=True
-                ), (1,-1))
-            )[0]
-            for (s, cluster) in clusters.items()
-        }
+        foms = {}
+        for s, cluster in clusters.items():
+            if len(cluster) == 1:
+                foms[s] = model.single_predict(
+                    np.reshape(
+                        ff.get_all_features_cluster(
+                            event,
+                            cluster,
+                            event,
+                            bvs=model.boolean_vectors,
+                            trim_features=True,
+                        ),
+                        (1, -1),
+                    )
+                )[0]
+            else:
+                foms[s] = model.predict(
+                    np.reshape(
+                        ff.get_all_features_cluster(
+                            event,
+                            cluster,
+                            event,
+                            bvs=model.boolean_vectors,
+                            trim_features=True,
+                        ),
+                        (1, -1),
+                    )
+                )[0]
+        return foms
 
     foms = {}
     s_events, s_clusters = split_event_clusters(event, clusters)
     for ev, clu in zip(s_events, s_clusters):
         for cluster_id, cluster in clu.items():
             feats = ff.get_all_features_cluster(
-                    ev, cluster, ev, bvs=model.boolean_vectors, trim_features=True
-                )
+                ev, cluster, ev, bvs=model.boolean_vectors, trim_features=True
+            )
             if np.sum(np.isnan(feats)) > 0:
                 for feat, feat_name in zip(feats, ff.all_feature_names):
                     # if np.isnan(feat):
                     print(feat_name, feat)
-            foms[cluster_id] = model.predict(
-                np.reshape(ff.get_all_features_cluster(
-                    ev, cluster, ev, bvs=model.boolean_vectors, trim_features=True
-                ), (1,-1))
-            )[0]
+            if len(cluster) == 1:
+                foms[cluster_id] = model.single_predict(
+                    np.reshape(
+                        ff.get_all_features_cluster(
+                            ev,
+                            cluster,
+                            ev,
+                            bvs=model.boolean_vectors,
+                            trim_features=True,
+                        ),
+                        (1, -1),
+                    )
+                )[0]
+            else:
+                foms[cluster_id] = model.predict(
+                    np.reshape(
+                        ff.get_all_features_cluster(
+                            ev,
+                            cluster,
+                            ev,
+                            bvs=model.boolean_vectors,
+                            trim_features=True,
+                        ),
+                        (1, -1),
+                    )
+                )[0]
     return foms
 
 

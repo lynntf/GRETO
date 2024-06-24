@@ -173,7 +173,7 @@ def load_linear_FOM_model(filename: str, weight_threshold: float = 1e-8) -> FOM_
     """
     model = load_linear_model(filename, weight_threshold=weight_threshold)
     return FOM_model(
-        model_evaluation=model.predict,
+        predict=model.predict,
         boolean_vectors=model.boolean_vectors,
         model=model,
     )
@@ -307,8 +307,8 @@ def load_suppression_FOM_model(filename: str) -> FOM_model:
         return load_xgbclassifier_FOM_model(filename)
     if filename.endswith(".pkl"):
         with open(filename, "rb") as f:
-            model = pkl.load(f)
-            return FOM_model(model.predict, ff.all_feature_names, None, model)
+            model : sns_model = pkl.load(f)
+            return FOM_model(model.predict, ff.all_feature_names, None, model, model.single_predict)
 
 
 class sns_model:
@@ -639,6 +639,75 @@ class sns_model:
                             )
                         )
                     )
+        return pred
+
+    def single_predict(
+        self,
+        X: np.ndarray,
+        weights: list = None,
+        bias: list = None,
+    ) -> np.ndarray:
+        """
+        Use the single model to get predictions
+
+        Args:
+            - X: features of the gamma-rays
+            - singles: indicator of which gamma-rays are singles
+            - weights: a vector with index [0] for weighting non-singles, [1] for singles
+            - bias: a vector with index [0] for biasing non-singles, [1] for singles
+        """
+
+        if self.use_combiner:
+            pred = np.zeros((X.shape[0], 2))
+
+            # Get predictions to pass to the combiner model
+            if self.model is LogisticRegression:
+                pred[:, 1] = self.model_s.predict_proba(
+                    self.pca_s.transform(
+                        self.scaler_s.transform(
+                            np.clip(X, self.lb, self.ub)
+                        )
+                    )
+                )[:, 1]
+                # Get predictions from the combiner model
+                pred = self.model_combiner.predict_proba(pred)[:, 1]
+            else:
+                pred[:, 1] = self.model_s.predict(
+                    self.pca_s.transform(
+                        self.scaler_s.transform(
+                            np.clip(X, self.lb, self.ub)
+                        )
+                    )
+                )
+                # Get predictions from the combiner model
+                pred = self.model_combiner.predict(pred)
+
+            # Apply weights and biases
+            if weights is not None:
+                if len(weights) == 2:
+                    pred *= weights[1]
+            if bias is not None:
+                if len(bias) == 2:
+                    pred += bias[1]
+        else:  # Not using a third combiner model to join the prediction values
+            pred = np.zeros((X.shape[0],))
+
+            if self.model is LogisticRegression:
+                pred = self.model_s.predict_proba(
+                    self.pca_s.transform(
+                        self.scaler_s.transform(
+                            np.clip(X, self.lb, self.ub)
+                        )
+                    )
+                )[:, 1]
+            else:
+                pred = self.model_s.predict(
+                    self.pca_s.transform(
+                        self.scaler_s.transform(
+                            np.clip(X, self.lb, self.ub)
+                        )
+                    )
+                )
         return pred
 
     def predict_separate(

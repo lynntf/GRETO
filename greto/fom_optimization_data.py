@@ -1925,7 +1925,7 @@ def create_classification_data(
     ordered = []
 
     print("Ordering clusters")
-    for clu, ev in zip(tqdm(list_of_clusters), list_of_events):
+    for clu, ev in zip(list_of_clusters, list_of_events):
         ordered_clusters = {}
         for cluster_id, cluster in clu.items():
             if len(cluster) > 1 and not use_true:
@@ -2127,7 +2127,7 @@ def create_classification_data_with_clustering(
     ordered = []
 
     print("Ordering clusters")
-    for clu, ev in zip(tqdm(list_of_clusters), list_of_events):
+    for clu, ev in zip(list_of_clusters, list_of_events):
         ordered_clusters = {}
         for cluster_id, cluster in clu.items():
             if len(cluster) > 1 and not use_true:

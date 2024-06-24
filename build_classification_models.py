@@ -27,19 +27,26 @@ X, Y = fo.create_classification_data(events[:], clusters[:], use_true=True)
 print("Getting test/train indices for data")
 train_indices, test_indices = sns_model.split(X)
 
+print("Gathering features of AFT-ordered events")
+X_aft, Y_aft = fo.create_classification_data(events[:], clusters[:], fom_method="aft")
 
-order_model_filename = "models/ordering/N2000_lp_nonnegFalse_C10000_cols-oft_fast_tango_width5.json"
-print(f"Load ordering model: {order_model_filename}")
-model = models.load_order_FOM_model(
-    order_model_filename
+print("Getting test/train indices for data")
+train_indices_aft, test_indices_aft = sns_model.split(X_aft)
+
+order_model_filename = (
+    "models/ordering/N2000_lp_nonnegFalse_C10000_cols-oft_fast_tango_width5.json"
 )
+print(f"Load ordering model: {order_model_filename}")
+model = models.load_order_FOM_model(order_model_filename)
 print("Ordering true clusters and gathering features of model-ordered events")
 X_model, Y_model = fo.create_classification_data(
     events[:], clusters[:], model=model, width=5, stride=3
 )
 
 alpha_degrees = 13.0
-print(f"Re-clustering (alpha = {alpha_degrees} degrees) and model-ordering events to gather features")
+print(
+    f"Re-clustering (alpha = {alpha_degrees} degrees) and model-ordering events to gather features"
+)
 X_re, Y_re = fo.create_classification_data_with_clustering(
     events[:],
     clusters[:],
@@ -51,6 +58,19 @@ X_re, Y_re = fo.create_classification_data_with_clustering(
 
 print("Getting test/train indices for reclustered data")
 train_indices_re, test_indices_re = sns_model.split(X_re)
+
+alpha_degrees = 13.0
+print(
+    f"Re-clustering (alpha = {alpha_degrees} degrees) and aft-ordering events to gather features"
+)
+X_re_aft, Y_re_aft = fo.create_classification_data_with_clustering(
+    events[:],
+    clusters[:],
+    fom_method="aft",
+    width=5,
+    stride=3,
+    alpha_degrees=alpha_degrees,
+)
 
 # Logistic Regression
 ## True data
@@ -87,6 +107,80 @@ classification_model.fit(
 
 with open(
     "models/suppression/N10000_sns-logistic_pca-0.95_order-true.pkl", "wb"
+) as file:
+    pkl.dump(classification_model, file)
+
+## AFT ordered data
+### 7_500 samples trained
+print("Training LogisticRegression based model using true order (training only)")
+classification_model = sns_model(
+    use_combiner=True,
+    model_class=LogisticRegression,
+    pca_n_components=0.95,
+    columns=ff.all_feature_names,
+)
+classification_model.fit(
+    X_aft.to_numpy()[train_indices_aft],
+    1 - Y_aft["complete"].to_numpy()[train_indices_aft],
+    Y_aft["lengths"].to_numpy()[train_indices_aft] <= 1,
+)
+
+with open("models/suppression/N7500_sns-logistic_pca-0.95_order-aft.pkl", "wb") as file:
+    pkl.dump(classification_model, file)
+
+### 10_000 sampled trained
+print("Training LogisticRegression based model using true order (testing and training)")
+classification_model = sns_model(
+    use_combiner=True,
+    model_class=LogisticRegression,
+    pca_n_components=0.95,
+    columns=ff.all_feature_names,
+)
+classification_model.fit(
+    X_aft.to_numpy(), 1 - Y_aft["complete"].to_numpy(), Y_aft["lengths"].to_numpy() <= 1
+)
+
+with open(
+    "models/suppression/N10000_sns-logistic_pca-0.95_order-aft.pkl", "wb"
+) as file:
+    pkl.dump(classification_model, file)
+
+## AFT ordered reclustered data
+### 7_500 samples trained
+print("Training LogisticRegression based model using true order (training only)")
+classification_model = sns_model(
+    use_combiner=True,
+    model_class=LogisticRegression,
+    pca_n_components=0.95,
+    columns=ff.all_feature_names,
+)
+classification_model.fit(
+    X_re_aft.to_numpy()[train_indices_re],
+    1 - Y_re_aft["complete"].to_numpy()[train_indices_re],
+    Y_re_aft["lengths"].to_numpy()[train_indices_re] <= 1,
+)
+
+with open(
+    "models/suppression/N7500_sns-logistic_pca-0.95_order-aft_reclustered.pkl", "wb"
+) as file:
+    pkl.dump(classification_model, file)
+
+### 10_000 sampled trained
+print("Training LogisticRegression based model using true order (testing and training)")
+classification_model = sns_model(
+    use_combiner=True,
+    model_class=LogisticRegression,
+    pca_n_components=0.95,
+    columns=ff.all_feature_names,
+)
+classification_model.fit(
+    X_re_aft.to_numpy(),
+    1 - Y_re_aft["complete"].to_numpy(),
+    Y_re_aft["lengths"].to_numpy() <= 1,
+)
+
+with open(
+    "models/suppression/N10000_sns-logistic_pca-0.95_order-aft_reclustered.pkl", "wb"
 ) as file:
     pkl.dump(classification_model, file)
 
@@ -131,7 +225,9 @@ with open(
 
 ## Model ordered reclustered data
 ### 7_500 samples trained
-print("Training LogisticRegression based model using reclustered model order (training only)")
+print(
+    "Training LogisticRegression based model using reclustered model order (training only)"
+)
 classification_model = sns_model(
     use_combiner=True,
     model_class=LogisticRegression,
@@ -150,7 +246,9 @@ with open(
     pkl.dump(classification_model, file)
 
 ### 10_000 samples trained
-print("Training LogisticRegression based model using reclustered model order (testing and training)")
+print(
+    "Training LogisticRegression based model using reclustered model order (testing and training)"
+)
 classification_model = sns_model(
     use_combiner=True,
     model_class=LogisticRegression,
@@ -184,6 +282,78 @@ classification_model.fit(
 )
 
 with open("models/suppression/N7500_sns-linear_pca-0.95_order-true.pkl", "wb") as file:
+    pkl.dump(classification_model, file)
+
+### 10_000 sampled trained
+print("Training LinearRegression based model using true order (testing and training)")
+classification_model = sns_model(
+    use_combiner=True,
+    model_class=LinearRegression,
+    pca_n_components=0.95,
+    columns=ff.all_feature_names,
+)
+classification_model.fit(
+    X_aft.to_numpy(), 1 - Y_aft["complete"].to_numpy(), Y_aft["lengths"].to_numpy() <= 1
+)
+
+with open("models/suppression/N10000_sns-linear_pca-0.95_order-aft.pkl", "wb") as file:
+    pkl.dump(classification_model, file)
+
+## AFT ordered data
+### 7_500 samples trained
+print("Training LinearRegression based model using true order (training only)")
+classification_model = sns_model(
+    use_combiner=True,
+    model_class=LinearRegression,
+    pca_n_components=0.95,
+    columns=ff.all_feature_names,
+)
+classification_model.fit(
+    X_aft.to_numpy()[train_indices_aft],
+    1 - Y_aft["complete"].to_numpy()[train_indices_aft],
+    Y_aft["lengths"].to_numpy()[train_indices_aft] <= 1,
+)
+
+with open("models/suppression/N7500_sns-linear_pca-0.95_order-aft.pkl", "wb") as file:
+    pkl.dump(classification_model, file)
+
+## AFT ordered reclustered data
+### 7_500 samples trained
+print("Training LinearRegression based model using true order (training only)")
+classification_model = sns_model(
+    use_combiner=True,
+    model_class=LinearRegression,
+    pca_n_components=0.95,
+    columns=ff.all_feature_names,
+)
+classification_model.fit(
+    X_re_aft.to_numpy()[train_indices_re],
+    1 - Y_re_aft["complete"].to_numpy()[train_indices_re],
+    Y_re_aft["lengths"].to_numpy()[train_indices_re] <= 1,
+)
+
+with open(
+    "models/suppression/N7500_sns-linear_pca-0.95_order-aft_reclustered.pkl", "wb"
+) as file:
+    pkl.dump(classification_model, file)
+
+### 10_000 sampled trained
+print("Training LinearRegression based model using true order (testing and training)")
+classification_model = sns_model(
+    use_combiner=True,
+    model_class=LinearRegression,
+    pca_n_components=0.95,
+    columns=ff.all_feature_names,
+)
+classification_model.fit(
+    X_re_aft.to_numpy(),
+    1 - Y_re_aft["complete"].to_numpy(),
+    Y_re_aft["lengths"].to_numpy() <= 1,
+)
+
+with open(
+    "models/suppression/N10000_sns-linear_pca-0.95_order-aft_reclustered.pkl", "wb"
+) as file:
     pkl.dump(classification_model, file)
 
 ### 10_000 sampled trained
@@ -240,7 +410,9 @@ with open(
 
 ## Model ordered reclustered data
 ### 7_500 samples trained
-print("Training LinearRegression based model using reclustered model order (training only)")
+print(
+    "Training LinearRegression based model using reclustered model order (training only)"
+)
 classification_model = sns_model(
     use_combiner=True,
     model_class=LinearRegression,
@@ -259,7 +431,9 @@ with open(
     pkl.dump(classification_model, file)
 
 ### 10_000 samples trained
-print("Training LinearRegression based model using reclustered model order (testing and training)")
+print(
+    "Training LinearRegression based model using reclustered model order (testing and training)"
+)
 classification_model = sns_model(
     use_combiner=True,
     model_class=LinearRegression,
@@ -322,8 +496,10 @@ drop_columns = [
 
 print(f"Dropping columns too similar to energy:\n{drop_columns}")
 X_dropped = X.drop(columns=drop_columns, inplace=False)
+X_aft_dropped = X_aft.drop(columns=drop_columns, inplace=False)
 X_model_dropped = X_model.drop(columns=drop_columns, inplace=False)
 X_re_dropped = X_re.drop(columns=drop_columns, inplace=False)
+X_re_aft_dropped = X_re_aft.drop(columns=drop_columns, inplace=False)
 
 classifier = xgb.XGBClassifier()
 classifier.fit(
@@ -339,6 +515,41 @@ classifier.fit(
 )
 classifier.get_booster().feature_names = list(X_dropped.columns)
 classifier.save_model("models/suppression/N10000_XGBClassifier_order-true.ubj")
+
+classifier = xgb.XGBClassifier()
+classifier.fit(
+    np.clip(X_aft_dropped.to_numpy()[train_indices], 0, 1e16),
+    1 - Y_aft["complete"].to_numpy()[train_indices] < 0.5,
+)
+classifier.get_booster().feature_names = list(X_aft_dropped.columns)
+classifier.save_model("models/suppression/N7500_XGBClassifier_order-aft.ubj")
+
+classifier = xgb.XGBClassifier()
+classifier.fit(
+    np.clip(X_aft_dropped.to_numpy(), 0, 1e16), 1 - Y_aft["complete"].to_numpy() < 0.5
+)
+classifier.get_booster().feature_names = list(X_aft_dropped.columns)
+classifier.save_model("models/suppression/N10000_XGBClassifier_order-aft.ubj")
+
+classifier = xgb.XGBClassifier()
+classifier.fit(
+    np.clip(X_re_aft_dropped.to_numpy()[train_indices_re], 0, 1e16),
+    1 - Y_re_aft["complete"].to_numpy()[train_indices_re] < 0.5,
+)
+classifier.get_booster().feature_names = list(X_re_aft_dropped.columns)
+classifier.save_model(
+    "models/suppression/N7500_XGBClassifier_order-aft_reclustered.ubj"
+)
+
+classifier = xgb.XGBClassifier()
+classifier.fit(
+    np.clip(X_re_aft_dropped.to_numpy(), 0, 1e16),
+    1 - Y_re_aft["complete"].to_numpy() < 0.5,
+)
+classifier.get_booster().feature_names = list(X_re_aft_dropped.columns)
+classifier.save_model(
+    "models/suppression/N10000_XGBClassifier_order-aft_reclustered.ubj"
+)
 
 classifier = xgb.XGBClassifier()
 classifier.fit(
