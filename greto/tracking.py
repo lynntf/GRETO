@@ -211,23 +211,26 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                 coincidence_event = pack_interactions(
                     coincidence_event, packing_distance=0.0
                 )
-                outputs.append(
-                    track_and_get_energy(
-                        coincidence_event,
-                        options["MONSTER_SIZE"],
-                        options["SECONDARY_ORDER"],
-                        eval_FOM_kwargs,
-                        options["MAX_HIT_POINTS"],
-                        cluster_kwargs,
-                        order_FOM_kwargs,
-                        secondary_order_FOM_kwargs,
-                        options["SAVE_INTERMEDIATE"],
-                        options["SAVE_EXTENDED_MODE1"],
-                        options["TRACK_MOLY_PEAK"],
-                        options["RECORD_UNTRACKED"],
-                        options["SUPPRESS_BAD_PAD"],
+                try:
+                    outputs.append(
+                        track_and_get_energy(
+                            coincidence_event,
+                            options["MONSTER_SIZE"],
+                            options["SECONDARY_ORDER"],
+                            eval_FOM_kwargs,
+                            options["MAX_HIT_POINTS"],
+                            cluster_kwargs,
+                            order_FOM_kwargs,
+                            secondary_order_FOM_kwargs,
+                            options["SAVE_INTERMEDIATE"],
+                            options["SAVE_EXTENDED_MODE1"],
+                            options["TRACK_MOLY_PEAK"],
+                            options["RECORD_UNTRACKED"],
+                            options["SUPPRESS_BAD_PAD"],
+                        )
                     )
-                )
+                except ValueError as ex:
+                    print(f"Some kind of error: {ex}")
             if options["VERBOSITY"] >= 4:
                 print(coincidence_event)
             position = mode2file.tell()
@@ -732,6 +735,10 @@ def track_and_get_energy(
             s: not any([event.points[i].pad > 0 for i in cluster])
             for s, cluster in clusters.items()
         }
+        for e, cluster in clusters.items():
+            for index in cluster:
+                if event.points[index].pad > 0:
+                    print(f"Found a bad pad, skipping:{event}")
         cluster_track_indicator = {
             s: indicator[s] and cluster_track_indicator[s] for s in clusters
         }

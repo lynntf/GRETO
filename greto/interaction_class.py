@@ -90,6 +90,7 @@ class Interaction:
             out += f", interaction_type={self.interaction_type}"
         if self.energy_factor is not None:
             out += f", energy_factor={self.energy_factor}"
+        out += f", pad={self.pad}"
         out += ")"
         return out
 
