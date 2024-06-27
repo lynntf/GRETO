@@ -40,6 +40,7 @@ from greto.fom_tools import (
 )
 from greto.models import load_order_FOM_model, load_suppression_FOM_model
 from greto.utils import get_file_size
+from greto.physics import inv_doppler
 
 
 def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
@@ -640,11 +641,6 @@ def solve_clusters_secondary_fom(
         print(event, pred_clusters)
         raise ex
     return out
-
-
-def inv_doppler(beta, cos_theta):
-    """Get a Doppler correction factor"""
-    return (1 - beta * cos_theta) / (np.sqrt(1 - beta**2))
 
 
 def moly_peak_check(

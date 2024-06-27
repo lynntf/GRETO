@@ -1437,3 +1437,16 @@ def sig_pair_old(E: np.ndarray[float]) -> np.ndarray[float]:
         * 1e-24
     )
     return sigma_pair
+
+def inv_doppler(beta:float, cos_theta:float) -> float:
+    """
+    Get a Doppler correction factor
+
+    Args:
+    - beta: v/c
+    - cos_theta: cosine of deflection angle
+
+    Returns:
+    - correction factor
+    """
+    return (1 - beta * cos_theta) / (np.sqrt(1 - beta**2))
