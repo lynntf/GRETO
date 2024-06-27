@@ -12,7 +12,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 from scipy.cluster.hierarchy import linkage  # fcluster,
-# from scipy.spatial.distance import pdist, squareform
+from scipy.spatial.distance import squareform  # pdist,
 
 import greto.geometry as geo
 import greto.physics as phys
@@ -246,7 +246,13 @@ class Event:
             # Z = asym_hier_linkage(squareform(distances), **kwargs)
             Z = asym_hier_linkage(geo.njit_squareform_vector(distances), **kwargs)
         else:
-            Z = linkage(distances, method=method)
+            try:
+                Z = linkage(distances, method=method)
+            except ValueError as e:
+                print(f"problem with distances {squareform(distances)}")
+                print(f"Event: {self}")
+                raise e
+
         self.linkage = Z
         return Z
 

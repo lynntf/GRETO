@@ -1161,6 +1161,7 @@ def semi_greedy_clusters(
     stride: int = 1,
     direction: Union["forward", "backward", "hybrid"] = "forward",
     split_event: bool = True,
+    cluster_track_indicator: Dict = None,
     **FOM_kwargs,
 ) -> Dict[Hashable, Iterable]:
     """
@@ -1178,6 +1179,9 @@ def semi_greedy_clusters(
     Returns:
         - copy of input clusters with new order
     """
+    if cluster_track_indicator is None:
+        cluster_track_indicator = {i: True for i in clusters}
+
     if not split_event:
         best_ordered_clusters = {
             s: semi_greedy(
@@ -1186,6 +1190,7 @@ def semi_greedy_clusters(
                 width=width,
                 stride=stride,
                 direction=direction,
+                track_indicator=cluster_track_indicator[s],
                 **FOM_kwargs,
             )
             for (s, cluster) in clusters.items()
@@ -1194,9 +1199,12 @@ def semi_greedy_clusters(
 
     s_events, s_clusters = split_event_clusters(event, clusters)
     for ev, (i, clu) in zip(s_events, enumerate(s_clusters)):
-        s_clusters[i] = semi_greedy_clusters(
-            ev, clu, width, stride, direction, split_event=False
-        )
+        if cluster_track_indicator[list(clu.keys())[0]]:
+            s_clusters[i] = semi_greedy_clusters(
+                ev, clu, width, stride, direction, split_event=False
+            )
+        else:
+            s_clusters[i] = clu
     # _joined_event, joined_clusters = merge_events(s_events, s_clusters)
     joined_clusters = merge_clusters(s_clusters, clusters)
     return joined_clusters
@@ -1211,6 +1219,7 @@ def semi_greedy_batch_clusters(
     direction: str = "forward",
     split_event: bool = True,
     batch_size: int = 1,
+    cluster_track_indicator: Dict = None,
     **FOM_kwargs,
 ):
     """
@@ -1230,6 +1239,9 @@ def semi_greedy_batch_clusters(
     Returns:
         - copy of input clusters with new order
     """
+    if cluster_track_indicator is None:
+        cluster_track_indicator = {i: True for i in clusters}
+
     if not split_event:
         best_ordered_clusters = {
             s: semi_greedy_batch(
@@ -1240,6 +1252,7 @@ def semi_greedy_batch_clusters(
                 stride=stride,
                 direction=direction,
                 batch_size=batch_size,
+                track_indicator=cluster_track_indicator[s],
                 **FOM_kwargs,
             )
             for (s, cluster) in clusters.items()
@@ -1249,7 +1262,14 @@ def semi_greedy_batch_clusters(
     s_events, s_clusters = split_event_clusters(event, clusters)
     for ev, (i, clu) in zip(s_events, enumerate(s_clusters)):
         s_clusters[i] = semi_greedy_batch_clusters(
-            ev, clu, model, width, stride, direction, split_event=False
+            ev,
+            clu,
+            model,
+            width,
+            stride,
+            direction,
+            split_event=False,
+            cluster_track_indicator={i: cluster_track_indicator[i] for i in clu},
         )
     # _joined_event, joined_clusters = merge_events(s_events, s_clusters)
     joined_clusters = merge_clusters(s_clusters, clusters)
@@ -1296,6 +1316,7 @@ def semi_greedy_batch(
     model_bvs: Optional[ff.boolean_vectors] = None,
     minimize: bool = True,
     batch_size: int = 1,
+    track_indicator: bool = True,
     **FOM_kwargs,
 ) -> List:
     """
@@ -1346,6 +1367,8 @@ def semi_greedy_batch(
     # If no cluster provided, assume the entire event is one cluster
     if cluster is None:
         cluster = list(range(0, len(event.hit_points) + 1))
+    if not track_indicator:  # Don't track
+        return cluster
 
     # For AFT, final FOM value is maximized when using exponential form
     if (
@@ -1515,6 +1538,7 @@ def semi_greedy(
     early_stopping: bool = False,
     debug: bool = False,
     minimize: bool = True,
+    track_indicator: bool = True,
     **FOM_kwargs,
 ) -> List:
     """
@@ -1555,6 +1579,8 @@ def semi_greedy(
     # FOM_kwargs['filter_singles'] = False
     if cluster is None:
         cluster = list(range(0, len(event.hit_points) + 1))
+    if not track_indicator:  # Don't track
+        return cluster
 
     # For AFT, final FOM value is maximized when using exponential form
     if (

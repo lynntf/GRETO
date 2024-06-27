@@ -46,6 +46,7 @@ class Interaction:
     interaction_id: str = None
     interaction_type: int = None
     energy_factor: float = None
+    pad: int = 0
 
     def __post_init__(self):
         """Convert to numpy arrays"""

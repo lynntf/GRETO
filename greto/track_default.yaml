@@ -12,7 +12,10 @@ GLOBAL_COORDS: false            # USE FOR SIMULATED DATA ONLY; If the data is pr
 MONSTER_SIZE: &monster 8        # Maximum size of a cluster; clusters larger than the "monster" size are not tracked
 PARTIAL_TRACK: false            # DO NOT USE; Should tracking bail after determining the first interaction points? (Possibly useful when performing double tracking because only the first interactions are recorded in mode1 data)
 SAVE_INTERMEDIATE: false        # DO NOT USE; Save an intermediate file format instead of mode1 (events and clusters stored by pickle)
+TRACK_MOLY_PEAK: false          # DO NOT USE; Only tracks data related to checking Molybdenum Doppler peak
 SAVE_EXTENDED_MODE1: false      # Save a mode1 file with all interactions recorded
+RECORD_UNTRACKED: true          # Save untracked data to the output file
+SUPPRESS_BAD_PAD: true          # Suppress bad PAD values (bad signal decomposition)
 REEVALUATE_FOM: false           # Reevaluate the FOM values according to the eval_FOM_kwargs; Used in conversion, not tracking
 order_FOM_kwargs:               # Arguments for ordering interactions (recorded in mode1)
   fom_method: selected          # FOM method for ordering; Available methods are "oft"/"agata", "aft"/"angle", "selected" (ML optimized for ordering), "model"
@@ -28,7 +31,7 @@ secondary_order_FOM_kwargs:     # If ordering twice (double tracking), reorder t
   width: 5                      # How many interactions to consider in the forward direction in the enumeration of possible tracks
   stride: 2                     # How many interactions to accept after each enumeration step
   max_cluster_size: *monster    # Maximum cluster size for tracking (should be the same as the monster size, but can be different)
-eval_FOM_kwargs:                # Suppression FOM. What FOM should be recorded in mode1? Not used if double tracking.
+eval_FOM_kwargs:                # Suppression FOM. What FOM should be recorded in mode1?
   fom_method: angle             # FOM method for recording in mode1
   model_filename: null          # Filename of the model
   singles_method: depth         # Singles method for recording in mode1; Available methods are "depth" (identical to AFT treatment), "range" (similar to AFT treatment using a continuous function to determine ranges), "probability" (range probability is returned), "continuous" (linear attenuation * distance)

@@ -10,12 +10,14 @@ from datetime import datetime
 from typing import BinaryIO, ByteString, Dict, List, Tuple
 
 import multiprocess as mp
+import numpy as np
 from tqdm import tqdm
 
 from greto.cluster_tools import (
     cluster_linkage,
     join_events,
     remove_zero_energy_interactions,
+    pack_interactions,
     split_event,
 )
 from greto.detector_config_class import default_config
@@ -122,6 +124,9 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                     coincidence_event = remove_zero_energy_interactions(
                         coincidence_event
                     )
+                    coincidence_event = pack_interactions(
+                        coincidence_event, packing_distance=1e-8
+                    )
                     tracking_processes.append(
                         pool.apply_async(
                             track_and_get_energy,
@@ -136,6 +141,9 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                                 secondary_order_FOM_kwargs,
                                 options["SAVE_INTERMEDIATE"],
                                 options["SAVE_EXTENDED_MODE1"],
+                                options["TRACK_MOLY_PEAK"],
+                                options["RECORD_UNTRACKED"],
+                                options["SUPPRESS_BAD_PAD"],
                             ),
                         )
                     )
@@ -172,8 +180,8 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                             )
                         except mp.TimeoutError:  # pylint: disable=E1101
                             print(f"Timeout occurred for process {j}")
-                        except ValueError:
-                            print(f"Found a bad event at process {j}")
+                        except ValueError as e:
+                            print(f"Found a bad event at process {j}: {e}")
                         else:
                             output_file.write(outputs)
                     tracking_processes = []
@@ -199,6 +207,9 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
         for num_events, coincidence_event in enumerate(mode2_data):
             if coincidence_event is not None:
                 coincidence_event = remove_zero_energy_interactions(coincidence_event)
+                coincidence_event = pack_interactions(
+                    coincidence_event, packing_distance=0.0
+                )
                 outputs.append(
                     track_and_get_energy(
                         coincidence_event,
@@ -211,6 +222,9 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                         secondary_order_FOM_kwargs,
                         options["SAVE_INTERMEDIATE"],
                         options["SAVE_EXTENDED_MODE1"],
+                        options["TRACK_MOLY_PEAK"],
+                        options["RECORD_UNTRACKED"],
+                        options["SUPPRESS_BAD_PAD"],
                     )
                 )
             if options["VERBOSITY"] >= 4:
@@ -306,6 +320,7 @@ def track_simulated(events: List[Event], output_file: BinaryIO, options: Dict):
                             secondary_order_FOM_kwargs,
                             options["SAVE_INTERMEDIATE"],
                             options["SAVE_EXTENDED_MODE1"],
+                            options["TRACK_MOLY_PEAK"],
                         ),
                     )
                 )
@@ -400,6 +415,103 @@ def track_simulated_serial(events: List[Event], output_file: BinaryIO, options: 
     print(
         f"[Average event processing time : {(datetime.now() - start)/max(1,len(events))}]."
     )
+
+
+def cone_cluster(
+    event: Event,
+    MAX_HIT_POINTS: int = 100,
+    cluster_kwargs: Dict = None,
+) -> Dict:
+    """Perform the cone clustering"""
+    if cluster_kwargs is None:
+        cluster_kwargs = {}
+
+    if len(event.hit_points) == 0 or len(event.hit_points) > MAX_HIT_POINTS:
+        print("Found a bad event:")
+        print(event)
+        raise ValueError(f" Event too large or empty: {len(event.hit_points)}")
+
+    return cluster_linkage(event, **cluster_kwargs)
+
+
+def order_clusters(
+    event: Event,
+    pred_clusters: Dict,
+    order_FOM_kwargs: Dict = None,
+    split_event_by_cluster: bool = True,
+    cluster_track_indicator: Dict = None,
+) -> Tuple[Event, Dict]:
+    """
+    Perform clustering and then ordering, returning the ordered clusters and
+    matching event
+
+    - event: gamma-ray event
+    - order_FOM_kwargs: keyword arguments for the ordering FOM. See
+      fom_tools.FOM for details
+    - split_event_by_cluster: split the event into smaller events (by cluster)
+      before ordering, may save some computation
+
+    Returns
+    - event: should be roughly equivalent to the original event, but if the
+    event was split and rejoined, the point indices may have changed
+    - pred_clusters: the predicted clusters (possibly altered by splitting and
+    joining)
+    """
+    if order_FOM_kwargs is None:
+        order_FOM_kwargs = {}
+    if cluster_track_indicator is None:
+        cluster_track_indicator = {i: True for i in pred_clusters}
+
+    if split_event_by_cluster:
+        split_events, split_clusters = split_event(event, pred_clusters)
+
+        # Order each split event/cluster
+        ordered_clusters = []
+        for ev, clusters in zip(split_events, split_clusters):
+            clu = list(clusters.values())[0]
+            cluster_id = list(clusters.keys())[0]
+            if order_FOM_kwargs.get("model", None) is not None:
+                ordered_clusters.append(
+                    {
+                        cluster_id: semi_greedy_batch(
+                            ev,
+                            clu,
+                            track_indicator=cluster_track_indicator[cluster_id],
+                            **order_FOM_kwargs,
+                        )
+                    }
+                )
+            else:
+                ordered_clusters.append(
+                    {
+                        cluster_id: semi_greedy(
+                            ev,
+                            clu,
+                            track_indicator=cluster_track_indicator[cluster_id],
+                            **order_FOM_kwargs,
+                        )
+                    }
+                )
+
+        # Recombine the split event into a single event
+        event, pred_clusters = join_events(split_events, ordered_clusters)
+    else:
+        if order_FOM_kwargs.get("model", None) is not None:
+            pred_clusters = semi_greedy_batch_clusters(
+                event,
+                pred_clusters,
+                cluster_track_indicator=cluster_track_indicator,
+                **order_FOM_kwargs,
+            )
+        else:
+            pred_clusters = semi_greedy_clusters(
+                event,
+                pred_clusters,
+                cluster_track_indicator=cluster_track_indicator,
+                **order_FOM_kwargs,
+            )
+
+    return event, pred_clusters
 
 
 def solve_clusters(
@@ -530,6 +642,41 @@ def solve_clusters_secondary_fom(
     return out
 
 
+def inv_doppler(beta, cos_theta):
+    """Get a Doppler correction factor"""
+    return (1 - beta * cos_theta) / (np.sqrt(1 - beta**2))
+
+
+def moly_peak_check(
+    event: Event,
+    clusters: Dict,
+    beam_direction: np.ndarray = np.array([0.0, 0.0, 1.0]),
+    beta: float = 0.0845,
+    peak_energy_MeV: float = 2.066,
+    threshold_MeV: float = 0.06,
+):
+    """
+    Check if a cluster can fall within a small region of a Molybdenum peak that
+    we care about for checking ordering
+    """
+    energy_sums = {
+        s: sum(event.points[i].e for i in clu) for s, clu in clusters.items()
+    }
+    check = {s: False for s in clusters}
+    for s, clu in clusters.items():
+        for index in clu:
+            cos_theta = (
+                np.dot(beam_direction, event.points[index].x) / event.points[index].r
+            )
+            if (
+                np.abs(inv_doppler(beta, cos_theta) * energy_sums[s] - peak_energy_MeV)
+                < threshold_MeV
+            ):
+                check[s] = True
+                break
+    return check
+
+
 def track_and_get_energy(
     event: Event,
     monster_size: int = 8,
@@ -541,9 +688,30 @@ def track_and_get_energy(
     secondary_order_FOM_kwargs: Dict = None,
     SAVE_INTERMEDIATE: bool = False,
     SAVE_EXTENDED_MODE1: bool = False,
+    TRACK_MOLY_PEAK: bool = False,
+    RECORD_UNTRACKED: bool = True,
+    SUPPRESS_BAD_PAD: bool = False,
 ) -> ByteString:
     """
     Track a single event by clustering and then ordering.
+    
+    Args:
+    - event: g-ray event object
+    - monster_size: maximum number of interactions that will be tracked per cluster
+    - SECONDARY_ORDER: option that tracks a second time for a FOM (first track is order)
+    - eval_FOM_kwargs: keyword arguments for FOM recorded in output
+    - MAX_HIT_POINTS: maximum number of interaction per event (more than this will ignore the event)
+    - cluster_kwargs: keyword arguments for clustering (cone clustering)
+    - order_FOM_kwargs: keyword arguments for FOM used to order interactions
+    - secondary_order_FOM_kwargs: keyword arguments for FOM used to get a secondary order (used for FOM, not order)
+    - SAVE_INTERMEDIATE: DO NOT USE, saves a pickled version of the event to file instead of mode1(x) output
+    - SAVE_EXTENDED_MODE1: saves a mode1x file instead of a mode1 file
+    - TRACK_MOLY_PEAK: used to track just around a Molybdenum peak to check ordering
+    - RECORD_UNTRACKED: record untracked data to the mode1(x) output
+    - SUPPRESS_BAD_PAD: don't track any clusters that have a bad pad interaction in them
+
+    Returns:
+    - BytesString with mode1(x) bytes to write to file
     """
     if eval_FOM_kwargs is None:
         eval_FOM_kwargs = {}
@@ -554,33 +722,67 @@ def track_and_get_energy(
     if secondary_order_FOM_kwargs is None:
         secondary_order_FOM_kwargs = {}
 
-    gr_event, clusters = solve_clusters(
-        event, MAX_HIT_POINTS, cluster_kwargs, order_FOM_kwargs
+    clusters = cone_cluster(event, MAX_HIT_POINTS, cluster_kwargs)
+
+    cluster_track_indicator = {s: True for s in clusters}
+    if TRACK_MOLY_PEAK:
+        indicator = moly_peak_check(event, clusters)
+        cluster_track_indicator = {
+            s: indicator[s] and len(cluster) <= monster_size
+            for s, cluster in clusters.items()
+        }
+    if SUPPRESS_BAD_PAD:
+        indicator = {
+            s: not any([event.points[i].pad > 0 for i in cluster])
+            for s, cluster in clusters.items()
+        }
+        cluster_track_indicator = {
+            s: indicator[s] and cluster_track_indicator[s] for s in clusters
+        }
+    gr_event, clusters = order_clusters(
+        event,
+        clusters,
+        order_FOM_kwargs,
+        cluster_track_indicator=cluster_track_indicator,
     )
 
     if SAVE_INTERMEDIATE:
         return pkl.dumps((gr_event.coincidence, clusters))
 
     if SECONDARY_ORDER:
-        foms = solve_clusters_secondary_fom(
-            event, MAX_HIT_POINTS, cluster_kwargs, secondary_order_FOM_kwargs
+        # foms = solve_clusters_secondary_fom(
+        #     event, MAX_HIT_POINTS, cluster_kwargs, secondary_order_FOM_kwargs
+        # )
+        _, secondary_clusters = order_clusters(
+            event,
+            clusters,
+            secondary_order_FOM_kwargs,
+            cluster_track_indicator=cluster_track_indicator,
         )
-        if SAVE_EXTENDED_MODE1:
-            return mode1_extended_data(
-                gr_event,
-                clusters,
-                foms=foms,
-                monster_size=monster_size,
-                **eval_FOM_kwargs,
-            )
-        return mode1_data(
-            gr_event, clusters, foms=foms, monster_size=monster_size, **eval_FOM_kwargs
-        )
+        foms = cluster_FOM(gr_event, secondary_clusters, **eval_FOM_kwargs)
+        # foms = cluster_FOM(gr_event, secondary_clusters, **secondary_order_FOM_kwargs)
+    else:
+        foms = cluster_FOM(gr_event, clusters, **eval_FOM_kwargs)
+
     if SAVE_EXTENDED_MODE1:
         return mode1_extended_data(
-            gr_event, clusters, monster_size=monster_size, **eval_FOM_kwargs
+            gr_event,
+            clusters,
+            foms=foms,
+            monster_size=monster_size,
+            tracked_dict=cluster_track_indicator,
+            RECORD_UNTRACKED=RECORD_UNTRACKED,
+            **eval_FOM_kwargs,
         )
-    return mode1_data(gr_event, clusters, monster_size=monster_size, **eval_FOM_kwargs)
+    return mode1_data(
+        gr_event,
+        clusters,
+        foms=foms,
+        monster_size=monster_size,
+        tracked_dict=cluster_track_indicator,
+        RECORD_UNTRACKED=RECORD_UNTRACKED,
+        **eval_FOM_kwargs,
+    )
 
 
 def track_event(

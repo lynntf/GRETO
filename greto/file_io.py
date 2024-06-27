@@ -775,6 +775,8 @@ def mode1_data(
     foms: Dict = None,
     monster_size: int = 8,
     include_TANGO: bool = False,
+    tracked_dict: Dict = None,
+    RECORD_UNTRACKED: bool = True,
     **FOM_kwargs,
 ) -> bytes:
     """
@@ -810,8 +812,15 @@ def mode1_data(
     ## Returns:
     - A bytes object that contains the MODE1 data for writing
     """
+    if tracked_dict is None:
+        tracked_dict = {
+            s: int(len(cluster) <= monster_size) for s, cluster in clusters.items()
+        }
     GEBHeader_format = "iiq"
-    ngam = len(clusters)
+    if RECORD_UNTRACKED:
+        ngam = len(clusters)
+    else:
+        ngam = sum([tracked_dict.get(i, True) for i in tracked_dict])
     tracked_gamma_hit_format = "ii"
     mode1_format = "fifiqffffffffh"
     extra_data_format = "hee"  # Extra bytes
@@ -833,6 +842,8 @@ def mode1_data(
     if foms is None:
         foms = cluster_FOM(event, clusters, **FOM_kwargs)
     for i, cluster in clusters.items():
+        if not RECORD_UNTRACKED and not tracked_dict.get(i, True):
+            continue
         mode1 = {
             "format": total_format,
             "GEB_type": 3,
@@ -840,7 +851,7 @@ def mode1_data(
             "esum": sum(event.points[i].e for i in cluster),
             "ndet": len(cluster),
             "fom": foms[i],
-            "tracked": int(len(cluster) <= monster_size),
+            "tracked": tracked_dict.get(i, True),
             "timestamp": event.points[cluster[0]].ts,
         }
         if escapes is None or not include_TANGO:
@@ -926,6 +937,7 @@ def mode1_extended_data(
     foms: Dict = None,
     monster_size: int = 8,
     include_TANGO: bool = False,
+    tracked_dict: Dict = None,
     **FOM_kwargs,
 ) -> bytes:
     """
@@ -961,6 +973,10 @@ def mode1_extended_data(
     ## Returns:
     - A bytes object that contains the extended MODE1 data for writing
     """
+    if tracked_dict is None:
+        tracked_dict = {
+            s: int(len(cluster) <= monster_size) for s, cluster in clusters.items()
+        }
     GEB_type = 33
     GEBHeader_format = "iiq"  # 16 bytes
     ngam = len(clusters)
@@ -1005,7 +1021,7 @@ def mode1_extended_data(
             "esum": sum(event.points[i].e for i in cluster),
             "ndet": len(cluster),
             "fom": foms[i],
-            "tracked": int(len(cluster) <= monster_size),
+            "tracked": tracked_dict.get(i, True),
             "timestamp": event.points[cluster[0]].ts,
         }
         if escapes is None or not include_TANGO:
@@ -1290,7 +1306,7 @@ def mode2_loader(
 
 
 def mode2_coincidence_to_event(
-    coincidence: list[dict], combine_collisions: bool = True, debug: bool = False
+    coincidence: list[dict], combine_collisions: bool = True, debug: bool = False,
 ) -> Event:
     """
     # Convert mode2 coincidence of crystal proto-events to a single event
@@ -1335,6 +1351,7 @@ def mode2_coincidence_to_event(
                 seg_no=intpt["seg"],
                 crystal_x=np.array(intpt["int"][:3]) / 10,
                 energy_factor=proto_event["energy_factor"],
+                pad=proto_event["pad"],
             )
             for intpt in proto_event["intpts"][: proto_event["num"]]
             if intpt["int"][3] > 0
