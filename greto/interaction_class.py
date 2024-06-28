@@ -45,7 +45,7 @@ class Interaction:
     event_no: int = None
     interaction_id: str = None
     interaction_type: int = None
-    energy_factor: float = None
+    energy_factor: float = 0.0
     pad: int = 0
 
     def __post_init__(self):

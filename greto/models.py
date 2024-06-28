@@ -50,8 +50,7 @@ class LinearModel:
         if bias is None:
             bias = 0.0
         self.bias = bias
-        if scale is None:
-            scale = np.ones(self.weights.shape)
+        
 
         # Feature names may not be provided in the order that they are created by other code
         # This maps weights (etc.) to an order that matches features
@@ -59,6 +58,8 @@ class LinearModel:
         self.permutation = ff.permute_column_names(columns)
 
         self.weights = np.array(weights)[self.permutation]
+        if scale is None:
+            scale = np.ones(self.weights.shape)
         self.scale = np.array(scale)[self.permutation]
         self.columns = np.array(columns)[self.permutation]
 
@@ -75,6 +76,8 @@ class LinearModel:
         self.boolean_vectors = ff.convert_feature_names_to_boolean_vectors(
             self.columns_thresholded
         )
+
+        # ff.test_feature_names_and_vectors(self.boolean_vectors)
 
         self.effective_weights = self.weights_thresholded / self.scale_thresholded
 

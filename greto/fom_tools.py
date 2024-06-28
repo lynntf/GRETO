@@ -242,6 +242,7 @@ def FOM(
     (completely energy sum independent but inaccurate)
     - `"feature"` : uses a multitude of FOM features and weights to compute
     - `"selected"` : uses a selected subset of FOM features and weights to compute
+    - `"zeros"` : returns 0.0 always
 
     ## Returns
     - `FOM` : the figure of merit specified by the `*args` and `**kwargs`
@@ -254,6 +255,9 @@ def FOM(
         print(f" - Permutation {perm}")
         print(f" - Start index {start_point}")
         raise IndexError
+
+    if fom_method == "zeros":
+        return 0.0
 
     if len(perm) == 1:
         return single_FOM(

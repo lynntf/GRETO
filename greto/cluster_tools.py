@@ -203,19 +203,36 @@ def pack_interactions(
     # Correct the points positions and energies, position is weighted by deposited energy
     points = []
     for cluster in set(packing_clusters):
+        # TODO - keep interaction data better, this is bad
         esum = 0
         interaction_type = 0
         position = np.array([0.0, 0.0, 0.0])
+        first = True
         for i, p in enumerate(packing_clusters):
             if p == cluster:
-                esum += event.hit_points[i].e
-                position += event.hit_points[i].e * event.hit_points[i].x
+                if first:
+                    interaction = deepcopy(event.hit_points[i])
+                    interaction.e = 0.0
+                    interaction.x = np.array([0.0, 0.0, 0.0])
+                    try:
+                        del interaction.r
+                    except:
+                        pass
+                    try:
+                        del interaction.theta
+                    except:
+                        pass
+                    first = False
+                interaction.e += event.hit_points[i].e
+                interaction.x += event.hit_points[i].e * event.hit_points[i].x
                 if event.hit_points[i].interaction_type is not None:
-                    interaction_type = max(
-                        interaction_type, event.hit_points[i].interaction_type
+                    interaction.interaction_type = max(
+                        interaction.interaction_type, event.hit_points[i].interaction_type
                     )
+        interaction.x /= interaction.e
         points.append(
-            Interaction(position / esum, esum, interaction_type=interaction_type)
+            # Interaction(position / esum, esum, interaction_type=interaction_type)
+            interaction
         )
 
     if clusters is not None:

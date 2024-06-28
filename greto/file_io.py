@@ -437,6 +437,8 @@ class GEBdata_file:
         )
 
         events = {"mode": 1, "ngam": ngam, "pad": pad}
+        if as_gr_event and ngam == 0:
+            raise ValueError("Empty event")
         for i in range(ngam):
             event = {}
             event_data = tuple(
@@ -506,6 +508,8 @@ class GEBdata_file:
                 print(f"       TANGO_fom= {events[i]['TANGO_fom']}")
             print()
         if as_gr_event:
+            if ngam == 0:
+                raise ValueError("Empty event")
             points = []
             clusters = {}
             int_count = 0
@@ -601,6 +605,8 @@ class GEBdata_file:
             self.file.read(struct.calcsize(tracked_gamma_hit_format)),
         )
 
+        if as_gr_event and ngam == 0:
+            raise ValueError("Empty event")
         events = {"mode": 1, "ngam": ngam, "pad": pad}
         for i in range(ngam):
             event = {}
@@ -691,6 +697,8 @@ class GEBdata_file:
                 print(f"       TANGO_fom= {events[i]['TANGO_fom']}")
             print()
         if as_gr_event:
+            if ngam == 0:
+                raise ValueError("Empty event")
             points = []
             clusters = {}
             int_count = 0
@@ -938,6 +946,7 @@ def mode1_extended_data(
     monster_size: int = 8,
     include_TANGO: bool = False,
     tracked_dict: Dict = None,
+    RECORD_UNTRACKED: bool = True,
     **FOM_kwargs,
 ) -> bytes:
     """
@@ -979,7 +988,10 @@ def mode1_extended_data(
         }
     GEB_type = 33
     GEBHeader_format = "iiq"  # 16 bytes
-    ngam = len(clusters)
+    if RECORD_UNTRACKED:
+        ngam = len(clusters)
+    else:
+        ngam = sum([tracked_dict.get(i, True) for i in tracked_dict])
     tracked_gamma_hit_format = "ii"  # 8 bytes
     gamma_info_format = "fifiq"  # 24 bytes
     interaction_format = "ffffihe"  # 24 bytes
@@ -1010,6 +1022,8 @@ def mode1_extended_data(
     if foms is None:
         foms = cluster_FOM(event, clusters, **FOM_kwargs)
     for i, cluster in clusters.items():
+        if not RECORD_UNTRACKED and not tracked_dict.get(i, True):
+            continue
         mode1 = {
             "format": total_format,
             "GEB_type": GEB_type,
@@ -1022,7 +1036,7 @@ def mode1_extended_data(
             "ndet": len(cluster),
             "fom": foms[i],
             "tracked": tracked_dict.get(i, True),
-            "timestamp": event.points[cluster[0]].ts,
+            "timestamp": max(event.points[cluster[0]].ts, event.id),
         }
         if escapes is None or not include_TANGO:
             mode1["escaped"] = 0
@@ -1090,7 +1104,7 @@ def mode1_extended_data(
             )
         except struct.error as e:
             print(
-                "Stuct packing error: got an unexpected value:\n"
+                "Struct packing error: got an unexpected value:\n"
                 + f'format {gamma_info_format}, esum {mode1["esum"]},'
                 + f' ndet {int(mode1["ndet"])}, fom {mode1["fom"]},'
                 + f' tracked {mode1["tracked"]}, timestamp {int(mode1["timestamp"])}'
@@ -1099,7 +1113,11 @@ def mode1_extended_data(
             print("foms", foms)
             raise e
         for interaction in mode1["interactions"]:
-            mode1_output += struct.pack(interaction_format, *interaction)
+            try:
+                mode1_output += struct.pack(interaction_format, *interaction)
+            except struct.error as ex:
+                print(mode1)
+                raise ex
         mode1_output += struct.pack(
             addendum_format,
             int(mode1["fhcrID"]),
@@ -1182,6 +1200,38 @@ def mode1_extended_data(
 #         except struct.error:
 #             return
 
+def mode1_loader(
+    file: BinaryIO,
+    debug: bool = False,
+    detector: DetectorConfig = default_config,
+    print_formatted: bool = False,
+) -> Generator[Event, None, None]:
+    """
+    # Create a generator for events from a MODE1 file
+
+    ## Args:
+    - `file` : A binary file object that contains the MODE1 data
+    - `debug` : A boolean that indicates whether to print debug messages to the
+      standard output. The default value is False.
+
+    ## Returns:
+    - A generator that yields Event objects, each representing an event from the
+      MODE1 file
+    """
+    mode1_data = GEBdata_file(file, detector=detector)
+
+    while True:
+        try:
+            data = mode1_data.read(as_gr_event=True, print_formatted=print_formatted)
+        except ValueError:
+            continue
+        if data is None:  # Reached the end of the file
+            return
+        try:
+            event, clusters = data
+        except ValueError:
+            continue
+        yield event
 
 def mode2_loader(
     file: BinaryIO,

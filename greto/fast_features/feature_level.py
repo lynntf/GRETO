@@ -654,7 +654,7 @@ def feature_values(
 
             compute_value(
                 "rc_sum_1v_penalty_removed",
-                ["res_cos_v", "res_cos_sigma"],
+                ["res_cos_v", "compton_penalty"],
                 lambda: njit_sum(
                     perm_calc.res_cos_v * (1.0 - perm_calc.compton_penalty)
                 ),
@@ -663,7 +663,7 @@ def feature_values(
 
             compute_value(
                 "rc_mean_1v_penalty_removed",
-                ["res_cos_v", "res_cos_sigma"],
+                ["res_cos_v", "compton_penalty"],
                 lambda: njit_mean(
                     perm_calc.res_cos_v * (1.0 - perm_calc.compton_penalty)
                 ),
@@ -672,7 +672,7 @@ def feature_values(
 
             compute_value(
                 "rc_sum_2v_penalty_removed",
-                ["res_cos_v", "res_cos_sigma"],
+                ["res_cos_v", "compton_penalty"],
                 lambda: njit_sum(
                     perm_calc.res_cos_v**2 * (1.0 - perm_calc.compton_penalty)
                 ),
@@ -681,7 +681,7 @@ def feature_values(
 
             compute_value(
                 "rc_mean_2v_penalty_removed",
-                ["res_cos_v", "res_cos_sigma"],
+                ["res_cos_v", "compton_penalty"],
                 lambda: njit_mean(
                     perm_calc.res_cos_v**2 * (1.0 - perm_calc.compton_penalty)
                 ),

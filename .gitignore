@@ -2,3 +2,6 @@
 **/__pycache__
 .vscode
 *.Mul30
+*.mode*
+*.log
+*.sh

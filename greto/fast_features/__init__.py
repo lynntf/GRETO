@@ -608,3 +608,74 @@ def get_all_features_cluster(
             copy=False,
         )
     return np.concatenate((perm_features, single_features, cluster_features))
+
+def test_feature_names():
+    print("event")
+    for a in event_value_names:
+        print(a)
+    print("\nperm")
+    for a in perm_value_names:
+        print(a)
+    print("\nfeature")
+    for a in feature_names:
+        print(a)
+    print("\nperm tango")
+    for a in perm_value_names:
+        print(a)
+    print("\nfeature tango")
+    for a in feature_names_tango:
+        print(a)
+    print("\nsingle")
+    for a in single_feature_names:
+        print(a)
+    print("\ncluster calc")
+    for a in cluster_calc_feature_names:
+        print(a)
+    print("\ncluster feature")
+    for a in cluster_feature_names:
+        print(a)
+
+def test_feature_names_and_vectors(bvs:boolean_vectors):
+    print("event")
+    for a, b in zip(bvs.event_boolean_vector, event_value_names):
+        print(a, b)
+    print("\nperm")
+    for a, b in zip(bvs.perm_boolean_vector, perm_value_names):
+        print(a, b)
+    print("\nfeature")
+    for a, b in zip(bvs.feature_boolean_vector, feature_names):
+        print(a, b)
+    print("\nperm tango")
+    for a, b in zip(bvs.perm_boolean_vector_tango, perm_value_names):
+        print(a, b)
+    print("\nfeature tango")
+    for a, b in zip(bvs.feature_boolean_vector_tango, feature_names_tango):
+        print(a, b)
+    print("\nsingle")
+    for a, b in zip(bvs.single_feature_boolean_vector, single_feature_names):
+        print(a, b)
+    print("\ncluster calc")
+    for a, b in zip(bvs.cluster_calc_feature_boolean_vector, cluster_calc_feature_names):
+        print(a, b)
+    print("\ncluster feature")
+    for a, b in zip(bvs.cluster_feature_boolean_vector, cluster_feature_names):
+        print(a, b)
+
+def test_dependencies():
+    print("event")
+    print(event_values(None, None, None, dependency_mode=True))
+    print("\nperm")
+    print(perm_atoms(None, None, dependency_mode=True))
+    print("\nfeature")
+    print(feature_values(None, None, dependency_mode=True))
+    print("\nperm tango")
+    print(perm_atoms(None, None, dependency_mode=True, tango_mode=True))
+    print("\nfeature tango")
+    print(feature_values(None, None, dependency_mode=True))
+    print("\nsingle")
+    print(single_values(None, None, dependency_mode=True))
+    print("\ncluster calc")
+    print(cluster_atoms(None, None, dependency_mode=True))
+    print("\ncluster feature")
+    print(cluster_feature_values(None, dependency_mode=True))
+    

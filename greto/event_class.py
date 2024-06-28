@@ -332,7 +332,13 @@ class Event:
             full_perm = tuple([start_point] + list(permutation))
         else:
             full_perm = tuple(permutation)
-        return self.cos_act[perm_to_transition(full_perm, D=3)]
+        try:
+            return self.cos_act[perm_to_transition(full_perm, D=3)]
+        except IndexError as ex:
+            print(self)
+            print(self.cos_act)
+            print(full_perm)
+            raise ex
 
     def cos_act_err_perm(
         self, permutation: Iterable[int], start_point: int = 0

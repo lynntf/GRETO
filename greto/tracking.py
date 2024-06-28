@@ -26,6 +26,7 @@ from greto.file_io import (
     load_options,
     mode1_data,
     mode1_extended_data,
+    mode1_loader,
     mode2_loader,
     read_agata_simulated_data,
     tracked_generator,
@@ -113,13 +114,18 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
 
     if options["NUM_PROCESSES"] > 1:
         with mp.Pool(options["NUM_PROCESSES"]) as pool:  # pylint: disable=E1102
-            mode2_data = mode2_loader(
-                mode2file,
-                time_gap=options["COINCIDENCE_TIME_GAP"],
-                monitor_progress=False,
-                global_coords=options["GLOBAL_COORDS"],
-            )
+            if not options["READ_MODE1"]:
+                mode2_data = mode2_loader(
+                    mode2file,
+                    time_gap=options["COINCIDENCE_TIME_GAP"],
+                    monitor_progress=False,
+                    global_coords=options["GLOBAL_COORDS"],
+                    print_formatted=options["PRINT_FORMATTED"],
+                )
+            else:
+                mode2_data = mode1_loader(mode2file, print_formatted=options["PRINT_FORMATTED"])
             tracking_processes = []
+            coincidence_events = []
             for num_events, coincidence_event in enumerate(mode2_data):
                 if coincidence_event is not None:
                     coincidence_event = remove_zero_energy_interactions(
@@ -128,6 +134,7 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                     coincidence_event = pack_interactions(
                         coincidence_event, packing_distance=1e-8
                     )
+                    coincidence_events.append(coincidence_event)
                     tracking_processes.append(
                         pool.apply_async(
                             track_and_get_energy,
@@ -181,6 +188,7 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                             )
                         except mp.TimeoutError:  # pylint: disable=E1101
                             print(f"Timeout occurred for process {j}")
+                            print(coincidence_events[j])
                         except ValueError as e:
                             print(f"Found a bad event at process {j}: {e}")
                         else:
@@ -198,12 +206,16 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
         )
     elif options["NUM_PROCESSES"] == 1:
         print("Using single process")
-        mode2_data = mode2_loader(
-            mode2file,
-            time_gap=options["COINCIDENCE_TIME_GAP"],
-            monitor_progress=False,
-            global_coords=options["GLOBAL_COORDS"],
-        )
+        if not options["READ_MODE1"]:
+            mode2_data = mode2_loader(
+                mode2file,
+                time_gap=options["COINCIDENCE_TIME_GAP"],
+                monitor_progress=False,
+                global_coords=options["GLOBAL_COORDS"],
+                print_formatted=options["PRINT_FORMATTED"],
+            )
+        else:
+            mode2_data = mode1_loader(mode2file, print_formatted=options["PRINT_FORMATTED"])
         outputs = []
         for num_events, coincidence_event in enumerate(mode2_data):
             if coincidence_event is not None:
@@ -690,6 +702,7 @@ def track_and_get_energy(
     TRACK_MOLY_PEAK: bool = False,
     RECORD_UNTRACKED: bool = True,
     SUPPRESS_BAD_PAD: bool = False,
+    regurgitate:bool = False
 ) -> ByteString:
     """
     Track a single event by clustering and then ordering.
@@ -708,6 +721,7 @@ def track_and_get_energy(
     - TRACK_MOLY_PEAK: used to track just around a Molybdenum peak to check ordering
     - RECORD_UNTRACKED: record untracked data to the mode1(x) output
     - SUPPRESS_BAD_PAD: don't track any clusters that have a bad pad interaction in them
+    - regurgitate: don't do any tracking at all, just regurgitate the data that would have been tracked
 
     Returns:
     - BytesString with mode1(x) bytes to write to file
@@ -723,11 +737,17 @@ def track_and_get_energy(
 
     clusters = cone_cluster(event, MAX_HIT_POINTS, cluster_kwargs)
 
-    cluster_track_indicator = {s: True for s in clusters}
+    if regurgitate:
+        cluster_track_indicator = {s : False for s in clusters}
+        regurgitate_indicator = moly_peak_check(event, clusters)
+    else:
+        cluster_track_indicator = {s: True for s in clusters}
+
     if TRACK_MOLY_PEAK:
-        indicator = moly_peak_check(event, clusters)
+        # indicator = {s: False for s in clusters}
+        moly_indicator = moly_peak_check(event, clusters)
         cluster_track_indicator = {
-            s: indicator[s] and len(cluster) <= monster_size
+            s: moly_indicator[s] and len(cluster) <= monster_size
             for s, cluster in clusters.items()
         }
     if SUPPRESS_BAD_PAD:
@@ -735,7 +755,7 @@ def track_and_get_energy(
             s: not any([event.points[i].pad > 0 for i in cluster])
             for s, cluster in clusters.items()
         }
-        for e, cluster in clusters.items():
+        for i, cluster in clusters.items():
             for index in cluster:
                 if event.points[index].pad > 0:
                     print(f"Found a bad pad, skipping:{event}")
@@ -767,13 +787,16 @@ def track_and_get_energy(
     else:
         foms = cluster_FOM(gr_event, clusters, **eval_FOM_kwargs)
 
+    if not regurgitate:
+        regurgitate_indicator = cluster_track_indicator
     if SAVE_EXTENDED_MODE1:
         return mode1_extended_data(
             gr_event,
             clusters,
             foms=foms,
             monster_size=monster_size,
-            tracked_dict=cluster_track_indicator,
+            tracked_dict=regurgitate_indicator,
+            # tracked_dict=cluster_track_indicator,
             RECORD_UNTRACKED=RECORD_UNTRACKED,
             **eval_FOM_kwargs,
         )
@@ -782,7 +805,8 @@ def track_and_get_energy(
         clusters,
         foms=foms,
         monster_size=monster_size,
-        tracked_dict=cluster_track_indicator,
+        tracked_dict=regurgitate_indicator,
+        # tracked_dict=cluster_track_indicator,
         RECORD_UNTRACKED=RECORD_UNTRACKED,
         **eval_FOM_kwargs,
     )

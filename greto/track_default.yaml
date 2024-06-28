@@ -16,6 +16,8 @@ TRACK_MOLY_PEAK: false          # DO NOT USE; Only tracks data related to checki
 SAVE_EXTENDED_MODE1: false      # Save a mode1 file with all interactions recorded
 RECORD_UNTRACKED: true          # Save untracked data to the output file
 SUPPRESS_BAD_PAD: true          # Suppress bad PAD values (bad signal decomposition)
+READ_MODE1: false               # If the input file is a mode1 (not recommended) or extended mode1 (should work fine)
+PRINT_FORMATTED: false          # DO NOT USE; Prints all incoming data to output in a nicely formatted way
 REEVALUATE_FOM: false           # Reevaluate the FOM values according to the eval_FOM_kwargs; Used in conversion, not tracking
 order_FOM_kwargs:               # Arguments for ordering interactions (recorded in mode1)
   fom_method: selected          # FOM method for ordering; Available methods are "oft"/"agata", "aft"/"angle", "selected" (ML optimized for ordering), "model"
