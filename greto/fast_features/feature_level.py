@@ -1820,42 +1820,42 @@ def feature_values(
 
         compute_value(
             "cross_total_ge_dist_sum",
-            ["lin_mu_total"],
+            ["lin_mu_total", "ge_distance_perm"],
             lambda: njit_sum(perm_calc.lin_mu_total * perm_calc.ge_distance_perm),
         )
         index += 1
 
         compute_value(
             "cross_total_ge_dist_mean",
-            ["lin_mu_total"],
+            ["lin_mu_total", "ge_distance_perm"],
             lambda: njit_mean(perm_calc.lin_mu_total * perm_calc.ge_distance_perm),
         )
         index += 1
 
         compute_value(
             "cross_total_ge_dist_max",
-            ["lin_mu_total"],
+            ["lin_mu_total", "ge_distance_perm"],
             lambda: njit_max(perm_calc.lin_mu_total * perm_calc.ge_distance_perm),
         )
         index += 1
 
         compute_value(
             "cross_total_dist_sum",
-            ["lin_mu_total"],
+            ["lin_mu_total", "distance_perm"],
             lambda: njit_sum(perm_calc.lin_mu_total * perm_calc.distance_perm),
         )
         index += 1
 
         compute_value(
             "cross_total_dist_mean",
-            ["lin_mu_total"],
+            ["lin_mu_total", "distance_perm"],
             lambda: njit_mean(perm_calc.lin_mu_total * perm_calc.distance_perm),
         )
         index += 1
 
         compute_value(
             "cross_total_dist_max",
-            ["lin_mu_total"],
+            ["lin_mu_total", "distance_perm"],
             lambda: njit_max(perm_calc.lin_mu_total * perm_calc.distance_perm),
         )
         index += 1
@@ -1869,14 +1869,14 @@ def feature_values(
 
         compute_value(
             "cross_total_ge_dist_min",
-            ["lin_mu_total"],
+            ["lin_mu_total", "ge_distance_perm"],
             lambda: njit_min(perm_calc.lin_mu_total * perm_calc.ge_distance_perm),
         )
         index += 1
 
         compute_value(
             "cross_total_dist_min",
-            ["lin_mu_total"],
+            ["lin_mu_total", "distance_perm"],
             lambda: njit_min(perm_calc.lin_mu_total * perm_calc.distance_perm),
         )
         index += 1
