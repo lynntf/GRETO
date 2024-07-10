@@ -1,77 +1,62 @@
-import asyncio
-import logging
+"""Track using multiprocessing"""
+
 import time
 
-import aiofiles
+from joblib import Parallel, delayed
 
+from greto.detector_config_class import default_config
 from greto.event_class import Event
 from greto.file_io import load_options, mode1_loader, mode2_loader
-from greto.models import load_order_FOM_model
+from greto.models import load_order_FOM_model, load_suppression_FOM_model
 from greto.tracking import track_and_get_energy
 
-logging.basicConfig(level=logging.INFO)
+
+def track(event: Event, **kwargs):
+    """Track the event with the provided options"""
+    # print(kwargs)
+    return track_and_get_energy(event, **kwargs)
 
 
-async def track(event: Event, **kwargs):
-    """Track an event asynchronously"""
-    return await asyncio.to_thread(track_and_get_energy, event, **kwargs)
-
-
-async def process_event(
-    event: Event,
-    file_lock: asyncio.Lock,
-    file_handle,
-    **track_kwargs,
-):
-    """Get the tracking result and append it to the output file"""
-    start_time = time.time()
+def process_event(event: Event, **kwargs):
+    """Get the tracking result"""
     try:
-        result = await track(event, **track_kwargs)
-        async with file_lock:
-            await file_handle.write(result)
-        logging.info(
-            "Event %s processed in %.5f seconds", event.id, time.time() - start_time
-        )
+        start_time = time.time()
+        result = track(event, **kwargs)
+        print(f"Event {event.id} processed in {time.time() - start_time:.5f} seconds")
+        return result
     except Exception as e:
-        logging.error("Error processing event: %s", e)
+        print(f"Error processing event: {e}")
+        return None
 
 
-async def event_producer(input_filename, options, queue):
-    """Produce events from the input file"""
-    with open(input_filename, mode="rb") as input_file:
-        if options["READ_MODE1"]:
-            loader = mode1_loader(input_file)
-        else:
-            loader = mode2_loader(input_file)
-        for event, _ in zip(loader, range(100)):
-            await queue.put(event)
-            logging.debug(f"Event added to queue")
-    await queue.put(None)  # Signal end of events
-    logging.info("All events added to queue")
+def process_batch(batch, **options):
+    results = []
+    for event in batch:
+        try:
+            result = process_event(event, **options)
+            results.append(result)
+        except Exception as e:
+            print(f"Error in process_batch: {e}")
+    return results
 
 
-async def event_consumer(queue, file_lock, file_handle, **options):
-    """Consume events from the queue and process them"""
-    while True:
-        event = await queue.get()
-        if event is None:
-            queue.task_done()
-            break
-        await process_event(event, file_lock, file_handle, **options)
-        queue.task_done()
-        logging.debug(f"Queue size: {queue.qsize()}")
-
-
-async def main(
+def main(
     input_filename: str,
     output_filename: str,
     options_filename: str,
-    max_concurrent_tasks: int = 20,
+    batch_size: int = 100,
 ):
-    """Do the main asynchronous tracking"""
+    """Do the main parallel tracking"""
     start_time = time.time()
     options = load_options(options_filename)
-    file_lock = asyncio.Lock()
+
+    print(f"Detector is set to {options.get('DETECTOR', 'defaulting to GRETINA')}")
+    default_config.set_detector(options.get("DETECTOR", "GRETINA"))
+
+    if options.get("SAVE_INTERMEDIATE", False):
+        print("Tracking will save an intermediate tracked format instead of mode1")
+    elif options.get("SAVE_EXTENDED_MODE1", False):
+        print("Tracking will save an extended mode1 data format with all interactions")
 
     if options["order_FOM_kwargs"].get("fom_method") == "model":
         if options["order_FOM_kwargs"].get("model_filename") is not None:
@@ -81,29 +66,90 @@ async def main(
         else:
             raise ValueError("Provide model filename for ordering")
         options["order_FOM_kwargs"]["model"] = order_model
-
-    queue = asyncio.Queue(maxsize=max_concurrent_tasks * 2)
-
-    async with aiofiles.open(output_filename, mode="wb") as output_file:
-        producer = asyncio.create_task(event_producer(input_filename, options, queue))
-        consumers = [
-            asyncio.create_task(
-                event_consumer(queue, file_lock, output_file, **options)
+        
+    secondary_order_model = None
+    if options["secondary_order_FOM_kwargs"].get("fom_method") == "model":
+        if options["secondary_order_FOM_kwargs"].get("model_filename") is not None:
+            secondary_order_model = load_order_FOM_model(
+                options["secondary_order_FOM_kwargs"].get("model_filename")
             )
-            for _ in range(max_concurrent_tasks)
-        ]
+        else:
+            raise ValueError("Provide model filename for secondary ordering")
+        options["secondary_order_FOM_kwargs"]["model"] = secondary_order_model
+    
+    eval_model = None
+    if options["eval_FOM_kwargs"].get("fom_method") == "model":
+        if options["eval_FOM_kwargs"].get("model_filename") is not None:
+            eval_model = load_suppression_FOM_model(
+                options["eval_FOM_kwargs"].get("model_filename")
+            )
+        else:
+            raise ValueError("Provide model filename for evaluation")
+        options["eval_FOM_kwargs"]["model"] = eval_model
 
-        await producer
-        await queue.join()
+    max_concurrent_tasks = options["NUM_PROCESSES"]
 
-        for _ in range(max_concurrent_tasks):
-            await queue.put(None)
-        await asyncio.gather(*consumers)
-    print(f"Total time: {time.time() - start_time}")
+    with open(input_filename, mode="rb") as input_file, open(
+        output_filename, mode="wb"
+    ) as output_file:
+        if options["READ_MODE1"]:
+            loader = mode1_loader(
+                input_file,
+                detector=default_config,
+                print_formatted=options["PRINT_FORMATTED"],
+            )
+        else:
+            loader = mode2_loader(
+                input_file,
+                time_gap=options["COINCIDENCE_TIME_GAP"],
+                detector=default_config,
+                global_coords=options["GLOBAL_COORDS"],
+                print_formatted=options["PRINT_FORMATTED"],
+            )
+
+        batch = []
+        processed_count = 0
+        last_update_time = time.time()
+
+        for event, _ in zip(loader, range(100)):
+            batch.append(event)
+            if len(batch) == batch_size:
+                processed_count += len(batch)
+                try:
+                    results = Parallel(n_jobs=max_concurrent_tasks)(
+                        delayed(process_batch)([b], **options) for b in batch
+                    )
+                    for batch_results in results:
+                        for result in batch_results:
+                            if result is not None:
+                                output_file.write(result)
+                                # print(f"Event processed")
+                except Exception as e:
+                    print(f"Error in parallel processing: {e}")
+                if time.time() - last_update_time > 60:  # Update every minute
+                    print(f"Processed {processed_count} events. Elapsed time: {time.time() - start_time:.2f} seconds")
+                    last_update_time = time.time()
+                batch = []
+
+        # Process any remaining events
+        if batch:
+            try:
+                results = Parallel(n_jobs=max_concurrent_tasks)(
+                    delayed(process_batch)([b], **options) for b in batch
+                )
+                for batch_results in results:
+                    for result in batch_results:
+                        if result is not None:
+                            output_file.write(result)
+                            # print(f"Event processed")
+            except Exception as e:
+                print(f"Error in processing remaining events: {e}")
+
+    print(f"Total time: {time.time() - start_time:.5f} seconds")
 
 
 if __name__ == "__main__":
     input_filename = "data12.mode2"
     output_filename = "test.mode1"
     options_filename = "data12_ML_model_ordering.yaml"
-    asyncio.run(main(input_filename, output_filename, options_filename))
+    main(input_filename, output_filename, options_filename)

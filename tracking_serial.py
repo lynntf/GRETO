@@ -12,14 +12,15 @@ def track(event: Event, **kwargs):
 
 def process_event(
     event: Event,
-    file_handle,
+    filename,
     **track_kwargs,
 ):
     """Get the tracking result and append it to the output file"""
     start_time = time.time()
     try:
         result = track(event, **track_kwargs)
-        file_handle.write(result)
+        with open(filename, 'ab') as file_handle:
+            file_handle.write(result)
         print(f"Event {event.id} processed in {time.time() - start_time:.5f} seconds")
     except Exception as e:
         print(f"Error processing event: {e}")
@@ -46,18 +47,15 @@ def main(
 
     count = 0
     max_count = 100
-    with open(output_filename, mode="wb") as output_file:
-        with open(input_filename, mode="rb") as input_file:
-            if options["READ_MODE1"]:
-                loader = mode1_loader(input_file)
-            else:
-                loader = mode2_loader(input_file)
-            for event in loader:
-                count += 1
-                process_event(event, output_file, **options)
-                if count >= max_count:
-                    print(f"Stopping after {max_count} events.")
-                    break
+    # with open(output_filename, mode="wb") as output_file:
+    with open(input_filename, mode="rb") as input_file:
+        if options["READ_MODE1"]:
+            loader = mode1_loader(input_file)
+        else:
+            loader = mode2_loader(input_file)
+        for event, _ in zip(loader, range(max_count)):
+            count += 1
+            process_event(event, output_filename, **options)
     print(f"Total time: {time.time() - start_time}")
 
 
