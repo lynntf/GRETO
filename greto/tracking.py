@@ -123,7 +123,9 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                     print_formatted=options["PRINT_FORMATTED"],
                 )
             else:
-                mode2_data = mode1_loader(mode2file, print_formatted=options["PRINT_FORMATTED"])
+                mode2_data = mode1_loader(
+                    mode2file, print_formatted=options["PRINT_FORMATTED"]
+                )
             tracking_processes = []
             coincidence_events = []
             for num_events, coincidence_event in enumerate(mode2_data):
@@ -215,7 +217,9 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                 print_formatted=options["PRINT_FORMATTED"],
             )
         else:
-            mode2_data = mode1_loader(mode2file, print_formatted=options["PRINT_FORMATTED"])
+            mode2_data = mode1_loader(
+                mode2file, print_formatted=options["PRINT_FORMATTED"]
+            )
         outputs = []
         for num_events, coincidence_event in enumerate(mode2_data):
             if coincidence_event is not None:
@@ -702,11 +706,12 @@ def track_and_get_energy(
     TRACK_MOLY_PEAK: bool = False,
     RECORD_UNTRACKED: bool = True,
     SUPPRESS_BAD_PAD: bool = False,
-    regurgitate:bool = False
+    regurgitate: bool = False,
+    **kwargs,
 ) -> ByteString:
     """
     Track a single event by clustering and then ordering.
-    
+
     Args:
     - event: g-ray event object
     - monster_size: maximum number of interactions that will be tracked per cluster
@@ -738,7 +743,7 @@ def track_and_get_energy(
     clusters = cone_cluster(event, MAX_HIT_POINTS, cluster_kwargs)
 
     if regurgitate:
-        cluster_track_indicator = {s : False for s in clusters}
+        cluster_track_indicator = {s: False for s in clusters}
         regurgitate_indicator = moly_peak_check(event, clusters)
     else:
         cluster_track_indicator = {s: True for s in clusters}

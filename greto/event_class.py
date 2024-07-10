@@ -156,9 +156,9 @@ class Event:
     @property
     def distance(self) -> np.ndarray:
         """Distance between two points"""
-        # return squareform(geo.pairwise_distance(self.point_matrix))
-        _calculator.set_event(self)
-        return _calculator.distance((self.id, tuple(self.points[1].x)))
+        return geo.njit_square_pdist(self.event.point_matrix)
+        # _calculator.set_event(self)
+        # return _calculator.distance((self.id, tuple(self.points[1].x)))
 
     def distance_perm(
         self, permutation: Iterable[int], start_point: int = 0
@@ -170,26 +170,22 @@ class Event:
             full_perm = tuple(permutation)
         return self.distance[perm_to_transition(full_perm, D=2)]
 
-    @property
+    @cached_property
     def angle_distance(self) -> np.ndarray:
         """
         Angular distance between two points
         TODO - can use cos_act property for this to avoid possible extra computation
         """
-        # return squareform(
-        #     np.arccos(1.0 - pdist(self.hit_point_matrix, metric="cosine"))
-        # )
-        _calculator.set_event(self)
-        return _calculator.angle_distance((self.id, tuple(self.points[1].x)))
+        return np.arccos(1.0 - geo.njit_square_cosine_pdist(self.hit_point_matrix))
+        # _calculator.set_event(self)
+        # return _calculator.angle_distance((self.id, tuple(self.points[1].x)))
 
-    @property
+    @cached_property
     def ge_distance(self) -> np.ndarray:
         """Distance between two points"""
-        # return squareform(
-        #     geo.ge_distance(self.point_matrix, d12_euc=squareform(self.distance))
-        # )
-        _calculator.set_event(self)
-        return _calculator.ge_distance((self.id, tuple(self.points[1].x)))
+        return geo.njit_square_ge_pdist(self.point_matrix, self.detector_config.inner_radius, d12_euc=self.distance)
+        # _calculator.set_event(self)
+        # return _calculator.ge_distance((self.id, tuple(self.points[1].x)))
 
     def ge_distance_perm(
         self, permutation: Iterable[int], start_point: int = 0
@@ -292,36 +288,36 @@ class Event:
         )
 
     # %% Cached geometric cosine and error
-    @property
+    @cached_property
     def cos_act(self) -> np.ndarray:
         """Cosine between interaction points"""
-        # return geo.cosine_ijk(self.point_matrix)
-        _calculator.set_event(self)
-        return _calculator.cos_act((self.id, tuple(self.points[1].x)))
+        return geo.cosine_ijk(self.point_matrix)
+        # _calculator.set_event(self)
+        # return _calculator.cos_act((self.id, tuple(self.points[1].x)))
 
-    @property
+    @cached_property
     def cos_err(self) -> np.ndarray:
         """Error in cosine due to position uncertainty"""
-        # err = geo.err_cos_vec_precalc(
-        #     self.distance, self.cos_act, self.position_uncertainty
-        # )
-        # # TODO - should the center point be made more accurate here or in position_uncertainty?
-        # # err[0,:,:] /= 2 # Center point is more accurate
-        # return err
-        _calculator.set_event(self)
-        return _calculator.cos_err((self.id, tuple(self.points[1].x)))
+        err = geo.err_cos_vec_precalc(
+            self.distance, self.cos_act, self.position_uncertainty
+        )
+        # TODO - should the center point be made more accurate here or in position_uncertainty?
+        # err[0,:,:] /= 2 # Center point is more accurate
+        return err
+        # _calculator.set_event(self)
+        # return _calculator.cos_err((self.id, tuple(self.points[1].x)))
 
-    @property
+    @cached_property
     def theta_err(self) -> np.ndarray:
         """Error in cosine due to position uncertainty"""
-        # err = geo.err_theta_vec_precalc(
-        #     self.distance, self.cos_act, self.position_uncertainty
-        # )
-        # # TODO - should the center point be made more accurate here or in position_uncertainty?
-        # # err[0,:,:] /= 2 # Center point is more accurate as in AFT
-        # return err
-        _calculator.set_event(self)
-        return _calculator.theta_err((self.id, tuple(self.points[1].x)))
+        err = geo.err_theta_vec_precalc(
+            self.distance, self.cos_act, self.position_uncertainty
+        )
+        # TODO - should the center point be made more accurate here or in position_uncertainty?
+        # err[0,:,:] /= 2 # Center point is more accurate as in AFT
+        return err
+        # _calculator.set_event(self)
+        # return _calculator.theta_err((self.id, tuple(self.points[1].x)))
 
     # %% Permuted geometric cosine and error
     def cos_act_perm(
@@ -371,37 +367,37 @@ class Event:
         )
 
     # %% Cached TANGO estimates and error
-    @property
+    @cached_property
     def tango_estimates(self) -> np.ndarray:
         """Local incoming energy estimates"""
-        # return phys.tango_incoming_estimate(
-        #     self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
-        # )
-        _calculator.set_event(self)
-        return _calculator.tango_estimates((self.id, tuple(self.points[1].x)))
+        return phys.tango_incoming_estimate(
+            self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
+        )
+        # _calculator.set_event(self)
+        # return _calculator.tango_estimates((self.id, tuple(self.points[1].x)))
 
-    @property
+    @cached_property
     def tango_partial_derivatives(self) -> Tuple[np.ndarray]:
         """d/de and d/d_cos for the TANGO estimates"""
-        # return phys.partial_tango_incoming_derivatives(
-        #     self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
-        # )
-        _calculator.set_event(self)
-        return _calculator.tango_partial_derivatives((self.id, tuple(self.points[1].x)))
+        return phys.partial_tango_incoming_derivatives(
+            self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
+        )
+        # _calculator.set_event(self)
+        # return _calculator.tango_partial_derivatives((self.id, tuple(self.points[1].x)))
 
-    @property
+    @cached_property
     def tango_estimates_sigma(self) -> np.ndarray:
         """Error in local incoming energy estimates"""
-        # eres = 1e-3
-        # return np.sqrt(
-        #     (eres * self.tango_partial_derivatives[0]) ** 2
-        #     + (self.cos_err * self.tango_partial_derivatives[1]) ** 2
-        # )
-        # # return tango_incoming_sigma(self.energy_matrix[np.newaxis,:,np.newaxis],
-        # #                             1 - self.cos_act,
-        # #                             self.cos_err, eres=1e-3)
-        _calculator.set_event(self)
-        return _calculator.tango_estimates_sigma((self.id, tuple(self.points[1].x)))
+        eres = 1e-3
+        return np.sqrt(
+            (eres * self.tango_partial_derivatives[0]) ** 2
+            + (self.cos_err * self.tango_partial_derivatives[1]) ** 2
+        )
+        # return tango_incoming_sigma(self.energy_matrix[np.newaxis,:,np.newaxis],
+        #                             1 - self.cos_act,
+        #                             self.cos_err, eres=1e-3)
+        # _calculator.set_event(self)
+        # return _calculator.tango_estimates_sigma((self.id, tuple(self.points[1].x)))
 
     # %% Permuted incoming energy estimates
     def tango_estimates_perm(
@@ -1251,6 +1247,7 @@ class _EventCalculator:
 
     def set_event(self, event: Event, cluster_id: Optional[int] = None) -> None:
         """Set the event (and cluster id) for calculations"""
+        print("Reset Event Calculator")
         self.event = event
         if cluster_id is not None:
             self.event_id = ((event.id, cluster_id), tuple(event.points[1].x))
