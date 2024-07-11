@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from greto.cluster_tools import (
     cluster_linkage,
+    cone_cluster_linkage,
     join_events,
     remove_zero_energy_interactions,
     pack_interactions,
@@ -74,7 +75,7 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
     if secondary_order_FOM_kwargs.get("fom_method") == "model":
         if secondary_order_FOM_kwargs.get("model_filename") is not None:
             secondary_order_model = load_order_FOM_model(
-                order_FOM_kwargs.get("model_filename")
+                secondary_order_FOM_kwargs.get("model_filename")
             )
         else:
             raise ValueError("Provide model filename for secondary ordering")
@@ -451,7 +452,8 @@ def cone_cluster(
         print(event)
         raise ValueError(f" Event too large or empty: {len(event.hit_points)}")
 
-    return cluster_linkage(event, **cluster_kwargs)
+    return cone_cluster_linkage(event, **cluster_kwargs)
+    # return cluster_linkage(event, **cluster_kwargs)
 
 
 def order_clusters(
@@ -694,7 +696,7 @@ def moly_peak_check(
 
 def track_and_get_energy(
     event: Event,
-    monster_size: int = 8,
+    MONSTER_SIZE: int = 8,
     SECONDARY_ORDER: bool = False,
     eval_FOM_kwargs: Dict = None,
     MAX_HIT_POINTS: int = 100,
@@ -731,6 +733,19 @@ def track_and_get_energy(
     Returns:
     - BytesString with mode1(x) bytes to write to file
     """
+    # print("MONSTER_SIZE", MONSTER_SIZE)
+    # print("SECONDARY_ORDER", SECONDARY_ORDER)
+    # print("eval_FOM_kwargs", eval_FOM_kwargs)
+    # print("MAX_HIT_POINTS", MAX_HIT_POINTS)
+    # print("cluster_kwargs", cluster_kwargs)
+    # print("order_FOM_kwargs", order_FOM_kwargs)
+    # print("secondary_order_FOM_kwargs", secondary_order_FOM_kwargs)
+    # print("SAVE_INTERMEDIATE", SAVE_INTERMEDIATE)
+    # print("SAVE_EXTENDED_MODE1", SAVE_EXTENDED_MODE1)
+    # print("TRACK_MOLY_PEAK", TRACK_MOLY_PEAK)
+    # print("RECORD_UNTRACKED", RECORD_UNTRACKED)
+    # print("SUPPRESS_BAD_PAD", SUPPRESS_BAD_PAD)
+    # print("regurgitate", regurgitate)
     if eval_FOM_kwargs is None:
         eval_FOM_kwargs = {}
     if cluster_kwargs is None:
@@ -752,7 +767,7 @@ def track_and_get_energy(
         # indicator = {s: False for s in clusters}
         moly_indicator = moly_peak_check(event, clusters)
         cluster_track_indicator = {
-            s: moly_indicator[s] and len(cluster) <= monster_size
+            s: moly_indicator[s] and len(cluster) <= MONSTER_SIZE
             for s, cluster in clusters.items()
         }
     if SUPPRESS_BAD_PAD:
@@ -799,7 +814,7 @@ def track_and_get_energy(
             gr_event,
             clusters,
             foms=foms,
-            monster_size=monster_size,
+            monster_size=MONSTER_SIZE,
             tracked_dict=regurgitate_indicator,
             # tracked_dict=cluster_track_indicator,
             RECORD_UNTRACKED=RECORD_UNTRACKED,
@@ -809,7 +824,7 @@ def track_and_get_energy(
         gr_event,
         clusters,
         foms=foms,
-        monster_size=monster_size,
+        monster_size=MONSTER_SIZE,
         tracked_dict=regurgitate_indicator,
         # tracked_dict=cluster_track_indicator,
         RECORD_UNTRACKED=RECORD_UNTRACKED,
