@@ -149,12 +149,12 @@ def escape_probability_func(
     if escaped_energy <= 0:
         return 0.0
     if np.linalg.norm(final_point) > detector_radius:
-        warnings.warn(
-            "greto.fast_features.permutation_level.escape_probability_func:\n"
-            + f"Final_point (radius = {np.linalg.norm(final_point)}) is outside"
-            + f" of the detector (radius = {detector_radius}).\n"
-            + "Returning probability 1. Assumed to escape with high probability."
-        )
+        # warnings.warn(
+        #     "greto.fast_features.permutation_level.escape_probability_func:\n"
+        #     + f"Final_point (radius = {np.linalg.norm(final_point)}) is outside"
+        #     + f" of the detector (radius = {detector_radius}).\n"
+        #     + "Returning probability 1. Assumed to escape with high probability."
+        # )
         return 1.0
     theor_cos = phys.njit_cos_theor(escaped_energy + final_energy, escaped_energy)
     if theor_cos < -1:
