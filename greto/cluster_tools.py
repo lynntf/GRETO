@@ -227,7 +227,8 @@ def pack_interactions(
                 interaction.x += event.hit_points[i].e * event.hit_points[i].x
                 if event.hit_points[i].interaction_type is not None:
                     interaction.interaction_type = max(
-                        interaction.interaction_type, event.hit_points[i].interaction_type
+                        interaction.interaction_type,
+                        event.hit_points[i].interaction_type,
                     )
         interaction.x /= interaction.e
         points.append(
@@ -299,6 +300,35 @@ def apply_error_model(event: Event, seed: int = None, rng=None) -> Event:
         # Minimum possible value is 0
         p.e = max(p.e, 0)
     return Event(event.id, hit_points)
+
+
+def cone_cluster_linkage(
+    event: Event,
+    alpha: float = np.deg2rad(10.0),
+    alpha_degrees: float = None,
+    **kwargs,
+) -> Dict[int, int]:
+    """
+    Cluster based on a cone single linkage
+
+    Does not handle a time gap!
+    """
+    if alpha_degrees is not None:
+        alpha = np.deg2rad(alpha_degrees)
+    try:
+        cluster_assignments = fclusterdata(
+            event.hit_point_matrix,
+            t=1 - np.cos(alpha),
+            criterion="distance",
+            metric="cosine",
+            method="single",
+        )
+    except Exception as e:
+        return {0:tuple(i + 1 for i in range(len(event.hit_points)))}
+    clusters = {}
+    for i in range(1, max(cluster_assignments) + 1):
+        clusters[i] = list((cluster_assignments == i).nonzero()[0] + 1)
+    return sort_clusters_by_min_index(clusters)
 
 
 def cluster_linkage(
