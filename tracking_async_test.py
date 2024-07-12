@@ -1,15 +1,17 @@
 """Track using multiprocessing"""
 
+import argparse
 import time
 from collections import defaultdict
 from multiprocessing import Process, Queue, cpu_count
 from typing import List
 
-from greto.cluster_tools import pack_interactions, remove_zero_energy_interactions
+from greto.cluster_tools import (pack_interactions,
+                                 remove_zero_energy_interactions)
 from greto.detector_config_class import default_config
 from greto.event_class import Event
 from greto.file_io import load_options, mode1_loader, mode2_loader
-from greto.models import load_order_FOM_model, load_suppression_FOM_model
+from greto.models import load_models
 from greto.tracking import track_event
 from greto.utils import get_file_size
 
@@ -121,54 +123,6 @@ def writer(output_queue: Queue, output_filename: str, num_workers: int):
                 workers_done += 1  # ... indicating complete
             else:
                 output_file.write(result)  # Write output to file
-
-
-def load_models(options: dict) -> dict:
-    """
-    Load the machine learning models for tracking
-
-    Places models into the options dictionary
-
-    Args
-    ----
-    options: dict. dictionary of options from the tracking .yaml file
-    """
-
-    # Model for ordering
-    order_model = None
-    if options["order_FOM_kwargs"].get("fom_method") == "model":
-        if options["order_FOM_kwargs"].get("model_filename") is not None:
-            order_model = load_order_FOM_model(
-                options["order_FOM_kwargs"].get("model_filename")
-            )
-        else:
-            raise ValueError("Provide model filename for ordering")
-    options["order_FOM_kwargs"]["model"] = order_model
-
-    # Model for secondary ordering
-    secondary_order_model = None
-    if options["secondary_order_FOM_kwargs"].get("fom_method") == "model":
-        if options["secondary_order_FOM_kwargs"].get("model_filename") is not None:
-            secondary_order_model = load_order_FOM_model(
-                options["secondary_order_FOM_kwargs"].get("model_filename")
-            )
-        else:
-            raise ValueError("Provide model filename for secondary ordering")
-    options["secondary_order_FOM_kwargs"]["model"] = secondary_order_model
-
-    # Model for evaluating the ordered g-rays
-    eval_model = None
-    if options["eval_FOM_kwargs"].get("fom_method") == "model":
-        if options["eval_FOM_kwargs"].get("model_filename") is not None:
-            eval_model = load_suppression_FOM_model(
-                options["eval_FOM_kwargs"].get("model_filename")
-            )
-        else:
-            raise ValueError("Provide model filename for evaluation")
-    options["eval_FOM_kwargs"]["model"] = eval_model
-
-    # Return updated options
-    return options
 
 
 def main(
@@ -300,11 +254,13 @@ def main(
 
 
 if __name__ == "__main__":
-    input_filename = "data12.mode2"
-    output_filename = "test.mode1"
-    options_filename = "test.yaml"
-    main(
-        input_filename,
-        output_filename,
-        options_filename,
+    # Read in details from the command line and perform tracking
+    parser = argparse.ArgumentParser(description=".")
+    parser.add_argument("input_filename", help="Path to the input (mode2, mode1x) file.")
+    parser.add_argument("output_filename", help="Path to the output (mode1, mode1x) file.")
+    parser.add_argument(
+        "options_file", nargs="?", help="Path to the JSON/YAML options file."
     )
+    args = parser.parse_args()
+
+    main(args.input_filename, args.output_filename, args.options_file)

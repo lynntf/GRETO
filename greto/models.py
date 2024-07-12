@@ -808,3 +808,51 @@ class sns_model:
         return self.predict_separate(
             data["features"], data["length"] == 1, weights=weights, bias=bias
         )
+
+
+def load_models(options: dict) -> dict:
+    """
+    Load the machine learning models for tracking
+
+    Places models into the options dictionary
+
+    Args
+    ----
+    options: dict. dictionary of options from the tracking .yaml file
+    """
+
+    # Model for ordering
+    order_model = None
+    if options["order_FOM_kwargs"].get("fom_method") == "model":
+        if options["order_FOM_kwargs"].get("model_filename") is not None:
+            order_model = load_order_FOM_model(
+                options["order_FOM_kwargs"].get("model_filename")
+            )
+        else:
+            raise ValueError("Provide model filename for ordering")
+    options["order_FOM_kwargs"]["model"] = order_model
+
+    # Model for secondary ordering
+    secondary_order_model = None
+    if options["secondary_order_FOM_kwargs"].get("fom_method") == "model":
+        if options["secondary_order_FOM_kwargs"].get("model_filename") is not None:
+            secondary_order_model = load_order_FOM_model(
+                options["secondary_order_FOM_kwargs"].get("model_filename")
+            )
+        else:
+            raise ValueError("Provide model filename for secondary ordering")
+    options["secondary_order_FOM_kwargs"]["model"] = secondary_order_model
+
+    # Model for evaluating the ordered g-rays
+    eval_model = None
+    if options["eval_FOM_kwargs"].get("fom_method") == "model":
+        if options["eval_FOM_kwargs"].get("model_filename") is not None:
+            eval_model = load_suppression_FOM_model(
+                options["eval_FOM_kwargs"].get("model_filename")
+            )
+        else:
+            raise ValueError("Provide model filename for evaluation")
+    options["eval_FOM_kwargs"]["model"] = eval_model
+
+    # Return updated options
+    return options
