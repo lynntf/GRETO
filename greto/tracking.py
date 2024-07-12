@@ -6,6 +6,7 @@ Methods for executing the tracking of gamma-rays.
 """
 
 import pickle as pkl
+from collections import defaultdict
 from datetime import datetime
 from typing import BinaryIO, ByteString, Dict, List, Tuple
 
@@ -116,7 +117,7 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
     if options["NUM_PROCESSES"] > 1:
         with mp.Pool(options["NUM_PROCESSES"]) as pool:  # pylint: disable=E1102
             if not options["READ_MODE1"]:
-                mode2_data = mode2_loader(
+                loader = mode2_loader(
                     mode2file,
                     time_gap=options["COINCIDENCE_TIME_GAP"],
                     monitor_progress=False,
@@ -124,12 +125,12 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                     print_formatted=options["PRINT_FORMATTED"],
                 )
             else:
-                mode2_data = mode1_loader(
+                loader = mode1_loader(
                     mode2file, print_formatted=options["PRINT_FORMATTED"]
                 )
             tracking_processes = []
             coincidence_events = []
-            for num_events, coincidence_event in enumerate(mode2_data):
+            for num_events, coincidence_event in enumerate(loader):
                 if coincidence_event is not None:
                     coincidence_event = remove_zero_energy_interactions(
                         coincidence_event
@@ -140,7 +141,7 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                     coincidence_events.append(coincidence_event)
                     tracking_processes.append(
                         pool.apply_async(
-                            track_and_get_energy,
+                            track_event,
                             args=(
                                 coincidence_event,
                                 options["MONSTER_SIZE"],
@@ -210,7 +211,7 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
     elif options["NUM_PROCESSES"] == 1:
         print("Using single process")
         if not options["READ_MODE1"]:
-            mode2_data = mode2_loader(
+            loader = mode2_loader(
                 mode2file,
                 time_gap=options["COINCIDENCE_TIME_GAP"],
                 monitor_progress=False,
@@ -218,11 +219,11 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                 print_formatted=options["PRINT_FORMATTED"],
             )
         else:
-            mode2_data = mode1_loader(
+            loader = mode1_loader(
                 mode2file, print_formatted=options["PRINT_FORMATTED"]
             )
         outputs = []
-        for num_events, coincidence_event in enumerate(mode2_data):
+        for num_events, coincidence_event in enumerate(loader):
             if coincidence_event is not None:
                 coincidence_event = remove_zero_energy_interactions(coincidence_event)
                 coincidence_event = pack_interactions(
@@ -230,7 +231,7 @@ def track_files(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
                 )
                 try:
                     outputs.append(
-                        track_and_get_energy(
+                        track_event(
                             coincidence_event,
                             options["MONSTER_SIZE"],
                             options["SECONDARY_ORDER"],
@@ -329,7 +330,7 @@ def track_simulated(events: List[Event], output_file: BinaryIO, options: Dict):
                 coincidence_event = remove_zero_energy_interactions(coincidence_event)
                 tracking_processes.append(
                     pool.apply_async(
-                        track_and_get_energy,
+                        track_event,
                         args=(
                             coincidence_event,
                             options["MONSTER_SIZE"],
@@ -414,7 +415,7 @@ def track_simulated_serial(events: List[Event], output_file: BinaryIO, options: 
         if coincidence_event is not None:
             coincidence_event = remove_zero_energy_interactions(coincidence_event)
             try:
-                outputs = track_and_get_energy(
+                outputs = track_event(
                     coincidence_event,
                     options["MONSTER_SIZE"],
                     options["SECONDARY_ORDER"],
@@ -694,7 +695,7 @@ def moly_peak_check(
     return check
 
 
-def track_and_get_energy(
+def track_event(
     event: Event,
     MONSTER_SIZE: int = 8,
     SECONDARY_ORDER: bool = False,
@@ -709,6 +710,7 @@ def track_and_get_energy(
     RECORD_UNTRACKED: bool = True,
     SUPPRESS_BAD_PAD: bool = False,
     regurgitate: bool = False,
+    return_stats: bool = False,
     **kwargs,
 ) -> ByteString:
     """
@@ -746,6 +748,11 @@ def track_and_get_energy(
     # print("RECORD_UNTRACKED", RECORD_UNTRACKED)
     # print("SUPPRESS_BAD_PAD", SUPPRESS_BAD_PAD)
     # print("regurgitate", regurgitate)
+    stats = defaultdict(int)
+    for point in event.hit_points:
+        stats["pad " + str(point.pad)] += 1
+        stats["crystal " + str(point.crystal_no)] += 1
+
     if eval_FOM_kwargs is None:
         eval_FOM_kwargs = {}
     if cluster_kwargs is None:
@@ -756,6 +763,8 @@ def track_and_get_energy(
         secondary_order_FOM_kwargs = {}
 
     clusters = cone_cluster(event, MAX_HIT_POINTS, cluster_kwargs)
+    
+    stats["clusters"] += len(clusters)
 
     if regurgitate:
         cluster_track_indicator = {s: False for s in clusters}
@@ -790,7 +799,9 @@ def track_and_get_energy(
     )
 
     if SAVE_INTERMEDIATE:
-        return pkl.dumps((gr_event.coincidence, clusters))
+        if not return_stats:
+            return pkl.dumps((gr_event.coincidence, clusters))
+        return pkl.dumps((gr_event.coincidence, clusters)), stats
 
     if SECONDARY_ORDER:
         # foms = solve_clusters_secondary_fom(
@@ -810,7 +821,7 @@ def track_and_get_energy(
     if not regurgitate:
         regurgitate_indicator = cluster_track_indicator
     if SAVE_EXTENDED_MODE1:
-        return mode1_extended_data(
+        output_bytes = mode1_extended_data(
             gr_event,
             clusters,
             foms=foms,
@@ -820,39 +831,20 @@ def track_and_get_energy(
             RECORD_UNTRACKED=RECORD_UNTRACKED,
             **eval_FOM_kwargs,
         )
-    return mode1_data(
-        gr_event,
-        clusters,
-        foms=foms,
-        monster_size=MONSTER_SIZE,
-        tracked_dict=regurgitate_indicator,
-        # tracked_dict=cluster_track_indicator,
-        RECORD_UNTRACKED=RECORD_UNTRACKED,
-        **eval_FOM_kwargs,
-    )
-
-
-def track_event(
-    event: Event,
-    eval_FOM_kwargs: Dict = None,
-    MAX_HIT_POINTS: int = 100,
-    cluster_kwargs: Dict = None,
-    order_FOM_kwargs: Dict = None,
-    secondary_order_FOM_kwargs: Dict = None,
-) -> ByteString:
-    """
-    Track a single event by clustering and then ordering.
-    """
-    if eval_FOM_kwargs is None:
-        eval_FOM_kwargs = {}
-    if cluster_kwargs is None:
-        cluster_kwargs = {}
-    if order_FOM_kwargs is None:
-        order_FOM_kwargs = {}
-    if secondary_order_FOM_kwargs is None:
-        secondary_order_FOM_kwargs = {}
-
-    return solve_clusters(event, MAX_HIT_POINTS, cluster_kwargs, order_FOM_kwargs)
+    else:
+        output_bytes = mode1_data(
+            gr_event,
+            clusters,
+            foms=foms,
+            monster_size=MONSTER_SIZE,
+            tracked_dict=regurgitate_indicator,
+            # tracked_dict=cluster_track_indicator,
+            RECORD_UNTRACKED=RECORD_UNTRACKED,
+            **eval_FOM_kwargs,
+        )
+    if not return_stats:
+        return output_bytes
+    return output_bytes, stats
 
 
 def load_and_track_files(
@@ -903,124 +895,3 @@ def evaluate_mode1x(
             for event, clusters in tracked_generator(tracked_file):
                 mode1file.write(mode1_data(event, clusters, **options.eval_FOM_kwargs))
 
-
-# def load_and_track_and_save(
-#     mode2_filename: str, tracked_filename: str, options_filename: str
-# ):
-#     """
-#     Load files for reading and writing and then track them using the specified
-#     options
-#     """
-#     options = load_options(options_filename)
-#     with open(mode2_filename, "rb") as mode2file:
-#         print(f"Beginning tacking of Mode2 file {mode2_filename}.")
-#         with open(tracked_filename, "wb") as tracked_file:
-#             print(f"Saving tracked data to {tracked_filename}.")
-#             track_and_save(mode2file, tracked_file, options)
-
-
-# # def track_and_save(mode2file: BinaryIO, output_file: BinaryIO, options: Dict):
-# #     """
-# #     Take in the mode2 file to track, the file to write the tracked data, and
-# #     tracking options
-# #     """
-# #     order_FOM_kwargs = options["order_FOM_kwargs"]
-# #     secondary_order_FOM_kwargs = options["secondary_order_FOM_kwargs"]
-# #     eval_FOM_kwargs = options["eval_FOM_kwargs"]
-# #     cluster_kwargs = options["cluster_kwargs"]
-
-# #     print(f"Detector is set to {options['DETECTOR']}")
-# #     default_config.set_detector(options["DETECTOR"])
-
-# #     GEB_EVENT_SIZE = 480
-# #     filesize = get_file_size(mode2file)
-# #     n_data_points = filesize // GEB_EVENT_SIZE
-# #     if options["PARTIAL_TRACK"]:
-# #         final_position = options["PARTIAL_TRACK"]
-# #     else:
-# #         final_position = filesize
-
-# #     start = datetime.now()
-
-# #     print(f'[{start.strftime("%H:%M:%S")}] Start')
-
-# #     chunk_size = options["NUM_PROCESSES"] * 100
-# #     chunks = max(n_data_points // chunk_size, 1)
-# #     chunk = 0
-# #     num_events = 1
-# #     previous_position = 1
-
-# #     if options["VERBOSITY"] >= 3:
-# #         progress_bar = tqdm(total=final_position, unit="bytes", unit_scale=True)
-# #     with mp.Pool(options["NUM_PROCESSES"]) as pool:  # pylint: disable=E1102
-# #         mode2_data = mode2_loader(
-# #             mode2file,
-# #             time_gap=options["COINCIDENCE_TIME_GAP"],
-# #             monitor_progress=False,
-# #             global_coords=options["GLOBAL_COORDS"],
-# #         )
-# #         tracking_processes = []
-# #         for num_events, coincidence_event in enumerate(mode2_data):
-# #             if coincidence_event is not None:
-# #                 coincidence_event = remove_zero_energy_interactions(coincidence_event)
-# #                 tracking_processes.append(
-# #                     pool.apply_async(
-# #                         track_event,
-# #                         args=(
-# #                             coincidence_event,
-# #                             eval_FOM_kwargs,
-# #                             options["MAX_HIT_POINTS"],
-# #                             cluster_kwargs,
-# #                             order_FOM_kwargs,
-# #                             secondary_order_FOM_kwargs,
-# #                         ),
-# #                     )
-# #                 )
-# #             position = mode2file.tell()
-# #             if (
-# #                 position // (chunk_size * GEB_EVENT_SIZE) > chunk
-# #                 or position >= final_position
-# #             ):
-# #                 chunk += 1
-# #                 elapsed_time = datetime.now() - start
-# #                 average_time = (elapsed_time) // (max(1, chunk - 1))
-# #                 if options["VERBOSITY"] >= 2:
-# #                     print(
-# #                         f'[{datetime.now().strftime("%H:%M:%S")} || {elapsed_time}]'
-# #                         + f"  Processing chunk {chunk} of {chunks + 1}"
-# #                     )
-# #                     print(
-# #                         f"           Progress {previous_position} of {final_position} || "
-# #                         + f"{previous_position/final_position*100:2.2f}%"
-# #                     )
-# #                     print(f"           Events {num_events}")
-# #                     print(f"  Average time per chunk:   {average_time}")
-# #                     print(
-# #                         f"  Average time per event:   {elapsed_time/max(1, num_events)}"
-# #                     )
-# #                     print(
-# #                         "  Est. time remaining:      "
-# #                         + f"{elapsed_time*(final_position/previous_position - 1)}"
-# #                     )
-# #                 for j, tracking_outputs in enumerate(tracking_processes):
-# #                     try:
-# #                         event, clusters = tracking_outputs.get(
-# #                             timeout=options["TIMEOUT_SECONDS"]
-# #                         )
-# #                     except mp.TimeoutError:  # pylint: disable=E1101
-# #                         print(f"Timeout occurred for process {j}")
-# #                     except ValueError:
-# #                         print(f"Found a bad event at process {j}")
-# #                     else:
-# #                         write_event_cluster(output_file, event, clusters)
-# #                 tracking_processes = []
-# #                 if options["VERBOSITY"] >= 3:
-# #                     progress_bar.update(position - previous_position)
-# #                 previous_position = position
-# #                 if position >= final_position:
-# #                     break
-# #     print(f'[{datetime.now().strftime("%H:%M:%S")}] Completed')
-# #     print(f"[Total time : {datetime.now() - start}].")
-# #     print(
-# #         f"[Average event processing time : {(datetime.now() - start)/max(1,num_events)}]."
-# #     )
