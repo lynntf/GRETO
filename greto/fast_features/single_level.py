@@ -86,7 +86,7 @@ def single_values(
             njit_norm(event_calc.point_matrix[permutation[0]]) - inner_radius
         )
         if distance_to_inside < EPS:
-            print(f"Negative distance to the inside of the detector {distance_to_inside}, inner radius {inner_radius}")
+            # print(f"Negative distance to the inside of the detector {distance_to_inside}, inner radius {inner_radius}")
             distance_to_inside = EPS
             # TODO - put a counter, log more information
             # raise ValueError
