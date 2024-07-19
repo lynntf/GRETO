@@ -1860,6 +1860,7 @@ def create_classification_data(
         - seed: random number generator seed
         - packing_distance: interactions closer than this distance [cm] are combined
         - energy_threshold: interactions with energies below this value are deleted
+        - use_true: use the true order of the clusters
 
     Returns:
         - df_X: pandas dataframe with features
@@ -2036,6 +2037,7 @@ def create_classification_data_with_clustering(
         - seed: random number generator seed
         - packing_distance: interactions closer than this distance [cm] are combined
         - energy_threshold: interactions with energies below this value are deleted
+        - use_true: use the true order of the clusters
 
     Returns:
         - df_X: pandas dataframe with features
