@@ -17,6 +17,17 @@ from greto import fom_optimization_data as fo
 from greto import models
 from greto.models import sns_model
 
+# Current best model for ordering experimental Moly data
+order_model_filename = (
+    "models/ordering/N2000_lp_nonnegTrue_C1000_cols-oft_width5.json"
+)
+print(f"Loading ordering model {order_model_filename}")
+print(f"Load ordering model: {order_model_filename}")
+model = models.load_order_FOM_model(order_model_filename)
+
+
+print("Ordering true clusters and gathering features of model-ordered events")
+
 # Load multiplicity 30 data
 print("Loading data")
 events, clusters = file_io.load_m30()  # pylint: disable=unbalanced-tuple-unpacking
@@ -33,12 +44,6 @@ X_aft, Y_aft = fo.create_classification_data(events[:], clusters[:], fom_method=
 print("Getting test/train indices for data")
 train_indices_aft, test_indices_aft = sns_model.split(X_aft)
 
-order_model_filename = (
-    "models/ordering/N2000_lp_nonnegFalse_C10000_cols-oft_fast_tango_width5.json"
-)
-print(f"Load ordering model: {order_model_filename}")
-model = models.load_order_FOM_model(order_model_filename)
-print("Ordering true clusters and gathering features of model-ordered events")
 X_model, Y_model = fo.create_classification_data(
     events[:], clusters[:], model=model, width=5, stride=3
 )

@@ -16,6 +16,7 @@ import greto.models as models
 from greto import cluster_svm as csvm
 from greto import fom_optimization_data as fo
 
+TRAIN_XGB = False
 
 print("Loading events")
 events, clusters = gr_file_io.load_m30()
@@ -23,6 +24,7 @@ events, clusters = gr_file_io.load_m30()
 N = 2000  # number of events to include in training
 width = 5
 seed = 42  # RNG seed for reproducibility
+C = 1000  # Sparsity parameter for linear models
 
 print("Creating training data")
 
@@ -52,8 +54,6 @@ for column_set_name, columns in fo.column_sets.items():
     # scaler = preprocessing.StandardScaler(with_mean=False)  # z = (x - mean_) / scale_
     # scaler.fit(r)
     # r = scaler.transform(r)
-
-    C = 10000
 
     # Force weights to be non-negative or not (allow negative weights)
     for non_neg in [True, False]:
@@ -116,36 +116,37 @@ for column_set_name, columns in fo.column_sets.items():
             report.pop("indices")
             print(report)
 
-    # Train a boosted tree ranker using XGBoost
-    sol_method = "XGBRanker_pairwise"
-    print("Training XGB ranker")
+    if TRAIN_XGB:
+        # Train a boosted tree ranker using XGBoost
+        sol_method = "XGBRanker_pairwise"
+        print("Training XGB ranker")
 
-    max_depth = 5
-    C_xgb = 10
+        max_depth = 5
+        C_xgb = 10
 
-    ranker = xgb.XGBRanker(
-        tree_method="hist",
-        n_estimators=100,
-        objective="rank:pairwise",
-        reg_alpha=C_xgb,
-        max_depth=max_depth,
-    )
+        ranker = xgb.XGBRanker(
+            tree_method="hist",
+            n_estimators=100,
+            objective="rank:pairwise",
+            reg_alpha=C_xgb,
+            max_depth=max_depth,
+        )
 
-    ranker.fit(
-        X[columns],
-        1 - Y["ordered"],
-        qid=Y["cluster_ids"],
-    )
+        ranker.fit(
+            X[columns],
+            1 - Y["ordered"],
+            qid=Y["cluster_ids"],
+        )
 
-    ranker.get_booster().feature_names = columns
-    solved, unsolved = csvm.check_solutions_general(
-        ranker.predict(X[columns]),
-        Y["cluster_ids"],
-        Y["ordered"],
-    )
+        ranker.get_booster().feature_names = columns
+        solved, unsolved = csvm.check_solutions_general(
+            ranker.predict(X[columns]),
+            Y["cluster_ids"],
+            Y["ordered"],
+        )
 
-    print(f"training acc = {solved / (solved + unsolved)}")
+        print(f"training acc = {solved / (solved + unsolved)}")
 
-    ranker_fname = f"models/ordering/N{N}_{sol_method}_C{C_xgb}_cols-{column_set_name}_width{width}.ubj"
+        ranker_fname = f"models/ordering/N{N}_{sol_method}_C{C_xgb}_cols-{column_set_name}_width{width}.ubj"
 
-    models.save_xgb_model(ranker, ranker_fname)
+        models.save_xgb_model(ranker, ranker_fname)
