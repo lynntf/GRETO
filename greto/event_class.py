@@ -156,7 +156,7 @@ class Event:
     @property
     def distance(self) -> np.ndarray:
         """Distance between two points"""
-        return geo.njit_square_pdist(self.event.point_matrix)
+        return geo.njit_square_pdist(self.point_matrix)
         # _calculator.set_event(self)
         # return _calculator.distance((self.id, tuple(self.points[1].x)))
 
