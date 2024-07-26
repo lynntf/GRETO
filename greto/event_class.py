@@ -371,8 +371,11 @@ class Event:
     def tango_estimates(self) -> np.ndarray:
         """Local incoming energy estimates"""
         return phys.tango_incoming_estimate(
-            self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
+            self.energy_matrix, 1 - self.cos_act
         )
+        # return phys.tango_incoming_estimate(
+        #     self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
+        # )
         # _calculator.set_event(self)
         # return _calculator.tango_estimates((self.id, tuple(self.points[1].x)))
 
@@ -380,8 +383,11 @@ class Event:
     def tango_partial_derivatives(self) -> Tuple[np.ndarray]:
         """d/de and d/d_cos for the TANGO estimates"""
         return phys.partial_tango_incoming_derivatives(
-            self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
+            self.energy_matrix, 1 - self.cos_act
         )
+        # return phys.partial_tango_incoming_derivatives(
+        #     self.energy_matrix[np.newaxis, :, np.newaxis], 1 - self.cos_act
+        # )
         # _calculator.set_event(self)
         # return _calculator.tango_partial_derivatives((self.id, tuple(self.points[1].x)))
 
