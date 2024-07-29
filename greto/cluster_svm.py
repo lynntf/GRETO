@@ -469,6 +469,53 @@ def check_solutions_baseline(X: np.ndarray, qid: np.ndarray) -> List:
                 output[i][1] += 1
     return output
 
+def check_solutions_general_fast(
+    pred: np.ndarray,
+    qid: np.ndarray,
+    y: np.ndarray[bool],
+    debug: bool = False,
+    return_report: bool = False,
+) -> Tuple[int, int] | Dict:
+    """
+    Given predictions `pred`, how many of the problems are solved
+
+    :param pred:  the predictions of the ranking model
+    :param qid:  the problem indices (also query ids)
+    :param y:  indicator if the data index is not a solution (1 if acceptable and
+        or correct, 0 otherwise)
+    :param debug:  print additional messages fro debugging
+    :param return_report:  return a dictionary with the solved status of the `qid`s
+    :return:  (num correct, num incorrect) or Dict[qid] = 1 or 0
+    """
+    unique_qids = np.unique(qid)
+    correct = np.ones(len(unique_qids), dtype=bool)
+    val = np.full(len(unique_qids), np.inf)
+    
+    # Create a mapping from qid to index
+    qid_to_idx = {q: i for i, q in enumerate(unique_qids)}
+    
+    for pred_val, q, y_val in zip(pred, qid, y):
+        idx = qid_to_idx[q]
+        if pred_val < val[idx]:
+            val[idx] = pred_val
+            correct[idx] = y_val
+        elif pred_val == val[idx]:
+            correct[idx] &= y_val
+    
+    num_solved = np.sum(correct)
+    num_unsolved = len(correct) - num_solved
+    
+    if debug:
+        print(
+            f"Solved {num_solved}/{len(correct)} "
+            + f"({num_solved/len(correct)*100:5.2f}%)"
+        )
+    
+    if return_report:
+        return {q: c for q, c in zip(unique_qids, correct)}
+    
+    return num_solved, num_unsolved
+
 
 def check_solutions_general(
     pred: np.ndarray,
