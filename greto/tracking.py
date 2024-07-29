@@ -791,12 +791,16 @@ def track_event(
         cluster_track_indicator = {
             s: indicator[s] and cluster_track_indicator[s] for s in clusters
         }
+    cone_clusters = clusters
+    # print(f"clusters after clustering {clusters}")
     gr_event, clusters = order_clusters(
         event,
-        clusters,
+        cone_clusters,
         order_FOM_kwargs,
         cluster_track_indicator=cluster_track_indicator,
     )
+    # print(f"original event: {event}\nordered event:{gr_event}")
+    # print(f"clusters after ordering {clusters}")
 
     if SAVE_INTERMEDIATE:
         if not return_stats:
@@ -807,13 +811,18 @@ def track_event(
         # foms = solve_clusters_secondary_fom(
         #     event, MAX_HIT_POINTS, cluster_kwargs, secondary_order_FOM_kwargs
         # )
-        _, secondary_clusters = order_clusters(
+        second_event, secondary_clusters = order_clusters(
             event,
-            clusters,
+            cone_clusters,
             secondary_order_FOM_kwargs,
             cluster_track_indicator=cluster_track_indicator,
         )
-        foms = cluster_FOM(gr_event, secondary_clusters, **eval_FOM_kwargs)
+        # print(event)
+        # print(f"clusters after secondary ordering {clusters},\nsecondary clusters after secondary ordering {secondary_clusters}")
+        # print("trying again...")
+        # aft_clusters = semi_greedy_clusters(event, cone_clusters, width=5, stride=2, fom_method="angle", debug=True)
+        # print(f"{secondary_order_FOM_kwargs}:\n{clusters}.{secondary_clusters}.{aft_clusters}")
+        foms = cluster_FOM(second_event, secondary_clusters, **eval_FOM_kwargs)
         # foms = cluster_FOM(gr_event, secondary_clusters, **secondary_order_FOM_kwargs)
     else:
         foms = cluster_FOM(gr_event, clusters, **eval_FOM_kwargs)

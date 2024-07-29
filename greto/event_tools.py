@@ -132,7 +132,7 @@ def split_event_clusters(
                 detector=event.detector_config,
             ),
         )
-        clusters.append({cluster_id: list(np.argsort(cluster) + 1)})
+        clusters.append({cluster_id: list(np.argsort(np.argsort(cluster)) + 1)})
     return events, clusters
 
 
