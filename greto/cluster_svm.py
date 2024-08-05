@@ -469,6 +469,7 @@ def check_solutions_baseline(X: np.ndarray, qid: np.ndarray) -> List:
                 output[i][1] += 1
     return output
 
+
 def check_solutions_general_fast(
     pred: np.ndarray,
     qid: np.ndarray,
@@ -490,10 +491,10 @@ def check_solutions_general_fast(
     unique_qids = np.unique(qid)
     correct = np.ones(len(unique_qids), dtype=bool)
     val = np.full(len(unique_qids), np.inf)
-    
+
     # Create a mapping from qid to index
     qid_to_idx = {q: i for i, q in enumerate(unique_qids)}
-    
+
     for pred_val, q, y_val in zip(pred, qid, y):
         idx = qid_to_idx[q]
         if pred_val < val[idx]:
@@ -501,19 +502,19 @@ def check_solutions_general_fast(
             correct[idx] = y_val
         elif pred_val == val[idx]:
             correct[idx] &= y_val
-    
+
     num_solved = np.sum(correct)
     num_unsolved = len(correct) - num_solved
-    
+
     if debug:
         print(
             f"Solved {num_solved}/{len(correct)} "
             + f"({num_solved/len(correct)*100:5.2f}%)"
         )
-    
+
     if return_report:
         return {q: c for q, c in zip(unique_qids, correct)}
-    
+
     return num_solved, num_unsolved
 
 
@@ -622,7 +623,8 @@ def weighted_svc(
     debug: bool = False,  # pylint: disable=unused-argument
     relaxation: bool = False,  # pylint: disable=unused-argument
     mirror: bool = False,  # default to not doubling data size
-    randomize_mirror: bool = True,
+    randomize_mirror: bool = True,  # randomly assign to mirrored class
+    retrain_non_neg: bool = False,
     **SVCkwargs,
 ) -> None:
     """
@@ -686,7 +688,7 @@ def weighted_svc(
                 clf.fit(X_mirror, y_mirror)
         else:  # Introduce a second negative class by swapping some data to the other class
             if randomize_mirror:
-                y = np.random.choice([-1,1], size = (selected_X.shape[0],))
+                y = np.random.choice([-1, 1], size=(selected_X.shape[0],))
             else:
                 y = np.ones((selected_X.shape[0],))
                 y[: len(y) // 2] = -1
@@ -702,8 +704,64 @@ def weighted_svc(
         else:
             # No ConvergenceWarning occurred
             convergence_warning = False
+
+    # Either set negative column weights to zero or retrain without the negative columns
     if non_neg:
-        return np.clip(clf.coef_[0], 0, np.inf), convergence_warning
+        weights = clf.coef_[0]
+        if retrain_non_neg and np.sum(clf.coef_[0] < 0) > 0:
+            nonneg_indices = weights >= 0.0
+            clf = LinearSVC(
+                penalty=penalty,
+                loss=loss,
+                dual=dual,
+                tol=tol,
+                C=C / 2 / num_clusters,
+                # C=C/2,
+                fit_intercept=fit_intercept,
+                **SVCkwargs,
+            )
+            with warnings.catch_warnings(
+                record=True
+            ) as w:  # Catch convergence warnings
+                if mirror:  # Duplicate data into a second negative class
+                    X_mirror = np.concatenate(
+                        (selected_X[:, nonneg_indices], -selected_X[:, nonneg_indices]),
+                        axis=0,
+                    )
+                    y = np.ones((selected_X.shape[0],))
+                    y_mirror = np.concatenate((y, -y), axis=0)
+
+                    if weighted:
+                        weights_mirror = np.concatenate((weights, weights), axis=0)
+                        clf.fit(X_mirror, y_mirror, sample_weight=weights_mirror)
+                    else:
+                        clf.fit(X_mirror, y_mirror)
+                else:  # Introduce a second negative class by swapping some data to the other class
+                    if randomize_mirror:
+                        y = np.random.choice([-1, 1], size=(selected_X.shape[0],))
+                    else:
+                        y = np.ones((selected_X.shape[0],))
+                        y[: len(y) // 2] = -1
+                    if weighted:
+                        clf.fit(
+                            y[:, np.newaxis] * selected_X[:, nonneg_indices],
+                            y,
+                            sample_weight=weights,
+                        )
+                    else:
+                        clf.fit(y[:, np.newaxis] * selected_X[:, nonneg_indices], y)
+                # Check if there is a ConvergenceWarning
+                if any(isinstance(warn.message, ConvergenceWarning) for warn in w):
+                    # Handle the situation when ConvergenceWarning occurs
+                    print("SVM did not converge!")
+                    convergence_warning = True
+                else:
+                    # No ConvergenceWarning occurred
+                    convergence_warning = False
+            weights[~nonneg_indices] = 0.0
+            weights[nonneg_indices] = clf.coef_[0]
+        # return np.clip(clf.coef_[0], 0, np.inf), convergence_warning
+        return np.clip(weights, 0, np.inf), convergence_warning
     return clf.coef_[0], convergence_warning
 
 
@@ -722,7 +780,8 @@ def weighted_lr(
     debug: bool = False,  # pylint: disable=unused-argument
     relaxation: bool = False,  # pylint: disable=unused-argument
     mirror: bool = True,
-    randomize_mirror:bool = True,
+    randomize_mirror: bool = True,
+    retrain_non_neg: bool = False,
     **LRkwargs,
 ) -> None:
     """
@@ -792,7 +851,7 @@ def weighted_lr(
                 clf.fit(X_mirror, y_mirror)
         else:  # Introduce a second negative class by swapping some data to the other class
             if randomize_mirror:
-                y = np.random.choice([-1,1], size = (selected_X.shape[0],))
+                y = np.random.choice([-1, 1], size=(selected_X.shape[0],))
             else:
                 y = np.ones((selected_X.shape[0],))
                 y[: len(y) // 2] = -1
@@ -803,15 +862,70 @@ def weighted_lr(
         # Check if there is a ConvergenceWarning
         if any(isinstance(warn.message, ConvergenceWarning) for warn in w):
             # Handle the situation when ConvergenceWarning occurs
-            print("SVM did not converge!")
+            print("LR did not converge!")
             convergence_warning = True
         else:
             # No ConvergenceWarning occurred
             convergence_warning = False
+
+    # Either set negative column weights to zero or retrain without the negative columns
     if non_neg:
-        # if debug:
-        #     print('    Clipping negative weights.')
-        return np.clip(clf.coef_[0], 0, np.inf), convergence_warning
+        weights = clf.coef_[0]
+        if retrain_non_neg and np.sum(clf.coef_[0] < 0) > 0:
+            nonneg_indices = weights >= 0.0
+            clf = LogisticRegression(
+                penalty=penalty,
+                dual=dual,
+                tol=tol,
+                C=C / 2 / num_clusters,
+                # C = C/2,
+                fit_intercept=fit_intercept,
+                solver=solver,
+                **LRkwargs,
+            )
+            with warnings.catch_warnings(
+                record=True
+            ) as w:  # Catch convergence warnings
+                if mirror:  # Duplicate data into a second negative class
+                    X_mirror = np.concatenate(
+                        (selected_X[:, nonneg_indices], -selected_X[:, nonneg_indices]),
+                        axis=0,
+                    )
+                    y = np.ones((selected_X.shape[0],))
+                    y_mirror = np.concatenate((y, -y), axis=0)
+                    # if debug:
+                    #     print(f'    Mirrored data with shape {X_mirror.shape}. '+\
+                    #           f'False classes with shape {y_mirror.shape}.')
+                    if weighted:
+                        weights_mirror = np.concatenate((weights, weights), axis=0)
+                        clf.fit(X_mirror, y_mirror, sample_weight=weights_mirror)
+                    else:
+                        clf.fit(X_mirror, y_mirror)
+                else:  # Introduce a second negative class by swapping some data to the other class
+                    if randomize_mirror:
+                        y = np.random.choice([-1, 1], size=(selected_X.shape[0],))
+                    else:
+                        y = np.ones((selected_X.shape[0],))
+                        y[: len(y) // 2] = -1
+                    if weighted:
+                        clf.fit(
+                            y[:, np.newaxis] * selected_X[:, nonneg_indices],
+                            y,
+                            sample_weight=weights,
+                        )
+                    else:
+                        clf.fit(y[:, np.newaxis] * selected_X[:, nonneg_indices], y)
+                # Check if there is a ConvergenceWarning
+                if any(isinstance(warn.message, ConvergenceWarning) for warn in w):
+                    # Handle the situation when ConvergenceWarning occurs
+                    print("LR did not converge!")
+                    convergence_warning = True
+                else:
+                    # No ConvergenceWarning occurred
+                    convergence_warning = False
+            weights[~nonneg_indices] = 0.0
+            weights[nonneg_indices] = clf.coef_[0]
+        return np.clip(weights, 0, np.inf), convergence_warning
     return clf.coef_[0], convergence_warning
 
 

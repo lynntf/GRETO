@@ -24,7 +24,8 @@ events, clusters = gr_file_io.load_m30()
 N = 2000  # number of events to include in training
 width = 5
 seed = 42  # RNG seed for reproducibility
-C = 1000  # Sparsity parameter for linear models
+Cs = [1000, 10000]  # Sparsity parameter for linear models
+sol_methods = ["lr", "svm", "lp", "milp"]
 
 print("Creating training data")
 
@@ -68,53 +69,54 @@ for column_set_name, columns in fo.column_sets.items():
         )
 
         # Loop over solution methods
-        for sol_method in ["lr", "svm", "lp", "milp"]:
-            # for sol_method in []:
+        for sol_method in sol_methods:
+            for C in Cs:
+                # for sol_method in []:
 
-            report = csvm.column_generation(
-                r,
-                qid,
-                w0=w0,
-                sol_method=sol_method,
-                C=C,
-                initial_selection_method=csvm.select_indices,
-                subsequent_selection_method=csvm.select_indices_neg,
-                non_neg=non_neg,
-                return_report=True,
-                debug=True,
-                mirror=False,
-            )
+                report = csvm.column_generation(
+                    r,
+                    qid,
+                    w0=w0,
+                    sol_method=sol_method,
+                    C=C,
+                    initial_selection_method=csvm.select_indices,
+                    subsequent_selection_method=csvm.select_indices_neg,
+                    non_neg=non_neg,
+                    return_report=True,
+                    debug=True,
+                    mirror=False,
+                )
 
-            scaled_w = np.array(report["w"] / scaler.scale_)  # move scale from X to w
-            w = np.array(report["w"])  # weights on scaled (dimensionless) features
-            weights = list(w[np.abs(w) > 0.0])  # eliminate zero weight features
-            scaled_weights = list(scaled_w[np.abs(scaled_w) > 0.0])
-            column_names = list(np.array(columns)[np.abs(w) > 0.0])
-            scales = list(scaler.scale_[np.abs(w) > 0.0])
+                scaled_w = np.array(report["w"] / scaler.scale_)  # move scale from X to w
+                w = np.array(report["w"])  # weights on scaled (dimensionless) features
+                weights = list(w[np.abs(w) > 0.0])  # eliminate zero weight features
+                scaled_weights = list(scaled_w[np.abs(scaled_w) > 0.0])
+                column_names = list(np.array(columns)[np.abs(w) > 0.0])
+                scales = list(scaler.scale_[np.abs(w) > 0.0])
 
-            fname = (
-                f"models/ordering/N{N}_{sol_method}_nonneg{non_neg}_C{C}"
-                + f"_cols-{column_set_name}_width{width}.json"
-            )
+                fname = (
+                    f"models/ordering/N{N}_{sol_method}_nonneg{non_neg}_C{C}"
+                    + f"_cols-{column_set_name}_width{width}.json"
+                )
 
-            models.save_linear_model(
-                weights,
-                scale=scales,
-                columns=column_names,
-                scaled_weights=scaled_weights,
-                filename=fname,
-            )
+                models.save_linear_model(
+                    weights,
+                    scale=scales,
+                    columns=column_names,
+                    scaled_weights=scaled_weights,
+                    filename=fname,
+                )
 
-            solved, unsolved = csvm.check_solutions_general(
-                np.dot(scaler.transform(X[columns]), w),
-                Y["cluster_ids"],
-                Y["ordered"],
-            )
+                solved, unsolved = csvm.check_solutions_general(
+                    np.dot(scaler.transform(X[columns]), w),
+                    Y["cluster_ids"],
+                    Y["ordered"],
+                )
 
-            print(f"training acc = {solved / (solved + unsolved)}")
+                print(f"training acc = {solved / (solved + unsolved)}")
 
-            report.pop("indices")
-            print(report)
+                report.pop("indices")
+                print(report)
 
     if TRAIN_XGB:
         # Train a boosted tree ranker using XGBoost
