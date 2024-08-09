@@ -1,0 +1,1 @@
+{"model": "linear", "weights": [1.0, 1.0], "scale": [1.0, 1.0], "bias": null, "scaled_weights": [1.0, 1.0], "columns": ["rth_cap_sum_2", "c_penalty_ell_sum_1"]}

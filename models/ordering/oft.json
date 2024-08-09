@@ -1,0 +1,1 @@
+{"model": "linear", "weights": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0], "scale": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0], "bias": null, "scaled_weights": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0], "columns": ["rsg_sum_2v", "rsg_sum_2v_first", "cross_compt_ge_dist_sum_nonfinal", "-log_p_compt_sum_nonfinal", "cross_abs_ge_dist_final", "-log_p_abs_final"]}
