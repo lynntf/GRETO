@@ -4,7 +4,7 @@
 
 DETECTOR: gretina               # Available detectors are "GRETINA", "GRETA" (identical to "GRETINA"), and "AGATA"
 COINCIDENCE_TIME_GAP: &tg 40    # Units of 10 ns; Used for grouping recorded crystal events in time
-NUM_PROCESSES: 100              # Number of processors to use for multi-processing (should be changed depending on the machine)
+NUM_PROCESSES: null             # Number of processors to use for multi-processing (should be changed depending on the machine)
 SECONDARY_ORDER: false          # Track twice; Used for ensuring comparison between the same data
 VERBOSITY: 2                    # Level of console output
 TIMEOUT_SECONDS: 15             # Timeout limit in seconds for multiprocessing processes
