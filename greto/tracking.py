@@ -863,12 +863,13 @@ def load_and_track_files(
     Load files for reading and writing and then track them using the specified
     options
     """
-    options = load_options(options_filename)
-    with open(mode2_filename, "rb") as mode2file:
-        print(f"Beginning tacking of Mode2 file {mode2_filename}.")
-        with open(mode1_filename, "wb") as mode1file:
-            print(f"Saving Mode1 data to {mode1_filename}.")
-            track_files(mode2file, mode1file, options)
+    track_async(mode2_filename, mode1_filename, options_filename)
+    # options = load_options(options_filename)
+    # with open(mode2_filename, "rb") as mode2file:
+    #     print(f"Beginning tacking of Mode2 file {mode2_filename}.")
+    #     with open(mode1_filename, "wb") as mode1file:
+    #         print(f"Saving Mode1 data to {mode1_filename}.")
+    #         track_files(mode2file, mode1file, options)
 
 
 def load_and_track_simulated(
