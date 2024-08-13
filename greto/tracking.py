@@ -711,6 +711,7 @@ def track_event(
     SUPPRESS_BAD_PAD: bool = False,
     regurgitate: bool = False,
     return_stats: bool = False,
+    debug: bool = False,
     **kwargs,
 ) -> ByteString:
     """
@@ -786,7 +787,7 @@ def track_event(
         }
         for i, cluster in clusters.items():
             for index in cluster:
-                if event.points[index].pad > 0:
+                if debug and event.points[index].pad > 0:
                     print(f"Found a bad pad, skipping:{event}")
         cluster_track_indicator = {
             s: indicator[s] and cluster_track_indicator[s] for s in clusters
