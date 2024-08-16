@@ -1,6 +1,15 @@
 # Tracking tutorial
 
 ## Installation
+1. Install conda: https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html
+2. Run
+    ```bash
+    conda init
+    ```
+3. Add `conda-forge channel`
+    ```bash
+    conda config --add channels conda-forge
+    ```
 1. Git clone the GRETO repository
     ```bash
     git clone https://github.com/lynntf/GRETO.git
@@ -9,25 +18,25 @@
     ```bash
     cd GRETO
     ```
-3. Create Python virtual environment and install dependencies using `requirements_tracking.txt` (required for tracking) or `requirements.txt` (for development and plotting)
-    * Using conda:
+3. Create Python virtual environment and install dependencies:
+    * Using conda using `requirements_tracking.txt` (required for tracking) or `requirements.txt` (for development and plotting):
         ```bash
-        conda create --name greto_env --file requirements_tracking.txt
+        conda create --name tracking-env --file requirements_tracking.txt
         ```
-        or
+        or install using dependencies explicitly (for tracking)
         ```bash
-        conda create --name greto_env --file requirements.txt
+        conda create -n tracking-env numpy scipy pyyaml scikit-learn=1.4.2 numba tqdm pandas multiprocess xgboost
         ```
 4. Activate virtual environment to access dependencies
     ```bash
-    conda activate greto_env
+    conda activate tracking-env
     ```
 
 ## Using the software
 ### Tracking
 Tracking is done using the script `track.py` that takes in some command line arguments for input, output, and options:
 ```bash
-python -u track.py input.mode2 output.mode1 example_options.yaml > track.log
+python -u track.py input.mode2 output.mode1 example_options.yaml
 ```
 The option `-u` specifies that the output from python is un-buffered (writes to `track.log` immediately).
 
