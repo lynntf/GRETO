@@ -313,6 +313,18 @@ For support, please use the Github issue tracker or [email Thomas Lynn](https://
 
 ## Roadmap
 
+Add warning about overwriting files.
+
+Investigate possible bad values from suppression model.
+
+Add directions for building models.
+
+Add non-negativity to suppression models (not immediately clear if PCA is used).
+
+Get suppression models in JSON form (agnostic to code language, and tranferrable).
+
+Investigate retraining non-negative logistic regression and SVM models instead of clipping weights.
+
 Providing adequate documentation is an ongoing effort.
 
 Current efforts are focused on incorporating pair-production tracking into the methods here (and in other tracking codes).
