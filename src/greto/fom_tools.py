@@ -19,7 +19,7 @@ from scipy import integrate
 
 import greto.fast_features as ff
 import greto.physics as phys
-from greto import default_config
+from greto.detector_config_class import default_config
 from greto.detector_config_class import DetectorConfig
 from greto.event_class import Event
 from greto.event_tools import merge_clusters, split_event_clusters

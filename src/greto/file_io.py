@@ -14,12 +14,12 @@ import zipfile
 from typing import BinaryIO, Dict, Generator, List, Tuple
 
 import numpy as np
-import pkg_resources
+import pathlib
 import yaml
 from scipy.spatial.distance import pdist, squareform
 from tqdm import tqdm
 
-from greto import default_config
+from greto.detector_config_class import default_config
 from greto.detector_config_class import DetectorConfig
 from greto.event_class import Event
 from greto.fom_tools import cluster_FOM
@@ -1637,16 +1637,25 @@ def read_simulated_ascii(filename):
         return events, rays
 
 
-# Get the file path from the package data
-m30_path = pkg_resources.resource_filename(__name__, "data/GammaEvents.Mul30")
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
 
-m30_zipped_path = pkg_resources.resource_filename(
-    __name__, "data/GammaEvents.Mul30.zip"
-)
+m30_path = DATA_DIR / "GammaEvents.Mul30"
+m30_zipped_path = DATA_DIR / "GammaEvents.Mul30.zip"
 
-if not os.path.exists(m30_path):
-    with zipfile.ZipFile(m30_zipped_path, "r") as zip_ref:
-        zip_ref.extractall(m30_path)
+def ensure_data_extracted():
+    if not m30_path.exists():
+        if m30_zipped_path.exists():
+            print(f"📦 Extracting simulation data to {DATA_DIR}...")
+            with zipfile.ZipFile(m30_zipped_path, "r") as zip_ref:
+                # Extracts directly into the /GRETO/data/ folder
+                zip_ref.extractall(DATA_DIR)
+            print("✅ Extraction complete.")
+        else:
+            print(f"⚠️ Warning: Could not find {m30_zipped_path}")
+    else:
+        # Data already exists
+        pass
 
 
 def load_m30(

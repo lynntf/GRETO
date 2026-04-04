@@ -9,7 +9,7 @@ from typing import Dict, Iterable, List
 
 import numpy as np
 
-# from greto import default_config
+# from greto.detector_config_class import default_config
 # from greto.detector_config_class import DetectorConfig
 from greto.event_class import Event
 

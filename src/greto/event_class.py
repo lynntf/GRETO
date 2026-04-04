@@ -16,7 +16,7 @@ from scipy.spatial.distance import squareform  # pdist,
 
 import greto.geometry as geo
 import greto.physics as phys
-from greto import default_config
+from greto.detector_config_class import default_config
 from greto.asym_heir_clustering import asym_hier_linkage
 from greto.coincidence_class import Coincidence
 from greto.detector_config_class import DetectorConfig

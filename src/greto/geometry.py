@@ -15,7 +15,7 @@ import numba
 from scipy.spatial.distance import pdist, squareform
 from scipy.spatial.transform import Rotation
 
-from greto import default_config
+from greto.detector_config_class import default_config
 from greto.detector_config_class import DetectorConfig
 from greto.utils import njit_squared_norm
 
