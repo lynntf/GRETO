@@ -1023,29 +1023,29 @@ __sig_pair = make_pair_interpolator(
 )
 
 
-def sig_abs(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[float]:
+def sig_abs(energies: np.ndarray, use_fit: bool = True) -> np.ndarray:
     """Interpolated absorption cross-sections for Germanium"""
     if use_fit:
         return fit_absorption(energies)
     return __sig_abs(energies)
 
 
-def lin_att_abs(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[float]:
+def lin_att_abs(energies: np.ndarray, use_fit: bool = True) -> np.ndarray:
     """Interpolated absorption linear attenuation [1/cm]"""
     return sig_abs(energies, use_fit) * RANGE_PROCESS
 
 
-def sig_ray(energies: np.ndarray[float]) -> np.ndarray[float]:
+def sig_ray(energies: np.ndarray) -> np.ndarray:
     """Interpolated rayleigh scattering cross-sections"""
     return __sig_ray(energies)
 
 
-def lin_att_ray(energies: np.ndarray[float]) -> np.ndarray[float]:
+def lin_att_ray(energies: np.ndarray) -> np.ndarray:
     """Interpolated rayleigh scattering linear attenuation [1/cm]"""
     return sig_ray(energies) * RANGE_PROCESS
 
 
-def sig_compt(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[float]:
+def sig_compt(energies: np.ndarray, use_fit: bool = True) -> np.ndarray:
     """Interpolated Compton scattering cross-sections"""
     if use_fit:
         return fit_compton(energies)
@@ -1053,13 +1053,13 @@ def sig_compt(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[f
 
 
 def lin_att_compt(
-    energies: np.ndarray[float], use_fit: bool = True
-) -> np.ndarray[float]:
+    energies: np.ndarray, use_fit: bool = True
+) -> np.ndarray:
     """Interpolated Compton scattering linear attenuation [1/cm]"""
     return sig_compt(energies, use_fit) * RANGE_PROCESS
 
 
-def sig_pair(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[float]:
+def sig_pair(energies: np.ndarray, use_fit: bool = True) -> np.ndarray:
     """Interpolated pair production cross-sections"""
     if use_fit:
         return fit_pair(energies)
@@ -1067,13 +1067,13 @@ def sig_pair(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[fl
 
 
 def lin_att_pair(
-    energies: np.ndarray[float], use_fit: bool = True
-) -> np.ndarray[float]:
+    energies: np.ndarray, use_fit: bool = True
+) -> np.ndarray:
     """Interpolated pair production linear attenuation [1/cm]"""
     return sig_pair(energies, use_fit) * RANGE_PROCESS
 
 
-def sig_total(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[float]:
+def sig_total(energies: np.ndarray, use_fit: bool = True) -> np.ndarray:
     """Interpolated total cross-section"""
     return (
         sig_abs(energies, use_fit)
@@ -1083,8 +1083,8 @@ def sig_total(energies: np.ndarray[float], use_fit: bool = True) -> np.ndarray[f
 
 
 def lin_att_total(
-    energies: np.ndarray[float], use_fit: bool = True
-) -> np.ndarray[float]:
+    energies: np.ndarray, use_fit: bool = True
+) -> np.ndarray:
     """Interpolated total linear attenuation [1/cm]"""
     return (
         sig_abs(energies, use_fit)
@@ -1093,7 +1093,7 @@ def lin_att_total(
     ) * RANGE_PROCESS
 
 @numba.njit
-def lin_att_total_fit(energies: np.ndarray[float]) -> np.ndarray[float]:
+def lin_att_total_fit(energies: np.ndarray) -> np.ndarray:
     """Interpolated total linear attenuation [1/cm]"""
     return (
         fit_absorption(energies)
@@ -1102,7 +1102,7 @@ def lin_att_total_fit(energies: np.ndarray[float]) -> np.ndarray[float]:
     ) * RANGE_PROCESS
 
 
-def range_process(sigma: np.ndarray[float]) -> np.ndarray[float]:
+def range_process(sigma: np.ndarray) -> np.ndarray:
     """
     Given gamma macroscopic cross section (absorption, Compton scattering, or
     pair production), return linear attenuation coefficient.
@@ -1112,8 +1112,8 @@ def range_process(sigma: np.ndarray[float]) -> np.ndarray[float]:
 
 
 def proba(
-    lamb_inv: np.ndarray[float], distance: np.ndarray[float]
-) -> np.ndarray[float]:
+    lamb_inv: np.ndarray, distance: np.ndarray
+) -> np.ndarray:
     """
     Cumulative exponential distribution: interaction probability. What is the
     probability that the interaction would occur at a distance greater than the
