@@ -124,6 +124,35 @@ def cone_pen_prob(
     ) / (2 * np.pi)
 
 
+@numba.njit
+def fast_cone_integral_trapz(point, direction, opening_angle, detector_radius, linear_attenuation, n_steps=50):
+    """
+    Integrates cone_pen_prob from 0 to pi using a fine Trapezoidal rule.
+    n_steps=200 is generally enough to match scipy.integrate.quad on smooth exponentials.
+    """
+    d_theta = np.pi / n_steps
+    total = 0.0
+    
+    # Evaluate at the boundary limits: 0 and pi
+    r_0 = geo.cone_ray_lengths(point, direction, opening_angle, 0.0, detector_radius)
+    r_pi = geo.cone_ray_lengths(point, direction, opening_angle, np.pi, detector_radius)
+    
+    val_0 = np.exp(-linear_attenuation * r_0) / (2 * np.pi)
+    val_pi = np.exp(-linear_attenuation * r_pi) / (2 * np.pi)
+    
+    # Trapezoidal endpoints
+    total += 0.5 * (val_0 + val_pi)
+    
+    # Evaluate the interior points
+    for i in range(1, n_steps):
+        theta = i * d_theta
+        r_len = geo.cone_ray_lengths(point, direction, opening_angle, theta, detector_radius)
+        val = np.exp(-linear_attenuation * r_len) / (2 * np.pi)
+        total += val
+        
+    return total * d_theta
+
+@numba.njit
 def escape_probability_func(
     penultimate_point: np.ndarray,
     final_point: np.ndarray,
@@ -136,7 +165,7 @@ def escape_probability_func(
         - penultimate_point: point location of point incoming final point before
           scattering out
         - final_point: point location of final point before scattering out
-        - final_energy: energy of final scatter interaction
+        - final_energy: energy deposited at the final scatter interaction
         - escaped_energy: assumed remaining energy (excess energy predicted by
           TANGO or another method)
         - detector_radius: radius of the detector sphere
@@ -147,39 +176,44 @@ def escape_probability_func(
 
     """
     if escaped_energy <= 0:
+        # Impossible to escape if there is no energy left to escape with
         return 0.0
+
     if np.linalg.norm(final_point) > detector_radius:
-        # warnings.warn(
-        #     "greto.fast_features.permutation_level.escape_probability_func:\n"
-        #     + f"Final_point (radius = {np.linalg.norm(final_point)}) is outside"
-        #     + f" of the detector (radius = {detector_radius}).\n"
-        #     + "Returning probability 1. Assumed to escape with high probability."
-        # )
+        # If the final point is already outside the detector, it has escaped
+        # This should not happen in practice (interactions should not be recorded outside the detector)
         return 1.0
+
     theor_cos = phys.njit_cos_theor(escaped_energy + final_energy, escaped_energy)
     if theor_cos < -1:
+        # Check if the theoretical scattering angle is physically valid
         return 0.0
-    point = final_point
+
+    # Calculate the direction of the scatter axis (from penultimate to final point)
     direction = final_point - penultimate_point
     direction = direction / np.linalg.norm(direction)
-    opening_angle = phys.theta_theor_single(
-        escaped_energy + final_energy, escaped_energy
-    )
-
+    # Calculate the opening angle of the cone based on the energies
+    opening_angle = phys.theta_theor_single(escaped_energy + final_energy, escaped_energy)
+    # Calculate the linear attenuation (for all possible interactions) for the escaped energy
     linear_attenuation = phys.lin_att_total_fit(escaped_energy)
 
-    out = (
-        integrate.quad(
-            cone_pen_prob,
-            0.0,
-            np.pi,
-            full_output=0,
-            args=(point, direction, opening_angle, detector_radius, linear_attenuation),
-        )[0]
-        * 2
-    )
+    # Use the fast cone integral to compute the average escape probability over all angles (half of the cone, hence multiply by 2)
+    out = fast_cone_integral_trapz(final_point, direction, opening_angle, detector_radius, linear_attenuation) * 2.0
+
+    # # Full integration using scipy.integrate.quad (slower but more accurate); cannot use numba with scipy.integrate.quad, hence the fast_trapz method above
+    # out = (
+    #     integrate.quad(
+    #         cone_pen_prob,
+    #         0.0,
+    #         np.pi,
+    #         full_output=0,
+    #         args=(final_point, direction, opening_angle, detector_radius, linear_attenuation),
+    #     )[0]
+    #     * 2
+    # )
 
     if out != out:
+        # out != out is a check for NaN
         print("Problem with integration:")
         print(f"direction normalized = {direction}")
         print(f"direction unnormalized = {final_point - penultimate_point}")

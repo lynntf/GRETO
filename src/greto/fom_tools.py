@@ -5632,6 +5632,35 @@ def cone_pen_prob(
     ) / (2 * np.pi)
 
 
+@numba.njit
+def fast_cone_integral_trapz(point, direction, opening_angle, detector_radius, linear_attenuation, n_steps=200):
+    """
+    Integrates cone_pen_prob from 0 to pi using a fine Trapezoidal rule.
+    n_steps=200 is generally enough to match scipy.integrate.quad on smooth exponentials.
+    """
+    d_theta = np.pi / n_steps
+    total = 0.0
+    
+    # Evaluate at the boundary limits: 0 and pi
+    r_0 = cone_ray_lengths(point, direction, opening_angle, 0.0, detector_radius)
+    r_pi = cone_ray_lengths(point, direction, opening_angle, np.pi, detector_radius)
+    
+    val_0 = np.exp(-linear_attenuation * r_0) / (2 * np.pi)
+    val_pi = np.exp(-linear_attenuation * r_pi) / (2 * np.pi)
+    
+    # Trapezoidal endpoints
+    total += 0.5 * (val_0 + val_pi)
+    
+    # Evaluate the interior points
+    for i in range(1, n_steps):
+        theta = i * d_theta
+        r_len = cone_ray_lengths(point, direction, opening_angle, theta, detector_radius)
+        val = np.exp(-linear_attenuation * r_len) / (2 * np.pi)
+        total += val
+        
+    return total * d_theta
+
+@numba.njit
 def escape_probability(
     penultimate_point: np.ndarray,
     final_point: np.ndarray,
@@ -5644,7 +5673,7 @@ def escape_probability(
         - penultimate_point: point location of point incoming final point before
           scattering out
         - final_point: point location of final point before scattering out
-        - final_energy: energy of final scatter interaction
+        - final_energy: energy deposited at the final scatter interaction
         - escaped_energy: assumed remaining energy (excess energy predicted by
           TANGO or another method)
         - detector_radius: radius of the detector sphere
@@ -5655,71 +5684,44 @@ def escape_probability(
 
     """
     if escaped_energy <= 0:
+        # Impossible to escape if there is no energy left to escape with
         return 0.0
+
+    if np.linalg.norm(final_point) > detector_radius:
+        # If the final point is already outside the detector, it has escaped
+        # This should not happen in practice (interactions should not be recorded outside the detector)
+        return 1.0
+
+    # Calculate the theoretical scattering angle based on the energies
     theor_cos = phys.njit_cos_theor(escaped_energy + final_energy, escaped_energy)
     if theor_cos < -1:
+        # Check if the theoretical scattering angle is physically valid
         return 0.0
-    point = final_point
+
+    # Calculate the direction of the scatter axis (from penultimate to final point)
     direction = final_point - penultimate_point
     direction = direction / np.linalg.norm(direction)
-    opening_angle = phys.theta_theor_single(
-        escaped_energy + final_energy, escaped_energy
-    )
-
+    # Calculate the opening angle of the cone based on the energies
+    opening_angle = phys.theta_theor_single(escaped_energy + final_energy, escaped_energy)
+    # Calculate the linear attenuation (for all possible interactions) for the escaped energy
     linear_attenuation = phys.lin_att_total_fit(escaped_energy)
 
-    return (
-        integrate.quad(
-            cone_pen_prob,
-            0.0,
-            np.pi,
-            full_output=0,
-            args=(point, direction, opening_angle, detector_radius, linear_attenuation),
-        )[0]
-        * 2
-    )
+    # Use the fast cone integral to compute the average escape probability over all angles (half of the cone, hence multiply by 2)
+    out = fast_cone_integral_trapz(final_point, direction, opening_angle, detector_radius, linear_attenuation) * 2.0
 
+    # # Full integration using scipy.integrate.quad (slower but more accurate); cannot use numba with scipy.integrate.quad, hence the fast_trapz method above
+    # out = (
+    #     integrate.quad(
+    #         cone_pen_prob,
+    #         0.0,
+    #         np.pi,
+    #         full_output=0,
+    #         args=(final_point, direction, opening_angle, detector_radius, linear_attenuation),
+    #     )[0]
+    #     * 2
+    # );
 
-# def escape_probability(
-#     p_imo: Interaction,
-#     p_i: Interaction,
-#     E_x: float,
-#     detector: DetectorConfig = default_config,
-# ):
-#     """
-#     point location of last point before scattering out
-#     direction of scatter axis (previous point to current point)
-#     opening angle (CSF)
-#     Ex excess energy for cross section values
-#     """
-#     point = p_i.x
-#     direction = p_i.x - p_imo.x
-#     direction /= np.linalg.norm(direction)
-#     opening_angle = phys.theta_theor_single(E_x + p_i.e, E_x)
-#     theor_cos = phys.njit_cos_theor(E_x + p_i.e, E_x)
-#     if theor_cos < -1:
-#         # return (0., 0)
-#         return 0.0
-
-#     # c = cone(point, direction, opening_angle, detector.outer_radius)
-#     # linear_attenuation = phys.lin_att_total(np.array([E_x]))[0]
-#     linear_attenuation = phys.lin_att_total(E_x)
-
-#     def probability(theta):
-#         # not clear if its faster to exploit symmetry and only integrate over
-#         # [0, pi) and multiply by 2 instead of integrating over [0, 2*pi)
-#         return (
-#             np.exp(
-#                 -linear_attenuation
-#                 * cone_ray_lengths(
-#                     point, direction, opening_angle, theta, detector.outer_radius
-#                 )
-#             )
-#             / 2
-#             / np.pi
-#         )
-
-#     return integrate.quad(probability, 0, 2 * np.pi)[0]
+    return out
 
 
 def escape_prob_features(
