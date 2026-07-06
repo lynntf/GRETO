@@ -5704,7 +5704,7 @@ def escape_probability(
     # Calculate the opening angle of the cone based on the energies
     opening_angle = phys.theta_theor_single(escaped_energy + final_energy, escaped_energy)
     # Calculate the linear attenuation (for all possible interactions) for the escaped energy
-    linear_attenuation = phys.lin_att_total_fit(escaped_energy)
+    linear_attenuation = phys.lin_att_total(escaped_energy)
 
     # Use the fast cone integral to compute the average escape probability over all angles (half of the cone, hence multiply by 2)
     out = fast_cone_integral_trapz(final_point, direction, opening_angle, detector_radius, linear_attenuation) * 2.0

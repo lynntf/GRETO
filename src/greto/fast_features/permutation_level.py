@@ -195,7 +195,7 @@ def escape_probability_func(
     # Calculate the opening angle of the cone based on the energies
     opening_angle = phys.theta_theor_single(escaped_energy + final_energy, escaped_energy)
     # Calculate the linear attenuation (for all possible interactions) for the escaped energy
-    linear_attenuation = phys.lin_att_total_fit(escaped_energy)
+    linear_attenuation = phys.lin_att_total(np.array([escaped_energy]))[0]
 
     # Use the fast cone integral to compute the average escape probability over all angles (half of the cone, hence multiply by 2)
     out = fast_cone_integral_trapz(final_point, direction, opening_angle, detector_radius, linear_attenuation) * 2.0
@@ -985,11 +985,11 @@ def perm_atoms(
     klein_nishina_relative_use_Ei = compute_value(
         "klein_nishina_relative_use_Ei",
         ["energy_rev_cumsum", "cos_act_perm", "linear_attenuation_compt"],
-        lambda: phys.KN_differential_cross(
+            lambda: phys.KN_differential_cross(
             energy_rev_cumsum[:-1],
             1 - cos_act_perm,
             energy_rev_cumsum[1:],
-            linear_attenuation_compt / phys.RANGE_PROCESS,
+            sigma_compt=linear_attenuation_compt[:-1] / phys.RANGE_PROCESS,
             relative=True,
             integrate=True,
         ),
@@ -999,10 +999,10 @@ def perm_atoms(
     klein_nishina_relative = compute_value(
         "klein_nishina_relative",
         ["energy_rev_cumsum", "cos_act_perm", "linear_attenuation_compt"],
-        lambda: phys.KN_differential_cross(
+            lambda: phys.KN_differential_cross(
             energy_rev_cumsum[:-1],
             1 - cos_act_perm,
-            sigma_compt=linear_attenuation_compt / phys.RANGE_PROCESS,
+            sigma_compt=linear_attenuation_compt[:-1] / phys.RANGE_PROCESS,
             relative=True,
             integrate=True,
         ),

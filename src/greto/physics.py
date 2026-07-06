@@ -12,6 +12,7 @@ from typing import Callable, Optional
 
 import numba
 import numpy as np
+import numpy.typing as npt
 from scipy.constants import physical_constants
 from scipy.interpolate import PchipInterpolator, interp1d  # CubicSpline,
 
@@ -55,8 +56,8 @@ imposed by the Compton Edge.
 
 @numba.njit
 def compton_edge_incoming(
-    E_out: np.ndarray[float] | float,
-) -> np.ndarray[float] | float:
+    E_out: npt.NDArray[np.float64] | float,
+) -> npt.NDArray[np.float64] | float:
     """
     Incoming energy assuming a back-scatter given outgoing energy
 
@@ -88,8 +89,8 @@ def compton_edge_incoming(
 
 @numba.njit
 def compton_edge_incoming_diff(
-    E_out: np.ndarray[float] | float,
-) -> np.ndarray[float] | float:
+    E_out: npt.NDArray[np.float64] | float,
+) -> npt.NDArray[np.float64] | float:
     """
     Deposited energy assuming a back-scatter given outgoing energy
 
@@ -103,7 +104,9 @@ def compton_edge_incoming_diff(
 
 
 @numba.njit
-def compton_edge_outgoing(E_in: np.ndarray[float] | float) -> np.ndarray[float] | float:
+def compton_edge_outgoing(
+    E_in: npt.NDArray[np.float64] | float,
+) -> npt.NDArray[np.float64] | float:
     """
     Outgoing energy assuming a back-scatter given incoming energy
 
@@ -127,8 +130,8 @@ def compton_edge_outgoing(E_in: np.ndarray[float] | float) -> np.ndarray[float] 
 
 @numba.njit
 def compton_edge_outgoing_diff(
-    E_in: np.ndarray[float] | float,
-) -> np.ndarray[float] | float:
+    E_in: npt.NDArray[np.float64] | float,
+) -> npt.NDArray[np.float64] | float:
     """
     Deposited energy assuming a back-scatter given incoming energy
 
@@ -148,9 +151,9 @@ def compton_edge_outgoing_diff(
 # %% Compton Scattering Formula: Cosine
 @numba.njit
 def njit_cos_theor(
-    E_imo: float | np.ndarray[float],
-    E_i: float | np.ndarray[float],
-) -> np.ndarray[float]:
+    E_imo: float | npt.NDArray[np.float64],
+    E_i: float | npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
     """
     Compton scattering formula. Compute cosine of angle based on starting and
     ending energy after an interaction.
@@ -163,7 +166,7 @@ def njit_cos_theor(
 
 
 @numba.njit
-def cos_theor_sequence(energies: np.ndarray) -> np.ndarray:
+def cos_theor_sequence(energies: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """
     Compton scattering formula. Compute cosine of angle based on starting and
     ending energy after an interaction.
@@ -172,19 +175,19 @@ def cos_theor_sequence(energies: np.ndarray) -> np.ndarray:
         - energies: sequence of energies [MeV]
     """
     # return 1 - MEC2 * np.diff(1 / energies)
-    out = np.zeros((energies.shape[0]-1,))  # for loop is faster when compiled
+    out = np.zeros((energies.shape[0] - 1,))  # for loop is faster when compiled
     for i in range(out.shape[0]):
-        out[i] = 1 - MEC2 * (1/energies[i+1] - 1/energies[i])
+        out[i] = 1 - MEC2 * (1 / energies[i + 1] - 1 / energies[i])
     return out
 
 
 def cos_theor(
-    E_imo: float | np.ndarray[float],
-    E_i: float | np.ndarray[float],
+    E_imo: float | npt.NDArray[np.float64],
+    E_i: float | npt.NDArray[np.float64],
     penalty: Optional[float] = None,
     penalty_slack: float = 0.1,
     compton_relief: float = 1.0e-10,
-) -> np.ndarray[float]:
+) -> npt.NDArray[np.float64]:
     """
     Compton scattering formula. Compute cosine of angle based on starting and
     ending energy after an interaction.
@@ -217,7 +220,7 @@ def compton_penalty_ell1_single(cosine: float) -> float:
 
 
 @numba.njit
-def compton_penalty_ell1(cosines: np.ndarray[float]):
+def compton_penalty_ell1(cosines: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """
     Return how much more negative the theoretical cosine is compared to -1
 
@@ -248,7 +251,7 @@ def compton_penalty_single(cosine: float) -> float:
 
 
 @numba.njit
-def compton_penalty(cosines: np.ndarray[float]):
+def compton_penalty(cosines: npt.NDArray[np.float64]):
     """
     Return if the theoretical cosine is less than -1
 
@@ -269,11 +272,11 @@ def compton_penalty(cosines: np.ndarray[float]):
 
 @numba.njit
 def cos_theor_sigma(
-    E_imo: float | np.ndarray[float],
-    E_i: float | np.ndarray[float],
+    E_imo: float | npt.NDArray[np.float64],
+    E_i: float | npt.NDArray[np.float64],
     Nmi: Optional[int] = None,
     eres: float = 1e-3,
-) -> np.ndarray[float]:
+) -> npt.NDArray[np.float64]:
     """
     Compton scattering formula error. Compute cosine of angle based on starting
     and ending energy after an interaction.
@@ -296,11 +299,11 @@ def cos_theor_sigma(
 
 
 # def cos_theor_err(
-#     E_imo: float | np.ndarray[float],
-#     E_i: float | np.ndarray[float],
+#     E_imo: float | npt.NDArray[np.float64],
+#     E_i: float | npt.NDArray[np.float64],
 #     Nmi: Optional[int] = None,
 #     eres: float = 1e-3,
-# ) -> np.ndarray[float]:
+# ) -> npt.NDArray[np.float64]:
 #     """
 #     Compton scattering formula. Compute the error of computing cosine of angle
 #     based on starting and ending energy after an interaction.
@@ -324,6 +327,7 @@ def cos_theor_sigma(
 #         1,
 #     )
 
+
 @numba.njit
 def theta_theor_single(
     E_imo: float,
@@ -345,10 +349,11 @@ def theta_theor_single(
             return penalty
     return np.arccos(c_theta)
 
+
 @numba.njit
 def theta_theor(
-    E_imo: np.ndarray[float],
-    E_i: np.ndarray[float],
+    E_imo: npt.NDArray[np.float64],
+    E_i: npt.NDArray[np.float64],
     penalty: Optional[float] = None,
 ) -> float:
     """
@@ -400,8 +405,9 @@ def theta_theor_single(
 # %% Compton Scattering Formula: Outbound energy
 @numba.njit
 def outgoing_energy_csf(
-    E_imo: float | np.ndarray[float], one_minus_cosines: float | np.ndarray[float]
-) -> float | np.ndarray[float]:
+    E_imo: float | npt.NDArray[np.float64],
+    one_minus_cosines: float | npt.NDArray[np.float64],
+) -> float | npt.NDArray[np.float64]:
     """
     Compton scattering formula for outgoing energy
 
@@ -411,13 +417,14 @@ def outgoing_energy_csf(
     """
     return E_imo / (1 + (E_imo / MEC2) * one_minus_cosines)
 
+
 @numba.njit
 def outgoing_energy_csf_sigma(
-    E_imo: np.ndarray[float],
-    one_minus_cosines: np.ndarray[float],
-    cosine_error: np.ndarray[float],
-    cumulative_energy_error: np.ndarray[float],
-) -> np.ndarray[float]:
+    E_imo: npt.NDArray[np.float64],
+    one_minus_cosines: npt.NDArray[np.float64],
+    cosine_error: npt.NDArray[np.float64],
+    cumulative_energy_error: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
     """
     Standard error for Compton scattering formula for outgoing energy
 
@@ -438,29 +445,29 @@ def outgoing_energy_csf_sigma(
 # %% Compton Scattering Formula: Inbound energy
 @numba.njit
 def incoming_energy_csf(
-    E_i: np.ndarray[float], one_minus_cosines: np.ndarray[float]
-) -> np.ndarray[float]:
+    E_i: npt.NDArray[np.float64], one_minus_cosines: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
     """Compton scattering formula for incoming energy"""
     return E_i / (1 - (E_i / MEC2) * one_minus_cosines)
 
 
 def incoming_energy_csf_sigma(
-    E_i: np.ndarray[float],
-    one_minus_cosines: np.ndarray[float],
-    cosine_error: np.ndarray[float],
-    cumulative_energy_error: np.ndarray[float],
-) -> np.ndarray[float]:
+    E_i: npt.NDArray[np.float64],
+    one_minus_cosines: npt.NDArray[np.float64],
+    cosine_error: npt.NDArray[np.float64],
+    cumulative_energy_error: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
     """Standard error of Compton scattering formula for incoming energy"""
-    raise NotImplementedError
+    raise NotImplementedError  # TODO
 
 
 # %% Compton Scattering Formula: Local inbound energy (TANGO)
 @numba.njit
 def tango_incoming_estimate(
-    e: np.ndarray[float],
-    one_minus_cosines: np.ndarray[float],
-    fill_value:float = 123456789.0,  # TODO - get rid of arbitrary number
-) -> np.ndarray[float]:
+    e: npt.NDArray[np.float64],
+    one_minus_cosines: npt.NDArray[np.float64],
+    fill_value: float = 123456789.0,  # TODO - get rid of arbitrary number
+) -> npt.NDArray[np.float64]:
     """
     Estimated incoming energy from local energy and the angle of scattering
     """
@@ -468,27 +475,32 @@ def tango_incoming_estimate(
     for i in range(one_minus_cosines.shape[0]):
         for j in range(one_minus_cosines.shape[1]):
             for k in range(one_minus_cosines.shape[2]):
-                if one_minus_cosines[i,j,k] <= 0.0:
-                    out[i,j,k] = fill_value
+                if one_minus_cosines[i, j, k] <= 0.0:
+                    out[i, j, k] = fill_value
                 else:
-                    out[i,j,k] = 0.5 * e[j] + np.sqrt(e[j]**2 / 4 + e[j] * MEC2 / one_minus_cosines[i,j,k])
+                    out[i, j, k] = 0.5 * e[j] + np.sqrt(
+                        e[j] ** 2 / 4 + e[j] * MEC2 / one_minus_cosines[i, j, k]
+                    )
     # one_minus_cosines[one_minus_cosines <= 0.0] = 10
     return out
 
+
 @numba.njit
 def partial_tango_incoming_derivatives_d_de_single(e, omc):
-    return 0.5 + 0.5 * (1 / np.sqrt(e**2 / 4 + e*MEC2/omc)) * (e/2 + MEC2/omc)
+    return 0.5 + 0.5 * (1 / np.sqrt(e**2 / 4 + e * MEC2 / omc)) * (e / 2 + MEC2 / omc)
+
 
 @numba.njit
 def partial_tango_incoming_derivatives_d_d_cos_single(e, omc):
     return 0.5 * (1 / np.sqrt(e**2 / 4 + e * MEC2 / omc)) * (e * MEC2) / (omc**2)
 
+
 @numba.njit
 def partial_tango_incoming_derivatives(
-    e: np.ndarray[float],
-    o_m_cos_ijk: np.ndarray[float],
+    e: npt.NDArray[np.float64],
+    o_m_cos_ijk: npt.NDArray[np.float64],
     fill_value: float = 123456789.0,  # TODO - get rid of arbitrary number
-) -> np.ndarray[float]:
+) -> npt.NDArray[np.float64]:
     """
     Partial derivatives of estimated incoming energy using local information
     """
@@ -498,14 +510,18 @@ def partial_tango_incoming_derivatives(
     for i in range(out_1.shape[0]):
         for j in range(out_1.shape[1]):
             for k in range(out_1.shape[2]):
-                if o_m_cos_ijk[i,j,k] <= 0.0 or e[j] <= 0.0:
-                    out_1[i,j,k] = fill_value
-                    out_2[i,j,k] = fill_value
+                if o_m_cos_ijk[i, j, k] <= 0.0 or e[j] <= 0.0:
+                    out_1[i, j, k] = fill_value
+                    out_2[i, j, k] = fill_value
                 else:
                     # out_1[i,j,k] = 0.5 + 0.5 * (1 / np.sqrt(e[j]**2 / 4 + e[j] * MEC2 / o_m_cos_ijk[i,j,k])) * (e[j] / 2 + MEC2 / o_m_cos_ijk[i,j,k])
                     # out_2[i,j,k] = 0.5 * (1 / np.sqrt(e[j]**2 / 4 + e[j] * MEC2 / o_m_cos_ijk[i,j,k])) * (e[j] * MEC2) / (o_m_cos_ijk[i,j,k]**2)
-                    out_1[i,j,k] = partial_tango_incoming_derivatives_d_de_single(e[j], o_m_cos_ijk[i,j,k])
-                    out_2[i,j,k] = partial_tango_incoming_derivatives_d_d_cos_single(e[j], o_m_cos_ijk[i,j,k])
+                    out_1[i, j, k] = partial_tango_incoming_derivatives_d_de_single(
+                        e[j], o_m_cos_ijk[i, j, k]
+                    )
+                    out_2[i, j, k] = partial_tango_incoming_derivatives_d_d_cos_single(
+                        e[j], o_m_cos_ijk[i, j, k]
+                    )
     # out_1 = np.where(
     #     np.logical_or(o_m_cos_ijk <= 0.0, e[np.newaxis,:,np.newaxis] <= 0),
     #     0.0,
@@ -520,11 +536,11 @@ def partial_tango_incoming_derivatives(
 
 
 def tango_incoming_sigma(
-    e: np.ndarray[float],
-    o_m_cos_ijk: np.ndarray[float],
-    err_cosines: np.ndarray[float],
+    e: npt.NDArray[np.float64],
+    o_m_cos_ijk: npt.NDArray[np.float64],
+    err_cosines: npt.NDArray[np.float64],
     eres: float = 1e-3,
-) -> np.ndarray[float]:
+) -> npt.NDArray[np.float64]:
     """
     Error of estimated incoming energy using local information
     """
@@ -536,15 +552,15 @@ def tango_incoming_sigma(
 
 
 def tango_outgoing_estimate(
-    e: np.ndarray[float], one_minus_cosines: np.ndarray[float]
-) -> np.ndarray[float]:
+    e: npt.NDArray[np.float64], one_minus_cosines: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
     """Outgoing estimate of energy using TANGO"""
     return tango_incoming_estimate(e, one_minus_cosines) - e
 
 
 def partial_tango_outgoing_derivatives(
-    e: np.ndarray[float], o_m_cos_ijk: np.ndarray[float]
-) -> np.ndarray[float]:
+    e: npt.NDArray[np.float64], o_m_cos_ijk: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
     """Partial derivatives of outgoing TANGO energies"""
     d_de, d_d_cos = partial_tango_incoming_derivatives(e, o_m_cos_ijk)
     d_de -= 1.0
@@ -552,11 +568,11 @@ def partial_tango_outgoing_derivatives(
 
 
 def tango_outgoing_sigma(
-    e: np.ndarray[float],
-    o_m_cos_ijk: np.ndarray[float],
-    err_cosines: np.ndarray[float],
+    e: npt.NDArray[np.float64],
+    o_m_cos_ijk: npt.NDArray[np.float64],
+    err_cosines: npt.NDArray[np.float64],
     eres: float = 1e-3,
-) -> np.ndarray[float]:
+) -> npt.NDArray[np.float64]:
     """Error of estimated outgoing energy using local information"""
     d_de, d_d_cos = partial_tango_outgoing_derivatives(e=e, o_m_cos_ijk=o_m_cos_ijk)
     return np.sqrt((eres * d_de) ** 2 + (err_cosines * d_d_cos) ** 2)
@@ -567,7 +583,7 @@ def tango_outgoing_sigma(
 
 # fmt: off
 # Energies [eV]
-sig_energies = np.array([
+CROSS_SECTION_ENERGIES_EV = np.array([
 1.00000E+03, 1.21660E+03, 1.21670E+03, 1.24770E+03, 1.24780E+03, 1.41420E+03,
 1.41430E+03, 1.50000E+03, 2.00000E+03, 3.00000E+03, 4.00000E+03, 5.00000E+03,
 6.00000E+03, 8.00000E+03, 1.00000E+04, 1.11030E+04, 1.11031E+04, 1.50000E+04,
@@ -586,7 +602,7 @@ sig_energies = np.array([
 ])
 
 # Cross-section [barn/atom]
-sig_coherent = np.array([
+CROSS_SECTION_COHERENT = np.array([
 6.437E+02, 6.281E+02, 6.281E+02, 6.258E+02, 6.258E+02, 6.139E+02, 6.139E+02, 6.072E+02,
 5.682E+02, 4.948E+02, 4.313E+02, 3.765E+02, 3.288E+02, 2.522E+02, 1.972E+02, 1.743E+02,
 1.743E+02, 1.191E+02, 8.159E+01, 4.586E+01, 2.907E+01, 2.006E+01, 1.475E+01, 9.004E+00,
@@ -601,7 +617,7 @@ sig_coherent = np.array([
 ])
 
 # Cross-section [barn/atom]
-sig_incoherent = np.array([
+CROSS_SECTION_INCOHERENT = np.array([
 7.458E-01, 1.016E+00, 1.016E+00, 1.056E+00, 1.056E+00, 1.271E+00, 1.271E+00, 1.381E+00,
 2.008E+00, 3.138E+00, 4.126E+00, 5.025E+00, 5.856E+00, 7.328E+00, 8.579E+00, 9.180E+00,
 9.180E+00, 1.091E+01, 1.238E+01, 1.400E+01, 1.475E+01, 1.505E+01, 1.512E+01, 1.494E+01,
@@ -616,7 +632,7 @@ sig_incoherent = np.array([
 ])
 
 # Cross-section [barn/atom]
-sig_absorption = np.array([
+CROSS_SECTION_ABSORPTION = np.array([
 2.275E+05, 1.429E+05, 5.252E+05, 5.988E+05, 8.018E+05, 6.690E+05, 7.574E+05, 6.595E+05,
 3.263E+05, 1.154E+05, 5.379E+04, 2.943E+04, 1.786E+04, 8.048E+03, 4.306E+03, 3.206E+03,
 2.371E+04, 1.090E+04, 4.996E+03, 1.610E+03, 7.045E+02, 3.670E+02, 2.140E+02, 9.061E+01,
@@ -631,7 +647,7 @@ sig_absorption = np.array([
 ])
 
 # Cross-section [barn/atom]
-sig_pair_nuc = np.array([
+CROSS_SECTION_PAIR_PRODUCTION_NUCLEUS = np.array([
 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00,
 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00,
 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00,
@@ -646,7 +662,7 @@ sig_pair_nuc = np.array([
 ])
 
 # Cross-section [barn/atom]
-sig_pair_electron = np.array([
+CROSS_SECTION_PAIR_PRODUCTION_ELECTRON = np.array([
 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00,
 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00,
 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00, 0.000E+00,
@@ -665,9 +681,11 @@ sig_pair_electron = np.array([
 # Interpolation code adapted version from nist-calculators by Mikhail Zelenyi,
 # an adaptation of XCOM by NIST
 
+# %% Non-linear fits to cross section data
+
 
 @numba.njit
-def fit_absorption(energy_MeV: np.ndarray):
+def fit_absorption(energy_MeV: npt.NDArray[np.float64]):
     """
     A least squares fit of a softplus and linear function to the linearized
     data. Roughly 2x speedup over interpolation
@@ -703,7 +721,7 @@ def fit_absorption(energy_MeV: np.ndarray):
 
 
 @numba.njit
-def fit_compton(energy_MeV: np.ndarray):
+def fit_compton(energy_MeV: npt.NDArray[np.float64]):
     """
     A least squares fit of a exponential and linear function to the linearized
     data. Roughly 2x speedup over interpolation
@@ -736,7 +754,7 @@ def fit_compton(energy_MeV: np.ndarray):
 
 
 @numba.njit
-def fit_pair(energy_MeV: np.ndarray | float):
+def fit_pair(energy_MeV: npt.NDArray[np.float64] | float):
     """
     A least squares fit of a quadratic function to the linearized data. Roughly
     2x speedup over interpolation
@@ -776,13 +794,20 @@ def fit_pair(energy_MeV: np.ndarray | float):
     return y
 
 
+# %% Interpolation object constructors
+
+# Interpolation of absorption cross section data requires dealing with edges in the data.
+# Linear interpolation is used below the largest edge.
+# Above the largest edge, we can use linear interpolation or cubic spline interpolation.
+
+
 def interpolateAbsorptionEdge(
-    x: np.ndarray[float],
-    y: np.ndarray[float],
+    x: npt.NDArray[np.float64],
+    y: npt.NDArray[np.float64],
     edge: float,
     warn: bool = False,
     linear: bool = True,
-) -> Callable[[np.ndarray], np.ndarray]:
+) -> Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]]:
     """
     Create an interpolator function for photo-absorption including edge
     information.
@@ -808,7 +833,9 @@ def interpolateAbsorptionEdge(
 
     if linear:
 
-        def linear_interpolator(x_sample: np.ndarray) -> np.ndarray:
+        def linear_interpolator(
+            x_sample: npt.NDArray[np.float64],
+        ) -> npt.NDArray[np.float64]:
             """
             Linear log-log interpolator
 
@@ -819,8 +846,8 @@ def interpolateAbsorptionEdge(
                 - photo-absorption cross-section
             """
             if (
-                np.min(x_sample) < np.min(sig_energies)
-                or np.max(x_sample) > np.max(sig_energies)
+                np.min(x_sample) < np.min(CROSS_SECTION_ENERGIES_EV)
+                or np.max(x_sample) > np.max(CROSS_SECTION_ENERGIES_EV)
             ) and warn:
                 warnings.warn(
                     "Energy requested is outside of tabulated data, "
@@ -834,7 +861,7 @@ def interpolateAbsorptionEdge(
     idx = x > edge
     cubic_spline_interp = PchipInterpolator(np.log(x[idx]), np.log(y[idx]))
 
-    def interpolator(x_sample: np.ndarray) -> np.ndarray:
+    def interpolator(x_sample: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         """
         Cubic spline log-log interpolator
 
@@ -845,8 +872,8 @@ def interpolateAbsorptionEdge(
             - photo-absorption cross-section
         """
         if (
-            np.min(x_sample) < np.min(sig_energies)
-            or np.max(x_sample) > np.max(sig_energies)
+            np.min(x_sample) < np.min(CROSS_SECTION_ENERGIES_EV)
+            or np.max(x_sample) > np.max(CROSS_SECTION_ENERGIES_EV)
         ) and warn:
             warnings.warn(
                 "Energy requested is outside of tabulated data, "
@@ -862,9 +889,13 @@ def interpolateAbsorptionEdge(
     return interpolator
 
 
+# For typical log-log data, we can use a cubic spline interpolation.
 def make_log_log_spline(
-    x: np.ndarray, y: np.ndarray, warn: bool = False, linear: bool = True
-) -> Callable[[np.ndarray], np.ndarray]:
+    x: npt.NDArray[np.float64],
+    y: npt.NDArray[np.float64],
+    warn: bool = False,
+    linear: bool = True,
+) -> Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]]:
     """
     Create spline of log-log data
     """
@@ -875,7 +906,9 @@ def make_log_log_spline(
 
     if linear:
 
-        def linear_interpolator(x_sample: np.ndarray) -> np.ndarray:
+        def linear_interpolator(
+            x_sample: npt.NDArray[np.float64],
+        ) -> npt.NDArray[np.float64]:
             """
             Linear log-log interpolator
 
@@ -886,8 +919,8 @@ def make_log_log_spline(
                 - cross-section
             """
             if (
-                np.min(x_sample) < np.min(sig_energies)
-                or np.max(x_sample) > np.max(sig_energies)
+                np.min(x_sample) < np.min(CROSS_SECTION_ENERGIES_EV)
+                or np.max(x_sample) > np.max(CROSS_SECTION_ENERGIES_EV)
             ) and warn:
                 warnings.warn(
                     "Energy requested is outside of tabulated data, "
@@ -900,7 +933,7 @@ def make_log_log_spline(
 
     cubic_spline_interp = PchipInterpolator(x=log_x, y=log_y)
 
-    def interpolator(x_sample: np.ndarray) -> np.ndarray:
+    def interpolator(x_sample: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         """
         Cubic spline log-log interpolator
 
@@ -911,8 +944,8 @@ def make_log_log_spline(
             - cross-section
         """
         if (
-            np.min(x_sample) < np.min(sig_energies)
-            or np.max(x_sample) > np.max(sig_energies)
+            np.min(x_sample) < np.min(CROSS_SECTION_ENERGIES_EV)
+            or np.max(x_sample) > np.max(CROSS_SECTION_ENERGIES_EV)
         ) and warn:
             warnings.warn(
                 "Energy requested is outside of tabulated data, "
@@ -930,13 +963,19 @@ def make_log_log_spline(
     return interpolator
 
 
+# Pair produciton data can only begin above a certain threshold energy
+# (1.022 MeV for pair producing involving a nucleus; 2.044 MeV for pair producing involving an electron).
+# To linearize the data, we need to divide the cross-section by (E * (E - threshold))^3.
+# The data becomes very nearly linear with this linearization, so we can use a linear interpolation for the data above the threshold.
+
+
 def make_pair_interpolator(
-    x: np.ndarray,
-    y: np.ndarray,
+    x: npt.NDArray[np.float64],
+    y: npt.NDArray[np.float64],
     threshold: float,
     warn: bool = False,
     linear: bool = True,
-) -> Callable[[np.ndarray], np.ndarray]:
+) -> Callable[[npt.NDArray[np.float64]], npt.NDArray[np.float64]]:
     """
     Create spline of linearized log-log data
     """
@@ -952,7 +991,9 @@ def make_pair_interpolator(
 
     if linear:
 
-        def linear_interpolator(x_sample: np.ndarray) -> np.ndarray:
+        def linear_interpolator(
+            x_sample: npt.NDArray[np.float64],
+        ) -> npt.NDArray[np.float64]:
             """
             Linearized pair production log-log interpolator
 
@@ -962,7 +1003,7 @@ def make_pair_interpolator(
             Returns:
                 - pair production cross-section
             """
-            if (np.max(x_sample) > np.max(sig_energies)) and warn:
+            if (np.max(x_sample) > np.max(CROSS_SECTION_ENERGIES_EV)) and warn:
                 warnings.warn(
                     "Energy requested is outside of tabulated data, "
                     + "using linear extrapolation",
@@ -983,7 +1024,7 @@ def make_pair_interpolator(
         y=np.log(y[idx] / (x[idx] * (x[idx] - threshold)) ** 3),
     )
 
-    def interpolator(x_sample: np.ndarray) -> np.ndarray:
+    def interpolator(x_sample: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         """
         Cubic spline linearized pair production log-log interpolator
 
@@ -993,7 +1034,7 @@ def make_pair_interpolator(
         Returns:
             - pair production cross-section
         """
-        if (np.max(x_sample) > np.max(sig_energies)) and warn:
+        if (np.max(x_sample) > np.max(CROSS_SECTION_ENERGIES_EV)) and warn:
             warnings.warn(
                 "Energy requested is outside of tabulated data, "
                 + "using linear extrapolation",
@@ -1013,96 +1054,274 @@ def make_pair_interpolator(
     return interpolator
 
 
+# Create the interpolators for the cross-sections using the tabulated data
+# Takes in enegies as MeV and returns cross-sections in cm^2/atom
 __sig_abs = interpolateAbsorptionEdge(
-    sig_energies / 1e6, sig_absorption / BARNS_PER_SQCM, K_GE / 1e6
+    CROSS_SECTION_ENERGIES_EV / 1e6,
+    CROSS_SECTION_ABSORPTION / BARNS_PER_SQCM,
+    K_GE / 1e6,
 )
-__sig_ray = make_log_log_spline(sig_energies / 1e6, sig_coherent / BARNS_PER_SQCM)
-__sig_compt = make_log_log_spline(sig_energies / 1e6, sig_incoherent / BARNS_PER_SQCM)
+__sig_ray = make_log_log_spline(
+    CROSS_SECTION_ENERGIES_EV / 1e6, CROSS_SECTION_COHERENT / BARNS_PER_SQCM
+)
+__sig_compt = make_log_log_spline(
+    CROSS_SECTION_ENERGIES_EV / 1e6, CROSS_SECTION_INCOHERENT / BARNS_PER_SQCM
+)
 __sig_pair = make_pair_interpolator(
-    sig_energies / 1e6, sig_pair_nuc / BARNS_PER_SQCM, THRESHOLD_PAIR_ATOM / 1e6
+    CROSS_SECTION_ENERGIES_EV / 1e6,
+    CROSS_SECTION_PAIR_PRODUCTION_NUCLEUS / BARNS_PER_SQCM,
+    THRESHOLD_PAIR_ATOM / 1e6,
+)
+
+# %% Numba JIT-able versions of the interpolators for speed
+
+_LOG_CS_ENERGIES = np.log(CROSS_SECTION_ENERGIES_EV / 1e6)
+_LOG_CS_ABS = np.log(CROSS_SECTION_ABSORPTION / BARNS_PER_SQCM)
+_LOG_CS_RAY = np.log(CROSS_SECTION_COHERENT / BARNS_PER_SQCM)
+_LOG_CS_COMPT = np.log(CROSS_SECTION_INCOHERENT / BARNS_PER_SQCM)
+# Pair production cross-section data should be linearized before interpolation to avoid numerical issues at low energies.
+# The linearization factor is (E * (E - threshold))^3, where threshold is 1.022 MeV for pair production.
+# _LOG_CS_PAIR_NUC_LINEARIZED = np.zeros_like(CROSS_SECTION_ENERGIES_EV)
+# above_threshold = CROSS_SECTION_ENERGIES_EV >= THRESHOLD_PAIR_ATOM
+# _LOG_CS_PAIR_NUC_LINEARIZED[above_threshold] = np.log(
+#     (CROSS_SECTION_PAIR_PRODUCTION_NUCLEUS[above_threshold] / BARNS_PER_SQCM)
+#     / (
+#         (
+#             (CROSS_SECTION_ENERGIES_EV[above_threshold] / 1e6)
+#             * (
+#                 CROSS_SECTION_ENERGIES_EV[above_threshold] / 1e6
+#                 - THRESHOLD_PAIR_ATOM / 1e6
+#             )
+#         )
+#         ** 3
+#     )
+# )
+
+_LOG_CS_PAIR_NUC_LINEARIZED = np.log(
+    (CROSS_SECTION_PAIR_PRODUCTION_NUCLEUS / BARNS_PER_SQCM)
+    / (
+        (
+            (CROSS_SECTION_ENERGIES_EV / 1e6)
+            * (CROSS_SECTION_ENERGIES_EV / 1e6 - THRESHOLD_PAIR_ATOM / 1e6)
+        )
+        ** 3
+    )
 )
 
 
-def sig_abs(energies: np.ndarray, use_fit: bool = True) -> np.ndarray:
-    """Interpolated absorption cross-sections for Germanium"""
-    if use_fit:
-        return fit_absorption(energies)
-    return __sig_abs(energies)
+@numba.njit
+def sig_abs_interp(qEnergies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Interpolated absorption cross-sections for Germanium using np.interp"""
+    # Interpolate in the log-log space for better accuracy
+    log_qEnergies = np.log(qEnergies_MeV)
+    # Initialize output array
+    out = np.zeros_like(qEnergies_MeV)
+
+    # Use extrapolation for energies outside the range of the tabulated data
+    tooSmall = qEnergies_MeV < np.min(CROSS_SECTION_ENERGIES_EV / 1e6)
+    tooLarge = qEnergies_MeV > np.max(CROSS_SECTION_ENERGIES_EV / 1e6)
+
+    if np.any(tooSmall):
+        slope = (_LOG_CS_ABS[1] - _LOG_CS_ABS[0]) / (
+            _LOG_CS_ENERGIES[1] - _LOG_CS_ENERGIES[0]
+        )
+        out[tooSmall] = np.exp(
+            _LOG_CS_ABS[0] + slope * (log_qEnergies[tooSmall] - _LOG_CS_ENERGIES[0])
+        )
+
+    if np.any(tooLarge):
+        slope = (_LOG_CS_ABS[-1] - _LOG_CS_ABS[-2]) / (
+            _LOG_CS_ENERGIES[-1] - _LOG_CS_ENERGIES[-2]
+        )
+        out[tooLarge] = np.exp(
+            _LOG_CS_ABS[-1] + slope * (log_qEnergies[tooLarge] - _LOG_CS_ENERGIES[-1])
+        )
+
+    # Use interpolation for energies within the range of the tabulated data
+    in_range = np.logical_and(np.logical_not(tooSmall), np.logical_not(tooLarge))
+    out[in_range] = np.exp(
+        np.interp(log_qEnergies[in_range], _LOG_CS_ENERGIES, _LOG_CS_ABS)
+    )
+    return out
 
 
-def lin_att_abs(energies: np.ndarray, use_fit: bool = True) -> np.ndarray:
+@numba.njit
+def sig_ray_interp(qEnergies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Interpolated Rayleigh scattering cross-sections for Germanium using np.interp"""
+    log_qEnergies = np.log(qEnergies_MeV)
+    out = np.zeros_like(qEnergies_MeV)
+
+    # Use extrapolation for energies outside the range of the tabulated data
+    tooSmall = qEnergies_MeV < np.min(CROSS_SECTION_ENERGIES_EV / 1e6)
+    tooLarge = qEnergies_MeV > np.max(CROSS_SECTION_ENERGIES_EV / 1e6)
+
+    if np.any(tooSmall):
+        slope = (_LOG_CS_RAY[1] - _LOG_CS_RAY[0]) / (
+            _LOG_CS_ENERGIES[1] - _LOG_CS_ENERGIES[0]
+        )
+        out[tooSmall] = np.exp(
+            _LOG_CS_RAY[0] + slope * (log_qEnergies[tooSmall] - _LOG_CS_ENERGIES[0])
+        )
+
+    if np.any(tooLarge):
+        slope = (_LOG_CS_RAY[-1] - _LOG_CS_RAY[-2]) / (
+            _LOG_CS_ENERGIES[-1] - _LOG_CS_ENERGIES[-2]
+        )
+        out[tooLarge] = np.exp(
+            _LOG_CS_RAY[-1] + slope * (log_qEnergies[tooLarge] - _LOG_CS_ENERGIES[-1])
+        )
+
+    in_range = np.logical_and(np.logical_not(tooSmall), np.logical_not(tooLarge))
+    out[in_range] = np.exp(
+        np.interp(log_qEnergies[in_range], _LOG_CS_ENERGIES, _LOG_CS_RAY)
+    )
+    return out
+
+
+@numba.njit
+def sig_compt_interp(qEnergies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Interpolated Compton scattering cross-sections for Germanium using np.interp"""
+    log_qEnergies = np.log(qEnergies_MeV)
+    out = np.zeros_like(qEnergies_MeV)
+
+    # Use extrapolation for energies outside the range of the tabulated data
+    tooSmall = qEnergies_MeV < np.min(CROSS_SECTION_ENERGIES_EV / 1e6)
+    tooLarge = qEnergies_MeV > np.max(CROSS_SECTION_ENERGIES_EV / 1e6)
+
+    if np.any(tooSmall):
+        slope = (_LOG_CS_COMPT[1] - _LOG_CS_COMPT[0]) / (
+            _LOG_CS_ENERGIES[1] - _LOG_CS_ENERGIES[0]
+        )
+        out[tooSmall] = np.exp(
+            _LOG_CS_COMPT[0] + slope * (log_qEnergies[tooSmall] - _LOG_CS_ENERGIES[0])
+        )
+
+    if np.any(tooLarge):
+        slope = (_LOG_CS_COMPT[-1] - _LOG_CS_COMPT[-2]) / (
+            _LOG_CS_ENERGIES[-1] - _LOG_CS_ENERGIES[-2]
+        )
+        out[tooLarge] = np.exp(
+            _LOG_CS_COMPT[-1] + slope * (log_qEnergies[tooLarge] - _LOG_CS_ENERGIES[-1])
+        )
+
+    in_range = np.logical_and(np.logical_not(tooSmall), np.logical_not(tooLarge))
+    out[in_range] = np.exp(
+        np.interp(log_qEnergies[in_range], _LOG_CS_ENERGIES, _LOG_CS_COMPT)
+    )
+    return out
+
+
+@numba.njit
+def sig_pair_interp(qEnergies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Interpolated pair production cross-sections for Germanium using np.interp"""
+    # The pair production cross-section is only defined for energies above the threshold (1.022 MeV)
+    out = np.zeros_like(qEnergies_MeV)
+    above_threshold = qEnergies_MeV >= THRESHOLD_PAIR_ATOM / 1e6
+    if not np.any(above_threshold):
+        return out  # All energies are below the threshold, return zeros
+    log_qEnergies = np.log(qEnergies_MeV)
+
+    tooLarge = qEnergies_MeV > np.max(CROSS_SECTION_ENERGIES_EV / 1e6)
+
+    if np.any(tooLarge):
+        slope = (_LOG_CS_PAIR_NUC_LINEARIZED[-1] - _LOG_CS_PAIR_NUC_LINEARIZED[-2]) / (
+            _LOG_CS_ENERGIES[-1] - _LOG_CS_ENERGIES[-2]
+        )
+        out[tooLarge] = np.exp(
+            _LOG_CS_PAIR_NUC_LINEARIZED[-1]
+            + slope * (log_qEnergies[tooLarge] - _LOG_CS_ENERGIES[-1])
+        ) * (
+            (
+                qEnergies_MeV[tooLarge]
+                * (qEnergies_MeV[tooLarge] - THRESHOLD_PAIR_ATOM / 1e6)
+            )
+            ** 3
+        )  # Linearization factor for pair production cross-section
+
+    in_range = np.logical_and(above_threshold, np.logical_not(tooLarge))
+    out[in_range] = np.exp(
+        np.interp(
+            log_qEnergies[in_range], _LOG_CS_ENERGIES, _LOG_CS_PAIR_NUC_LINEARIZED
+        )
+    ) * (
+        (
+            qEnergies_MeV[in_range]
+            * (qEnergies_MeV[in_range] - THRESHOLD_PAIR_ATOM / 1e6)
+        )
+        ** 3
+    )  # Linearization factor for pair production cross-section
+    return out
+
+
+@numba.njit
+def sig_abs(energies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Interpolated absorption cross-sections for Germanium [cm^2/atom]"""
+    return sig_abs_interp(energies_MeV)
+
+
+@numba.njit
+def lin_att_abs(energies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """Interpolated absorption linear attenuation [1/cm]"""
-    return sig_abs(energies, use_fit) * RANGE_PROCESS
+    return sig_abs_interp(energies_MeV) * RANGE_PROCESS
 
 
-def sig_ray(energies: np.ndarray) -> np.ndarray:
-    """Interpolated rayleigh scattering cross-sections"""
-    return __sig_ray(energies)
+@numba.njit
+def sig_ray(energies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Interpolated rayleigh scattering cross-sections for Germanium [cm^2/atom]"""
+    return sig_ray_interp(energies_MeV)
 
 
-def lin_att_ray(energies: np.ndarray) -> np.ndarray:
+@numba.njit
+def lin_att_ray(energies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """Interpolated rayleigh scattering linear attenuation [1/cm]"""
-    return sig_ray(energies) * RANGE_PROCESS
+    return sig_ray_interp(energies_MeV) * RANGE_PROCESS
 
 
-def sig_compt(energies: np.ndarray, use_fit: bool = True) -> np.ndarray:
-    """Interpolated Compton scattering cross-sections"""
-    if use_fit:
-        return fit_compton(energies)
-    return __sig_compt(energies)
+@numba.njit
+def sig_compt(energies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Interpolated Compton scattering cross-sections for Germanium [cm^2/atom]"""
+    return sig_compt_interp(energies_MeV)
 
 
-def lin_att_compt(
-    energies: np.ndarray, use_fit: bool = True
-) -> np.ndarray:
+@numba.njit
+def lin_att_compt(energies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """Interpolated Compton scattering linear attenuation [1/cm]"""
-    return sig_compt(energies, use_fit) * RANGE_PROCESS
+    return sig_compt_interp(energies_MeV) * RANGE_PROCESS
 
 
-def sig_pair(energies: np.ndarray, use_fit: bool = True) -> np.ndarray:
-    """Interpolated pair production cross-sections"""
-    if use_fit:
-        return fit_pair(energies)
-    return __sig_pair(energies)
+@numba.njit
+def sig_pair(energies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Interpolated pair production cross-sections for Germanium [cm^2/atom]"""
+    return sig_pair_interp(energies_MeV)
 
 
-def lin_att_pair(
-    energies: np.ndarray, use_fit: bool = True
-) -> np.ndarray:
+@numba.njit
+def lin_att_pair(energies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """Interpolated pair production linear attenuation [1/cm]"""
-    return sig_pair(energies, use_fit) * RANGE_PROCESS
+    return sig_pair_interp(energies_MeV) * RANGE_PROCESS
 
 
-def sig_total(energies: np.ndarray, use_fit: bool = True) -> np.ndarray:
-    """Interpolated total cross-section"""
+@numba.njit
+def sig_total(energies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """Interpolated total cross-section for Germanium [cm^2/atom]"""
     return (
-        sig_abs(energies, use_fit)
-        + sig_compt(energies, use_fit)
-        + sig_pair(energies, use_fit)
+        sig_abs_interp(energies_MeV)
+        + sig_compt_interp(energies_MeV)
+        + sig_pair_interp(energies_MeV)
     )
 
 
-def lin_att_total(
-    energies: np.ndarray, use_fit: bool = True
-) -> np.ndarray:
-    """Interpolated total linear attenuation [1/cm]"""
-    return (
-        sig_abs(energies, use_fit)
-        + sig_compt(energies, use_fit)
-        + sig_pair(energies, use_fit)
-    ) * RANGE_PROCESS
-
 @numba.njit
-def lin_att_total_fit(energies: np.ndarray) -> np.ndarray:
+def lin_att_total(energies_MeV: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """Interpolated total linear attenuation [1/cm]"""
     return (
-        fit_absorption(energies)
-        + fit_compton(energies)
-        + fit_pair(energies)
+        sig_abs_interp(energies_MeV)
+        + sig_compt_interp(energies_MeV)
+        + sig_pair_interp(energies_MeV)
     ) * RANGE_PROCESS
 
 
-def range_process(sigma: np.ndarray) -> np.ndarray:
+def range_process(sigma: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """
     Given gamma macroscopic cross section (absorption, Compton scattering, or
     pair production), return linear attenuation coefficient.
@@ -1112,8 +1331,8 @@ def range_process(sigma: np.ndarray) -> np.ndarray:
 
 
 def proba(
-    lamb_inv: np.ndarray, distance: np.ndarray
-) -> np.ndarray:
+    lamb_inv: npt.NDArray[np.float64], distance: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
     """
     Cumulative exponential distribution: interaction probability. What is the
     probability that the interaction would occur at a distance greater than the
@@ -1130,8 +1349,8 @@ def proba(
 def KN_differential_cross_single(
     E_imo: float,
     one_minus_cos_theta: float,
-    Ei: float = None,
-    sigma_compt: float = None,
+    Ei: Optional[float] = None,
+    sigma_compt: Optional[float] = None,
     relative: bool = True,
     integrate: bool = False,
 ) -> float:
@@ -1149,7 +1368,13 @@ def KN_differential_cross_single(
         - Klein-Nishina differential cross-section value
     """
     if sigma_compt is None and relative:
-        sigma_compt = fit_compton(E_imo)
+        # sig_compt_interp is written to operate on arrays. If this
+        # function is called with a scalar `E_imo`, build a one-element
+        # array, call the interpolator, and extract the scalar result to
+        # avoid boolean-indexing on scalars inside the interpolator.
+        temp = np.empty((1,))
+        temp[0] = E_imo
+        sigma_compt = sig_compt_interp(temp)[0]
     if E_imo <= 0:
         return 0.0
     if Ei is not None:
@@ -1164,15 +1389,16 @@ def KN_differential_cross_single(
         out /= sigma_compt
     return out
 
+
 @numba.njit
 def KN_differential_cross(
-    E_imo: np.ndarray[float],
-    one_minus_cos_theta: np.ndarray[float],
-    Ei: np.ndarray[float] = None,
-    sigma_compt: np.ndarray[float] = None,
+    E_imo: npt.NDArray[np.float64],
+    one_minus_cos_theta: npt.NDArray[np.float64],
+    Ei: Optional[npt.NDArray[np.float64]] = None,
+    sigma_compt: Optional[npt.NDArray[np.float64]] = None,
     relative: bool = True,
     integrate: bool = False,
-) -> np.ndarray[float]:
+) -> npt.NDArray[np.float64]:
     """
     Klein-Nishina differential cross-section
 
@@ -1190,15 +1416,34 @@ def KN_differential_cross(
     for i in numba.prange(len(E_imo)):
         if Ei is not None:
             if sigma_compt is not None:
-                out[i] = KN_differential_cross_single(E_imo[i], one_minus_cos_theta[i], Ei[i], sigma_compt[i], relative, integrate)
+                out[i] = KN_differential_cross_single(
+                    E_imo[i],
+                    one_minus_cos_theta[i],
+                    Ei[i],
+                    sigma_compt[i],
+                    relative,
+                    integrate,
+                )
             else:
-                out[i] = KN_differential_cross_single(E_imo[i], one_minus_cos_theta[i], Ei[i], None, relative, integrate)
+                out[i] = KN_differential_cross_single(
+                    E_imo[i], one_minus_cos_theta[i], Ei[i], None, relative, integrate
+                )
         else:
             if sigma_compt is not None:
-                out[i] = KN_differential_cross_single(E_imo[i], one_minus_cos_theta[i], None, sigma_compt[i], relative, integrate)
+                out[i] = KN_differential_cross_single(
+                    E_imo[i],
+                    one_minus_cos_theta[i],
+                    None,
+                    sigma_compt[i],
+                    relative,
+                    integrate,
+                )
             else:
-                out[i] = KN_differential_cross_single(E_imo[i], one_minus_cos_theta[i], None, None, relative, integrate)
+                out[i] = KN_differential_cross_single(
+                    E_imo[i], one_minus_cos_theta[i], None, None, relative, integrate
+                )
     return out
+
 
 def singles_depth_explicit(
     depth: float,
@@ -1256,189 +1501,8 @@ def singles_depth_explicit(
         return singles_penalty_max
     return singles_penalty_min
 
-# %% Old cross-sections
-# def make_sig_ray_l_interp():
-#     """
-#     Create the linear interpolator
-#     """
-#     arr = np.loadtxt('data/physics/RayleighCrossSection-z32.csv',
-#                  delimiter=",", dtype=str)
-#     xp = arr[1:,0].astype(np.float64)*10**(-6)
-#     fp = arr[1:,1].astype(np.float64)*10**(-24)
-#     return interp1d(np.log(xp), np.log(fp), kind='slinear', fill_value='extrapolate')
 
-# sig_ray_l_interp = make_sig_ray_l_interp()
-
-# def sig_ray(E):
-#     """
-#     Use linear interpolator to do logarithmic interpolation
-#     """
-#     return np.exp(sig_ray_l_interp(np.log(E)))
-
-# def make_sig_ray_livermore_l_interp():
-#     """
-#     Make linear interpolator
-#     """
-#     arr = np.loadtxt('data/physics/rayleigh_geant4_re-cs-32.csv',
-#                  delimiter=",", dtype=str)
-#     xp = arr[1:,0].astype(np.float64)
-#     fp = arr[1:,1].astype(np.float64)/100 # convert to cm^2/atom
-#     return interp1d(np.log(xp), np.log(fp), kind='slinear', fill_value='extrapolate')
-
-# sig_ray_livermore_l_interp = make_sig_ray_livermore_l_interp()
-
-# def sig_ray_livermore(E):
-#     """
-#     Use logarithmic interpolation
-#     """
-#     return np.exp(sig_ray_livermore_l_interp(np.log(E)))/E**2
-
-# # def sig_ray_livermore(E):
-# #     """
-# #     Cross section of Rayleigh scattering using the Livermore model with
-# #     coefficients from GEANT4
-# #     """
-# #     dataframe = pd.read_csv('data/physics/rayleigh_geant4_re-cs-32.csv')
-# #     xp = np.array(dataframe['Photon energy (MeV)'])
-# #     fp = np.array(dataframe['Cross section (mm*mm)'])/10/10 # convert to cm^2/atom
-# #     out = log_interp(E, xp, fp)/E**2
-# #     return out
-
-
-# @njit
-def sig_abs_old(E: np.ndarray[float]) -> np.ndarray[float]:
-    """
-    Cross section of photoelectric absorption with energy E.
-
-    See [Wikipedia: Gamma ray cross
-    section](https://en.wikipedia.org/wiki/Gamma_ray_cross_section) for more
-    information.
-
-    Arg:
-        E : energy of the photon [MeV]
-    Returns:
-        sig_abs : the cross section of absorption at E [cm^2/atom]
-    """
-    hnu_k = (Z_GE - 0.03) ** 2 * MEC2 * ALPHA**2 / 2
-    # if isinstance(E, (float, int)):
-    #     E = np.array(E)
-    # return np.piecewise(E,
-    #                     (E >= 0.025,
-    #                      np.logical_and(E < 0.025, E >= 0.0111),
-    #                      np.logical_and(E < 0.0111, E > 0),
-    #                      E <= 0),
-    #                     ((4 * ALPHA**4 * np.sqrt(2) * 6.651e-25 * Z_GE**5) / ((E/MEC2)**3),
-    #                      np.power((hnu_k/E),2.6666) * 2.2 * 6.3e-18 / Z_GE**2,
-    #                      np.power((hnu_k/E),2.6666) * 2.2 * 6.3e-18 / Z_GE**2/8.5,
-    #                      0.0))
-    sigma_abs = np.zeros(E.shape)
-    ind = E >= 0.025
-    sigma_abs[ind] = (4 * ALPHA**4 * np.sqrt(2) * 6.651e-25 * Z_GE**5) / (
-        (E[ind] / MEC2) ** 3
-    )
-    ind = np.logical_and(E < 0.025, E > 0)
-    sigma_abs[ind] = np.power((hnu_k / E[ind]), 2.6666) * 2.2 * 6.3e-18 / Z_GE**2
-    ind = np.logical_and(E < 0.0111, E > 0)
-    sigma_abs[ind] = sigma_abs[ind] / 8.5
-    return sigma_abs
-
-
-# def sig_abs_scofield(E:np.ndarray[float]) -> np.ndarray[float]:
-#     """
-#     Absorption cross section
-#     """
-#     if isinstance(E, (float, int)):
-#         E = np.array(E)
-#     dataframe = pd.read_csv('data/physics/absorption_Scofield1973.csv')
-#     xp = np.array(dataframe['Photon Energy (keV)'])*10**(-3)
-#     fp = np.array(dataframe['Cross-section (barns/atom)'])*10**(-24)
-#     out = log_interp(E, xp, fp)
-#     return out
-
-# def sig_abs_sandia(E):
-#     """Sandia version of absorption cross-section from GEANT4"""
-#     sandia = np.array([[ 0.01,         0.4941E+04,  0.0000E+00,  0.0000E+00,  0.0000E+00 ] ,
-#                         [ 0.0305,       0.1269E+05, -0.9339E+03,  0.2767E+02, -0.1952E+00 ] ,
-#                         [ 0.1,         -0.1358E+04,  0.3695E+04, -0.4569E+03,  0.1599E+02 ] ,
-#                         [ 1.217,       -0.7402E+04,  0.3636E+05, -0.6670E+05,  0.5346E+05 ] ,
-#                         [ 1.248,       -0.3400E+03,  0.3232E+04,  0.1163E+05, -0.1089E+04 ] ,
-#                         [ 1.413,       -0.5940E+02,  0.1646E+04,  0.2621E+05, -0.1507E+05 ] ,
-#                         [ 11.104,      -0.2025E+01,  0.1283E+03,  0.4069E+06, -0.1510E+07 ] ,
-#                         [ 100.0,        0.6478E+00, -0.2603E+03,  0.4045E+06, -0.5153E+05 ] ,
-#                         [ 500.0,        0.2155E+00,  0.2609E+03,  0.2074E+06,  0.2220E+08 ]])
-#     energy_ranges = sandia[:,0]
-#     cross_section = np.zeros(E.shape)
-#     for i, (energy_low, energy_high) in enumerate(zip(energy_ranges,
-#                                                       list(energy_ranges[1:]) + [np.inf])):
-#         ind = np.logical_and(energy_low <= E*1000, E*1000 < energy_high)
-#         cross_section[ind] = sandia[i,1]/(E[ind]*1000) + \
-#             sandia[i,2]/(E[ind]*1000)**2 + \
-#             sandia[i,3]/(E[ind]*1000)**3 + \
-#             sandia[i,4]/(E[ind]*1000)**4
-#     return RHO_GE*cross_section/range_process(1)
-
-
-# @njit
-def sig_compt_old(E: np.ndarray[float]) -> np.ndarray[float]:
-    """
-    Cross section of Compton scattering with energy E.
-
-    See [Wikipedia: Gamma ray cross
-    section](https://en.wikipedia.org/wiki/Gamma_ray_cross_section#Compton_scattering_cross_section)
-    for more information.
-
-    This function comes from the integration of the Klein-Nishina formula
-    (integrates with respect to azimuthal and polar angle).
-
-    Arg:
-        E : energy of the photon [MeV]
-    Returns:
-        sig_compt : the cross section of Compton scattering at E [cm^2/atom]
-    """
-    # if isinstance(E, (float, int)):
-    #     E = np.array(E)
-    ind = E > 0
-    sigma_compt = np.zeros(E.shape)
-    gamma = E[ind] / MEC2
-    sigma_compt[ind] = (2 * np.pi * (R_0) ** 2 * Z_GE) * (
-        ((1 + gamma) / gamma**2)
-        * ((2 * (1 + gamma) / (1 + 2 * gamma)) - (np.log(1 + 2 * gamma) / gamma))
-        + (
-            np.log(1 + 2 * gamma) / (2 * gamma)
-            - ((1 + 3 * gamma) / ((1 + 2 * gamma) ** 2))
-        )
-    )
-    return sigma_compt
-
-
-# @njit
-def sig_pair_old(E: np.ndarray[float]) -> np.ndarray[float]:
-    """
-    Cross section of pair production with energy E.
-
-    See [Wikipedia: Gamma ray cross
-    section](https://en.wikipedia.org/wiki/Gamma_ray_cross_section) for more
-    information.
-
-    Arg:
-        E: energy of the photon [MeV]
-    Returns:
-        sig_pair: the cross section of pair production at E [cm^2/atom]
-    """
-    # if isinstance(E, (float, int)):
-    #     E = np.array(E)
-    sigma_pair = np.zeros(E.shape)
-    ind = np.logical_and(E >= 1.022, E < 1.15)
-    sigma_pair[ind] = (1 - ((1.15 - E[ind]) / 0.129)) * 7.55e-28 * 1e-24
-    ind = E > 1.15
-    sigma_pair[ind] = (
-        0.792189
-        * np.log(E[ind] + 0.948261 - 1.1332 * E[ind] + 0.15567 * E[ind] ** 2)
-        * 1e-24
-    )
-    return sigma_pair
-
-def inv_doppler(beta:float, cos_theta:float) -> float:
+def inv_doppler(beta: float, cos_theta: float) -> float:
     """
     Get a Doppler correction factor
 

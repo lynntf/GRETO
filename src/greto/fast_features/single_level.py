@@ -78,9 +78,11 @@ def single_values(
 
     if compute_mode:
         # print(permutation)
-        linear_attenuation = phys.lin_att_total_fit(
-            event_calc.energy_matrix[permutation[0]]
-        )
+        # Ensure we pass a 1D array to the numba-jitted interpolator to avoid
+        # boolean-indexing-on-scalar issues; extract the scalar result.
+        linear_attenuation = phys.lin_att_total(
+            np.array([event_calc.energy_matrix[permutation[0]]])
+        )[0]
         # distance_to_inside = event_calc.ge_distance[start_point,permutation[0]]
         distance_to_inside = (
             njit_norm(event_calc.point_matrix[permutation[0]]) - inner_radius
