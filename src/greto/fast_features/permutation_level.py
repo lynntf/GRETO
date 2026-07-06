@@ -125,32 +125,37 @@ def cone_pen_prob(
 
 
 @numba.njit
-def fast_cone_integral_trapz(point, direction, opening_angle, detector_radius, linear_attenuation, n_steps=50):
+def fast_cone_integral_trapz(
+    point, direction, opening_angle, detector_radius, linear_attenuation, n_steps=50
+):
     """
     Integrates cone_pen_prob from 0 to pi using a fine Trapezoidal rule.
     n_steps=200 is generally enough to match scipy.integrate.quad on smooth exponentials.
     """
     d_theta = np.pi / n_steps
     total = 0.0
-    
+
     # Evaluate at the boundary limits: 0 and pi
     r_0 = geo.cone_ray_lengths(point, direction, opening_angle, 0.0, detector_radius)
     r_pi = geo.cone_ray_lengths(point, direction, opening_angle, np.pi, detector_radius)
-    
+
     val_0 = np.exp(-linear_attenuation * r_0) / (2 * np.pi)
     val_pi = np.exp(-linear_attenuation * r_pi) / (2 * np.pi)
-    
+
     # Trapezoidal endpoints
     total += 0.5 * (val_0 + val_pi)
-    
+
     # Evaluate the interior points
     for i in range(1, n_steps):
         theta = i * d_theta
-        r_len = geo.cone_ray_lengths(point, direction, opening_angle, theta, detector_radius)
+        r_len = geo.cone_ray_lengths(
+            point, direction, opening_angle, theta, detector_radius
+        )
         val = np.exp(-linear_attenuation * r_len) / (2 * np.pi)
         total += val
-        
+
     return total * d_theta
+
 
 @numba.njit
 def escape_probability_func(
@@ -193,12 +198,19 @@ def escape_probability_func(
     direction = final_point - penultimate_point
     direction = direction / np.linalg.norm(direction)
     # Calculate the opening angle of the cone based on the energies
-    opening_angle = phys.theta_theor_single(escaped_energy + final_energy, escaped_energy)
+    opening_angle = phys.theta_theor_single(
+        escaped_energy + final_energy, escaped_energy
+    )
     # Calculate the linear attenuation (for all possible interactions) for the escaped energy
     linear_attenuation = phys.lin_att_total(np.array([escaped_energy]))[0]
 
     # Use the fast cone integral to compute the average escape probability over all angles (half of the cone, hence multiply by 2)
-    out = fast_cone_integral_trapz(final_point, direction, opening_angle, detector_radius, linear_attenuation) * 2.0
+    out = (
+        fast_cone_integral_trapz(
+            final_point, direction, opening_angle, detector_radius, linear_attenuation
+        )
+        * 2.0
+    )
 
     # # Full integration using scipy.integrate.quad (slower but more accurate); cannot use numba with scipy.integrate.quad, hence the fast_trapz method above
     # out = (
@@ -985,7 +997,7 @@ def perm_atoms(
     klein_nishina_relative_use_Ei = compute_value(
         "klein_nishina_relative_use_Ei",
         ["energy_rev_cumsum", "cos_act_perm", "linear_attenuation_compt"],
-            lambda: phys.KN_differential_cross(
+        lambda: phys.KN_differential_cross(
             energy_rev_cumsum[:-1],
             1 - cos_act_perm,
             energy_rev_cumsum[1:],
@@ -999,7 +1011,7 @@ def perm_atoms(
     klein_nishina_relative = compute_value(
         "klein_nishina_relative",
         ["energy_rev_cumsum", "cos_act_perm", "linear_attenuation_compt"],
-            lambda: phys.KN_differential_cross(
+        lambda: phys.KN_differential_cross(
             energy_rev_cumsum[:-1],
             1 - cos_act_perm,
             sigma_compt=linear_attenuation_compt[:-1] / phys.RANGE_PROCESS,
