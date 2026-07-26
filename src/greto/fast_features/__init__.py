@@ -28,7 +28,7 @@ import numpy as np
 from greto.event_class import Event
 from greto.fast_features.cluster_level import cluster_atoms, cluster_feature_values
 from greto.fast_features.event_level import event_level_values, event_values
-from greto.fast_features.feature_level import feature_values
+from greto.fast_features.feature_level import FeatureSpec, build_feature_specs, feature_values
 from greto.fast_features.permutation_level import perm_atoms, perm_level_values
 from greto.fast_features.single_level import single_values
 from greto.utils import njit_any
