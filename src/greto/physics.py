@@ -14,12 +14,9 @@ import numba
 import numpy as np
 import numpy.typing as npt
 from scipy.constants import physical_constants
-from scipy.interpolate import PchipInterpolator, interp1d  # CubicSpline,
+from scipy.interpolate import PchipInterpolator, interp1d
 
-# from numba import njit
 # from functools import partial
-
-# from greto.utils import log_interp
 
 # %% Constants
 RHO_GE = 5.323  # Density of Germanium [g/cm3] (NIST)
@@ -963,7 +960,7 @@ def make_log_log_spline(
     return interpolator
 
 
-# Pair produciton data can only begin above a certain threshold energy
+# Pair production data can only begin above a certain threshold energy
 # (1.022 MeV for pair producing involving a nucleus; 2.044 MeV for pair producing involving an electron).
 # To linearize the data, we need to divide the cross-section by (E * (E - threshold))^3.
 # The data becomes very nearly linear with this linearization, so we can use a linear interpolation for the data above the threshold.
@@ -1081,22 +1078,6 @@ _LOG_CS_RAY = np.log(CROSS_SECTION_COHERENT / BARNS_PER_SQCM)
 _LOG_CS_COMPT = np.log(CROSS_SECTION_INCOHERENT / BARNS_PER_SQCM)
 # Pair production cross-section data should be linearized before interpolation to avoid numerical issues at low energies.
 # The linearization factor is (E * (E - threshold))^3, where threshold is 1.022 MeV for pair production.
-# _LOG_CS_PAIR_NUC_LINEARIZED = np.zeros_like(CROSS_SECTION_ENERGIES_EV)
-# above_threshold = CROSS_SECTION_ENERGIES_EV >= THRESHOLD_PAIR_ATOM
-# _LOG_CS_PAIR_NUC_LINEARIZED[above_threshold] = np.log(
-#     (CROSS_SECTION_PAIR_PRODUCTION_NUCLEUS[above_threshold] / BARNS_PER_SQCM)
-#     / (
-#         (
-#             (CROSS_SECTION_ENERGIES_EV[above_threshold] / 1e6)
-#             * (
-#                 CROSS_SECTION_ENERGIES_EV[above_threshold] / 1e6
-#                 - THRESHOLD_PAIR_ATOM / 1e6
-#             )
-#         )
-#         ** 3
-#     )
-# )
-
 _LOG_CS_PAIR_NUC_LINEARIZED = np.log(
     (CROSS_SECTION_PAIR_PRODUCTION_NUCLEUS / BARNS_PER_SQCM)
     / (

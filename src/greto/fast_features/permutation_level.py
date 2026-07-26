@@ -13,7 +13,6 @@ import warnings
 
 import numba
 import numpy as np
-from scipy import integrate
 
 import greto.geometry as geo
 import greto.physics as phys
