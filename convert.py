@@ -6,6 +6,8 @@ Script for conversion to mode1 files or re-evaluating the FOM of mode1x files.
 """
 
 import argparse
+from importlib.resources import files
+
 import yaml
 
 from greto.file_io import mode1x_new_fom, convert_mode1_extended
@@ -36,8 +38,8 @@ def convert_with_args():
     else:
         loaded_options = {}
 
-    with open(
-        "greto/convert_default.yaml", "r", encoding="utf-8"
+    with files("greto").joinpath("convert_default.yaml").open(
+        "r", encoding="utf-8"
     ) as default_options_file:
         default_options = yaml.safe_load(default_options_file)
 
